@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, ShoppingCart, Check, X } from 'lucide-react'
+import { Plus, Trash2, ShoppingCart, Check, X, BookOpen } from 'lucide-react'
 import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
 import { useCreateCard } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
@@ -7,7 +7,8 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { cn } from '../../lib/utils'
 import { Card, BoardType } from '../../types'
-import { COLLECTIONS } from '../../lib/utils'
+import { CatalogPicker } from './CatalogPicker'
+import { CatalogItem } from '../../lib/catalog'
 
 interface LineItemsTableProps {
   card: Card
@@ -37,6 +38,8 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const toast = useToast()
 
   const [adding, setAdding] = useState(false)
+  const [showCatalog, setShowCatalog] = useState(false)
+  const [selectedCatalogImage, setSelectedCatalogImage] = useState<string | null>(null)
   const [newItem, setNewItem] = useState<NewItem>({ ...EMPTY_ITEM })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Partial<CardItem>>({})
@@ -44,6 +47,22 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0)
   const totalValue = items.reduce((s, i) => s + (i.quantity * (i.unit_price_usd ?? 0)), 0)
+
+  function handleCatalogSelect(item: CatalogItem | null) {
+    setShowCatalog(false)
+    setAdding(true)
+    if (item) {
+      setNewItem(v => ({
+        ...v,
+        reference_code: item.code,
+        description: item.label + ' — ' + item.category,
+      }))
+      setSelectedCatalogImage(item.image)
+    } else {
+      setNewItem({ ...EMPTY_ITEM })
+      setSelectedCatalogImage(null)
+    }
+  }
 
   async function handleAdd() {
     if (!newItem.reference_code && !newItem.description) {
@@ -218,15 +237,31 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
       {/* Add row */}
       {!readonly && !adding && (
-        <button onClick={() => setAdding(true)}
+        <button onClick={() => setShowCatalog(true)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
-          <Plus className="h-3.5 w-3.5" /> Add item
+          <BookOpen className="h-3.5 w-3.5" /> Browse catalog / Add item
         </button>
       )}
 
+      {showCatalog && <CatalogPicker onSelect={handleCatalogSelect} onClose={() => setShowCatalog(false)} />}
+
       {adding && (
         <div className="border border-dashed border-border rounded-lg p-3 space-y-2 bg-muted/20">
-          <p className="text-xs font-medium text-muted-foreground">New item</p>
+          <div className="flex items-center gap-3 mb-1">
+            {selectedCatalogImage ? (
+              <img src={selectedCatalogImage} alt="" className="h-12 w-12 object-contain rounded-lg border border-border bg-white p-1 shrink-0" />
+            ) : (
+              <div className="h-12 w-12 rounded-lg border-2 border-dashed border-border flex items-center justify-center shrink-0 text-muted-foreground">
+                <Plus className="h-5 w-5" />
+              </div>
+            )}
+            <div>
+              <p className="text-xs font-medium">{selectedCatalogImage ? 'Catalog item selected' : 'Custom item'}</p>
+              <button type="button" className="text-[10px] text-primary hover:underline" onClick={() => setShowCatalog(true)}>
+                {selectedCatalogImage ? 'Change product' : 'Browse catalog'}
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <div><label className="text-[10px] text-muted-foreground">Reference</label>
               <Input className="h-7 text-xs" value={newItem.reference_code} onChange={e => setNewItem(v => ({ ...v, reference_code: e.target.value }))} />
@@ -259,7 +294,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleAdd} loading={addItem.isPending}>Add item</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }) }}>Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }); setSelectedCatalogImage(null) }}>Cancel</Button>
           </div>
         </div>
       )}
