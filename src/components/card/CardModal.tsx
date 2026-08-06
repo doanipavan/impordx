@@ -11,6 +11,7 @@ import { Select } from '../ui/select'
 import { Separator } from '../ui/label'
 import { CommentThread } from '../comments/CommentThread'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
+import { ActivityLog } from './ActivityLog'
 import { cn, formatDate, formatCurrency, isOverdue } from '../../lib/utils'
 
 interface CardModalProps {
@@ -19,7 +20,7 @@ interface CardModalProps {
   onClose: () => void
 }
 
-type Tab = 'details' | 'comments' | 'attachments'
+type Tab = 'details' | 'comments' | 'attachments' | 'history'
 
 export function CardModal({ card, board, onClose }: CardModalProps) {
   const [tab, setTab] = useState<Tab>('details')
@@ -59,6 +60,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
     { key: 'details', label: 'Details' },
     { key: 'comments', label: `Comments${(card.comments_count ?? 0) > 0 ? ` (${card.comments_count})` : ''}` },
     { key: 'attachments', label: `Files${(card.attachments_count ?? 0) > 0 ? ` (${card.attachments_count})` : ''}` },
+    { key: 'history', label: 'History' },
   ]
 
   return (
@@ -266,6 +268,12 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
           {tab === 'attachments' && (
             <div className="p-6">
               <AttachmentPanel cardId={card.id} />
+            </div>
+          )}
+
+          {tab === 'history' && (
+            <div className="p-6">
+              <ActivityLog cardId={card.id} />
             </div>
           )}
         </div>

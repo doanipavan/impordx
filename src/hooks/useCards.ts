@@ -79,8 +79,15 @@ export function useCreateCard() {
       if (error) throw error
       return data as Card
     },
-    onSuccess: (card) => {
+    onSuccess: async (card) => {
       qc.invalidateQueries({ queryKey: CARDS_QUERY(card.board as BoardType) })
+      // Log creation
+      await supabase.from('activity_logs').insert({
+        card_id: card.id,
+        user_id: card.created_by,
+        action: 'created',
+        new_value: card.title,
+      })
     },
   })
 }

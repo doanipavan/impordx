@@ -1,8 +1,11 @@
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Paperclip, X, File, Image as ImageIcon } from 'lucide-react'
 import { BoardType, CardStatus, BOARD_COLUMNS, BOARD_LABELS, Priority } from '../../types'
 import { useCreateCard } from '../../hooks/useCards'
+import { useUploadAttachment } from '../../hooks/useAttachments'
 import { useToast } from '../ui/toast'
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
@@ -10,7 +13,7 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
-import { COLLECTIONS, LOGO_TECHNIQUES, LOGO_POSITIONS, OUTSIDE_MATERIALS, INSIDE_MATERIALS } from '../../lib/utils'
+import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize } from '../../lib/utils'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -39,21 +42,36 @@ interface CreateCardModalProps {
   onClose: () => void
 }
 
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+
 export function CreateCardModal({ board, initialStatus, onClose }: CreateCardModalProps) {
   const createCard = useCreateCard()
+  const uploadAttachment = useUploadAttachment()
   const toast = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      status: initialStatus,
-      priority: 'medium',
-    },
+    defaultValues: { status: initialStatus, priority: 'medium' },
   })
 
+  function addFiles(files: File[]) {
+    const valid = files.filter(f => ACCEPTED.includes(f.type))
+    const invalid = files.filter(f => !ACCEPTED.includes(f.type))
+    if (invalid.length) toast(`${invalid.length} file(s) not supported`, 'error')
+    setQueuedFiles(prev => [...prev, ...valid])
+  }
+
+  function removeFile(idx: number) {
+    setQueuedFiles(prev => prev.filter((_, i) => i !== idx))
+  }
+
   const onSubmit = async (values: FormValues) => {
+    setIsSubmitting(true)
     try {
-      await createCard.mutateAsync({
+      const card = await createCard.mutateAsync({
         board,
         status: values.status as CardStatus,
         title: values.title,
@@ -72,10 +90,24 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         reference_code: values.reference_code || undefined,
         supplier_ref: values.supplier_ref || undefined,
       })
-      toast('Card created', 'success')
+
+      // Upload queued files
+      if (queuedFiles.length > 0) {
+        for (const file of queuedFiles) {
+          try {
+            await uploadAttachment.mutateAsync({ cardId: card.id, file })
+          } catch {
+            toast(`Failed to upload "${file.name}"`, 'error')
+          }
+        }
+      }
+
+      toast(`Card created${queuedFiles.length > 0 ? ` with ${queuedFiles.length} file(s)` : ''}`, 'success')
       onClose()
     } catch {
       toast('Failed to create card. Please try again.', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -89,28 +121,19 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         </DialogHeader>
 
         <DialogBody className="space-y-4">
-          {/* Title */}
           <div>
             <Label htmlFor="title">Title *</Label>
-            <Input
-              id="title"
-              placeholder="e.g. Parma 300pcs Navy Blue — Quote Request"
-              {...register('title')}
-              autoFocus
-            />
+            <Input id="title" placeholder="e.g. Parma 300pcs Navy Blue — Quote Request" {...register('title')} autoFocus />
             {errors.title && <p className="text-xs text-destructive mt-1">{errors.title.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Status */}
             <div>
               <Label htmlFor="status">Initial Status</Label>
               <Select id="status" {...register('status')}>
                 {columns.map((s) => <option key={s} value={s}>{s}</option>)}
               </Select>
             </div>
-
-            {/* Priority */}
             <div>
               <Label htmlFor="priority">Priority</Label>
               <Select id="priority" {...register('priority')}>
@@ -123,13 +146,10 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Client */}
             <div>
               <Label htmlFor="client_name">Client Name</Label>
               <Input id="client_name" placeholder="e.g. Lize Joias" {...register('client_name')} />
             </div>
-
-            {/* Collection */}
             <div>
               <Label htmlFor="collection">Collection</Label>
               <Select id="collection" {...register('collection')}>
@@ -140,13 +160,10 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Quantity */}
             <div>
               <Label htmlFor="quantity">Quantity</Label>
               <Input id="quantity" type="number" placeholder="300" {...register('quantity', { valueAsNumber: true })} />
             </div>
-
-            {/* Value */}
             <div>
               <Label htmlFor="value_usd">Value (USD)</Label>
               <Input id="value_usd" type="number" step="0.01" placeholder="0.00" {...register('value_usd', { valueAsNumber: true })} />
@@ -154,7 +171,6 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Outside material */}
             <div>
               <Label htmlFor="outside_material">Outside Material</Label>
               <Select id="outside_material" {...register('outside_material')}>
@@ -162,8 +178,6 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
                 {OUTSIDE_MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
               </Select>
             </div>
-
-            {/* Inside material */}
             <div>
               <Label htmlFor="inside_material">Inside Material</Label>
               <Select id="inside_material" {...register('inside_material')}>
@@ -174,13 +188,10 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Logo color */}
             <div>
               <Label htmlFor="logo_color">Logo Color</Label>
               <Input id="logo_color" placeholder="e.g. Gold, White" {...register('logo_color')} />
             </div>
-
-            {/* Logo technique */}
             <div>
               <Label htmlFor="logo_technique">Logo Technique</Label>
               <Select id="logo_technique" {...register('logo_technique')}>
@@ -191,13 +202,10 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Size */}
             <div>
               <Label htmlFor="size">Size (cm)</Label>
               <Input id="size" placeholder="16 x 16 x 3.5" {...register('size')} />
             </div>
-
-            {/* Deadline */}
             <div>
               <Label htmlFor="deadline">Deadline</Label>
               <Input id="deadline" type="date" {...register('deadline')} />
@@ -205,34 +213,58 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Reference code */}
             <div>
               <Label htmlFor="reference_code">Reference Code (RDX)</Label>
               <Input id="reference_code" placeholder="500578" {...register('reference_code')} />
             </div>
-
-            {/* Supplier ref */}
             <div>
               <Label htmlFor="supplier_ref">Supplier Ref (DEQI)</Label>
               <Input id="supplier_ref" {...register('supplier_ref')} />
             </div>
           </div>
 
-          {/* Description */}
           <div>
             <Label htmlFor="description">Description / Notes</Label>
-            <Textarea
-              id="description"
-              placeholder="Additional details, special instructions, color references..."
-              rows={3}
-              {...register('description')}
-            />
+            <Textarea id="description" placeholder="Additional details, special instructions, color references..." rows={3} {...register('description')} />
+          </div>
+
+          {/* File upload */}
+          <div>
+            <Label>Attachments</Label>
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-muted-foreground/40 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
+            >
+              <Paperclip className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Drop files or click to attach (JPG, PNG, PDF)</p>
+              <input ref={fileInputRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
+                onChange={(e) => addFiles(Array.from(e.target.files ?? []))} />
+            </div>
+
+            {queuedFiles.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {queuedFiles.map((file, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-muted rounded px-2 py-1.5 text-xs">
+                    {file.type.startsWith('image/') ? <ImageIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" /> : <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                    <span className="flex-1 truncate">{file.name}</span>
+                    <span className="text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+                    <button type="button" onClick={() => removeFile(idx)} className="text-muted-foreground hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </DialogBody>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={createCard.isPending}>Create Card</Button>
+          <Button type="submit" loading={isSubmitting}>
+            {isSubmitting ? `Creating${queuedFiles.length > 0 ? ' & uploading...' : '...'}` : 'Create Card'}
+          </Button>
         </DialogFooter>
       </form>
     </Dialog>
