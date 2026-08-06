@@ -1,0 +1,148 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import { Card, BoardType, CardStatus } from '../types'
+import { useAuth } from './useAuth'
+
+const CARDS_QUERY = (board: BoardType) => ['cards', board]
+
+export function useCards(board: BoardType) {
+  const qc = useQueryClient()
+
+  const query = useQuery({
+    queryKey: CARDS_QUERY(board),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cards')
+        .select(`
+          *,
+          responsible:users!cards_responsible_id_fkey(id, full_name, email, avatar_url, role, created_at),
+          comments:comments(count),
+          attachments:attachments(count)
+        `)
+        .eq('board', board)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return (data ?? []).map((c: Record<string, unknown>) => ({
+        ...c,
+        comments_count: (c.comments as Array<{ count: number }>)?.[0]?.count ?? 0,
+        attachments_count: (c.attachments as Array<{ count: number }>)?.[0]?.count ?? 0,
+      })) as Card[]
+    },
+  })
+
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel(`cards:${board}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter: `board=eq.${board}` },
+        () => { qc.invalidateQueries({ queryKey: CARDS_QUERY(board) }) }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [board, qc])
+
+  return query
+}
+
+export function useCard(id: string) {
+  return useQuery({
+    queryKey: ['card', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cards')
+        .select(`
+          *,
+          responsible:users!cards_responsible_id_fkey(id, full_name, email, avatar_url, role, created_at)
+        `)
+        .eq('id', id)
+        .single()
+      if (error) throw error
+      return data as Card
+    },
+    enabled: !!id,
+  })
+}
+
+export function useCreateCard() {
+  const qc = useQueryClient()
+  const { user } = useAuth()
+
+  return useMutation({
+    mutationFn: async (card: Omit<Card, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
+      const { data, error } = await supabase
+        .from('cards')
+        .insert({ ...card, created_by: user!.id })
+        .select()
+        .single()
+      if (error) throw error
+      return data as Card
+    },
+    onSuccess: (card) => {
+      qc.invalidateQueries({ queryKey: CARDS_QUERY(card.board as BoardType) })
+    },
+  })
+}
+
+export function useUpdateCard() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Card> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('cards')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) throw error
+      return data as Card
+    },
+    onSuccess: (card) => {
+      qc.invalidateQueries({ queryKey: CARDS_QUERY(card.board as BoardType) })
+      qc.invalidateQueries({ queryKey: ['card', card.id] })
+    },
+  })
+}
+
+export function useMoveCard() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, status, board }: { id: string; status: CardStatus; board: BoardType }) => {
+      const { error } = await supabase
+        .from('cards')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', id)
+      if (error) throw error
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        card_id: id,
+        user_id: (await supabase.auth.getUser()).data.user!.id,
+        action: 'moved',
+        new_value: status,
+      })
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: CARDS_QUERY(vars.board) })
+      qc.invalidateQueries({ queryKey: ['card', vars.id] })
+    },
+  })
+}
+
+export function useDeleteCard() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, board }: { id: string; board: BoardType }) => {
+      const { error } = await supabase.from('cards').delete().eq('id', id)
+      if (error) throw error
+      return board
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: CARDS_QUERY(vars.board) })
+    },
+  })
+}
