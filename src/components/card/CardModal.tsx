@@ -12,6 +12,7 @@ import { Separator } from '../ui/label'
 import { CommentThread } from '../comments/CommentThread'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { ActivityLog } from './ActivityLog'
+import { LineItemsTable } from './LineItemsTable'
 import { cn, formatDate, formatCurrency, isOverdue } from '../../lib/utils'
 
 interface CardModalProps {
@@ -203,6 +204,12 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                     </div>
                   </div>
                 )}
+
+                {/* Line Items */}
+                <div className="pt-2">
+                  <LineItemsTable card={card} />
+                </div>
+
               </div>
 
               {/* Sidebar */}

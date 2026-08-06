@@ -1,0 +1,274 @@
+import { useState } from 'react'
+import { Plus, Trash2, ShoppingCart, Check, X } from 'lucide-react'
+import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
+import { useCreateCard } from '../../hooks/useCards'
+import { useToast } from '../ui/toast'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { cn } from '../../lib/utils'
+import { Card, BoardType } from '../../types'
+import { COLLECTIONS } from '../../lib/utils'
+
+interface LineItemsTableProps {
+  card: Card
+  readonly?: boolean
+}
+
+const EMPTY_ITEM = {
+  reference_code: '',
+  collection: '',
+  description: '',
+  outside_color: '',
+  inside_color: '',
+  size: '',
+  quantity: 1,
+  unit_price_usd: undefined as number | undefined,
+  notes: '',
+}
+
+type NewItem = typeof EMPTY_ITEM
+
+export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
+  const { data: items = [], isLoading } = useCardItems(card.id)
+  const addItem = useAddCardItem()
+  const updateItem = useUpdateCardItem()
+  const deleteItem = useDeleteCardItem()
+  const createCard = useCreateCard()
+  const toast = useToast()
+
+  const [adding, setAdding] = useState(false)
+  const [newItem, setNewItem] = useState<NewItem>({ ...EMPTY_ITEM })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<Partial<CardItem>>({})
+  const [generatingOrder, setGeneratingOrder] = useState(false)
+
+  const totalQty = items.reduce((s, i) => s + i.quantity, 0)
+  const totalValue = items.reduce((s, i) => s + (i.quantity * (i.unit_price_usd ?? 0)), 0)
+
+  async function handleAdd() {
+    if (!newItem.reference_code && !newItem.description) {
+      toast('Enter at least a reference or description', 'error')
+      return
+    }
+    try {
+      await addItem.mutateAsync({
+        card_id: card.id,
+        ...newItem,
+        sort_order: items.length,
+      })
+      setNewItem({ ...EMPTY_ITEM })
+      setAdding(false)
+      toast('Item added', 'success')
+    } catch {
+      toast('Failed to add item', 'error')
+    }
+  }
+
+  async function handleUpdate(id: string) {
+    try {
+      await updateItem.mutateAsync({ id, cardId: card.id, ...editValues })
+      setEditingId(null)
+    } catch {
+      toast('Failed to update item', 'error')
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteItem.mutateAsync({ id, cardId: card.id })
+    } catch {
+      toast('Failed to delete item', 'error')
+    }
+  }
+
+  async function handleGenerateOrder() {
+    if (items.length === 0) { toast('Add at least one item first', 'error'); return }
+    setGeneratingOrder(true)
+    try {
+      // Create the order card
+      const orderCard = await createCard.mutateAsync({
+        board: 'orders' as BoardType,
+        status: 'Placed',
+        title: `Order from: ${card.title}`,
+        priority: card.priority,
+        client_name: card.client_name,
+        collection: card.collection,
+        quantity: totalQty,
+        value_usd: totalValue > 0 ? totalValue : card.value_usd,
+        description: `Generated from Sample #${card.id.substring(0, 8)}\n\nItems:\n${items.map(i =>
+          `• ${i.reference_code || ''} ${i.description || ''} — ${i.outside_color || ''} / ${i.inside_color || ''} — ${i.size || ''} — ${i.quantity}pcs${i.unit_price_usd ? ` @ $${i.unit_price_usd}` : ''}`
+        ).join('\n')}`,
+        reference_code: card.reference_code,
+        supplier_ref: card.supplier_ref,
+      })
+
+      // Copy items to the new order card
+      const { supabase } = await import('../../lib/supabase')
+      for (const item of items) {
+        const { id: _id, created_at: _c, card_id: _ci, ...rest } = item
+        await supabase.from('card_items').insert({ ...rest, card_id: orderCard.id })
+      }
+
+      toast('Order card created successfully!', 'success')
+    } catch {
+      toast('Failed to generate order', 'error')
+    } finally {
+      setGeneratingOrder(false)
+    }
+  }
+
+  if (isLoading) return <p className="text-xs text-muted-foreground">Loading items...</p>
+
+  const canGenerateOrder = (card.board === 'samples' && card.status === 'Approved') ||
+    (card.board === 'quotes' && card.status === 'Confirmed')
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Product Line Items {items.length > 0 && `(${items.length})`}
+        </p>
+        {canGenerateOrder && (
+          <Button size="sm" onClick={handleGenerateOrder} loading={generatingOrder} className="gap-1.5">
+            <ShoppingCart className="h-3.5 w-3.5" />
+            Generate Order
+          </Button>
+        )}
+      </div>
+
+      {/* Table */}
+      {items.length > 0 && (
+        <div className="border border-border rounded-lg overflow-hidden text-xs">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                {['Ref', 'Description', 'Ext Color', 'Int Color', 'Size', 'Qty', 'Unit $', ''].map(h => (
+                  <th key={h} className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((item) => (
+                <tr key={item.id} className={cn('group hover:bg-muted/30', editingId === item.id && 'bg-blue-50/50')}>
+                  {editingId === item.id ? (
+                    <>
+                      {(['reference_code', 'description', 'outside_color', 'inside_color', 'size'] as const).map(field => (
+                        <td key={field} className="px-1 py-1">
+                          <Input className="h-6 text-xs px-1" value={String(editValues[field] ?? item[field] ?? '')}
+                            onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))} />
+                        </td>
+                      ))}
+                      <td className="px-1 py-1 w-12">
+                        <Input type="number" className="h-6 text-xs px-1" value={editValues.quantity ?? item.quantity}
+                          onChange={e => setEditValues(v => ({ ...v, quantity: Number(e.target.value) }))} />
+                      </td>
+                      <td className="px-1 py-1 w-16">
+                        <Input type="number" step="0.01" className="h-6 text-xs px-1"
+                          value={String(editValues.unit_price_usd ?? item.unit_price_usd ?? '')}
+                          onChange={e => setEditValues(v => ({ ...v, unit_price_usd: e.target.value ? Number(e.target.value) : undefined }))} />
+                      </td>
+                      <td className="px-1 py-1">
+                        <div className="flex gap-1">
+                          <button onClick={() => handleUpdate(item.id)} className="p-0.5 text-green-600 hover:bg-green-50 rounded"><Check className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setEditingId(null)} className="p-0.5 text-muted-foreground hover:bg-muted rounded"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1.5 font-mono text-[11px]">{item.reference_code || '—'}</td>
+                      <td className="px-2 py-1.5">{item.description || '—'}</td>
+                      <td className="px-2 py-1.5">{item.outside_color || '—'}</td>
+                      <td className="px-2 py-1.5">{item.inside_color || '—'}</td>
+                      <td className="px-2 py-1.5">{item.size || '—'}</td>
+                      <td className="px-2 py-1.5 font-semibold">{item.quantity}</td>
+                      <td className="px-2 py-1.5">{item.unit_price_usd ? `$${item.unit_price_usd}` : '—'}</td>
+                      <td className="px-2 py-1.5">
+                        {!readonly && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { setEditingId(item.id); setEditValues({}) }}
+                              className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted">
+                              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button onClick={() => handleDelete(item.id)}
+                              className="p-0.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+
+              {/* Totals */}
+              {items.length > 1 && (
+                <tr className="bg-muted/40 font-semibold">
+                  <td colSpan={5} className="px-2 py-1.5 text-right text-muted-foreground text-[10px] uppercase tracking-wide">Total</td>
+                  <td className="px-2 py-1.5">{totalQty}</td>
+                  <td className="px-2 py-1.5">{totalValue > 0 ? `$${totalValue.toFixed(2)}` : '—'}</td>
+                  <td />
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add row */}
+      {!readonly && !adding && (
+        <button onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
+          <Plus className="h-3.5 w-3.5" /> Add item
+        </button>
+      )}
+
+      {adding && (
+        <div className="border border-dashed border-border rounded-lg p-3 space-y-2 bg-muted/20">
+          <p className="text-xs font-medium text-muted-foreground">New item</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div><label className="text-[10px] text-muted-foreground">Reference</label>
+              <Input className="h-7 text-xs" value={newItem.reference_code} onChange={e => setNewItem(v => ({ ...v, reference_code: e.target.value }))} />
+            </div>
+            <div className="col-span-2"><label className="text-[10px] text-muted-foreground">Description</label>
+              <Input className="h-7 text-xs" placeholder="e.g. Parma — Navy Blue" value={newItem.description} onChange={e => setNewItem(v => ({ ...v, description: e.target.value }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <div><label className="text-[10px] text-muted-foreground">Ext Color</label>
+              <Input className="h-7 text-xs" value={newItem.outside_color} onChange={e => setNewItem(v => ({ ...v, outside_color: e.target.value }))} />
+            </div>
+            <div><label className="text-[10px] text-muted-foreground">Int Color</label>
+              <Input className="h-7 text-xs" value={newItem.inside_color} onChange={e => setNewItem(v => ({ ...v, inside_color: e.target.value }))} />
+            </div>
+            <div><label className="text-[10px] text-muted-foreground">Size</label>
+              <Input className="h-7 text-xs" placeholder="16x16x3.5" value={newItem.size} onChange={e => setNewItem(v => ({ ...v, size: e.target.value }))} />
+            </div>
+            <div><label className="text-[10px] text-muted-foreground">Qty *</label>
+              <Input type="number" className="h-7 text-xs" value={newItem.quantity} onChange={e => setNewItem(v => ({ ...v, quantity: Number(e.target.value) }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><label className="text-[10px] text-muted-foreground">Unit Price (USD)</label>
+              <Input type="number" step="0.01" className="h-7 text-xs" value={newItem.unit_price_usd ?? ''} onChange={e => setNewItem(v => ({ ...v, unit_price_usd: e.target.value ? Number(e.target.value) : undefined }))} />
+            </div>
+            <div className="col-span-2"><label className="text-[10px] text-muted-foreground">Notes</label>
+              <Input className="h-7 text-xs" value={newItem.notes} onChange={e => setNewItem(v => ({ ...v, notes: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleAdd} loading={addItem.isPending}>Add item</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }) }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {!canGenerateOrder && items.length > 0 && card.board === 'samples' && (
+        <p className="text-[10px] text-muted-foreground">
+          "Generate Order" will appear when this sample reaches <strong>Approved</strong> status.
+        </p>
+      )}
+    </div>
+  )
+}
