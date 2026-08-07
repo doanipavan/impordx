@@ -38,6 +38,7 @@ export interface Card {
   logo_positions?: string[]
   reference_code?: string
   supplier_ref?: string
+  ref_number?: string
   tags?: string[]
   created_by: string
   created_at: string

@@ -53,8 +53,9 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   }
 
   function handleCopyLink() {
-    const url = `${window.location.origin}/card/${card.id}`
-    navigator.clipboard.writeText(url).then(() => toast('Link copied', 'success'))
+    const ref = card.ref_number ?? card.id
+    const url = `${window.location.origin}/${card.board}/${ref}`
+    navigator.clipboard.writeText(url).then(() => toast('Link copied — share it to open this card directly', 'success'))
   }
 
   const tabs: { key: Tab; label: string }[] = [
@@ -79,9 +80,12 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
               <span className={cn('text-xs font-medium', PRIORITY_COLORS[card.priority])}>
                 {PRIORITY_LABELS[card.priority]}
               </span>
-              {overdue && (
-                <Badge variant="destructive">Overdue</Badge>
+              {card.ref_number && (
+                <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                  {card.ref_number}
+                </span>
               )}
+              {overdue && <Badge variant="destructive">Overdue</Badge>}
             </div>
             <h2 className="text-lg font-semibold leading-snug">{card.title}</h2>
           </div>

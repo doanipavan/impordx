@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   DndContext,
   DragEndEvent,
@@ -22,15 +22,22 @@ import { Button } from '../ui/button'
 
 interface BoardProps {
   board: BoardType
+  autoOpenCard?: Card | null
+  onAutoOpenClear?: () => void
 }
 
-export function Board({ board }: BoardProps) {
+export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   const { data: cards = [], isLoading } = useCards(board)
   const moveCard = useMoveCard()
   const toast = useToast()
   const [activeCard, setActiveCard] = useState<Card | null>(null)
-  const [openCard, setOpenCard] = useState<Card | null>(null)
+  const [openCard, setOpenCard] = useState<Card | null>(autoOpenCard ?? null)
   const [creating, setCreating] = useState<CardStatus | null>(null)
+
+  // Auto-open when ref link is followed
+  useEffect(() => {
+    if (autoOpenCard) setOpenCard(autoOpenCard)
+  }, [autoOpenCard])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })

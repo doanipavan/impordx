@@ -71,9 +71,16 @@ export function useCreateCard() {
 
   return useMutation({
     mutationFn: async (card: Omit<Card, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
+      // Generate ref_number client-side
+      const prefixes: Record<string, string> = { quotes: 'QUO', samples: 'SMP', orders: 'ORD' }
+      const prefix = prefixes[card.board] ?? 'REF'
+      const year = new Date().getFullYear()
+      const rand = String(Math.floor(Math.random() * 9000) + 1000)
+      const ref_number = `${prefix}-${year}-${rand}`
+
       const { data, error } = await supabase
         .from('cards')
-        .insert({ ...card, created_by: user!.id })
+        .insert({ ...card, created_by: user!.id, ref_number })
         .select()
         .single()
       if (error) throw error

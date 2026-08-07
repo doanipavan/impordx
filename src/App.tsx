@@ -39,8 +39,11 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/quotes" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
+      <Route path="/quotes/:ref" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
       <Route path="/samples" element={<ProtectedRoute><SamplesPage /></ProtectedRoute>} />
+      <Route path="/samples/:ref" element={<ProtectedRoute><SamplesPage /></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+      <Route path="/orders/:ref" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/archive" element={<ProtectedRoute><ArchivePage /></ProtectedRoute>} />
       <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />

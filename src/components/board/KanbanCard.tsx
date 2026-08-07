@@ -61,6 +61,11 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
       {/* Title */}
       <p className="text-sm font-medium text-foreground line-clamp-2 mb-2 leading-snug">{card.title}</p>
 
+      {/* Ref number */}
+      {card.ref_number && (
+        <p className="text-[10px] font-mono text-muted-foreground/70 mb-1">{card.ref_number}</p>
+      )}
+
       {/* Client / Collection */}
       {(card.client_name || card.collection) && (
         <div className="flex items-center gap-1.5 mb-2">
