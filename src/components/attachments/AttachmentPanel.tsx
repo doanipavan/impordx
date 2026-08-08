@@ -1,11 +1,10 @@
-import { useRef, useState, DragEvent, useCallback } from 'react'
-import { Upload, File, Trash2, Download, X, Eye } from 'lucide-react'
+import { useRef, useState, DragEvent } from 'react'
+import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon } from 'lucide-react'
 import { useAttachments, useUploadAttachment, useDeleteAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
-import { Button } from '../ui/button'
 import { Attachment } from '../../types'
-import { cn, formatDate, formatFileSize } from '../../lib/utils'
+import { cn, formatFileSize, formatDateTime } from '../../lib/utils'
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const MAX_PDF_SIZE = 20 * 1024 * 1024
@@ -21,112 +20,82 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
   const [preview, setPreview] = useState<string | null>(null)
-  const [loadingUrl, setLoadingUrl] = useState<string | null>(null)
+  const [loadingId, setLoadingId] = useState<string | null>(null)
 
   async function uploadFiles(files: File[]) {
     for (const file of files) {
-      if (!ACCEPTED.includes(file.type)) {
-        toast(`"${file.name}" is not supported. Use JPG, PNG, WEBP or PDF.`, 'error')
-        continue
-      }
+      if (!ACCEPTED.includes(file.type)) { toast(`"${file.name}" not supported`, 'error'); continue }
       const maxSize = file.type.startsWith('image/') ? MAX_IMAGE_SIZE : MAX_PDF_SIZE
-      if (file.size > maxSize) {
-        toast(`"${file.name}" exceeds the size limit.`, 'error')
-        continue
-      }
-      setUploading((prev) => [...prev, file.name])
+      if (file.size > maxSize) { toast(`"${file.name}" exceeds size limit`, 'error'); continue }
+      setUploading(p => [...p, file.name])
       try {
         await uploadAttachment.mutateAsync({ cardId, file })
         toast(`"${file.name}" uploaded`, 'success')
       } catch {
-        toast(`Failed to upload "${file.name}". Check your connection and try again.`, 'error')
+        toast(`Failed to upload "${file.name}"`, 'error')
       } finally {
-        setUploading((prev) => prev.filter((n) => n !== file.name))
+        setUploading(p => p.filter(n => n !== file.name))
       }
     }
   }
 
   function handleDrop(e: DragEvent) {
-    e.preventDefault()
-    setDragging(false)
+    e.preventDefault(); setDragging(false)
     uploadFiles(Array.from(e.dataTransfer.files))
   }
 
-  async function handleDownload(att: Attachment) {
-    setLoadingUrl(att.id)
-    try {
-      const url = await getSignedUrl(att.file_url)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = att.filename
-      a.target = '_blank'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    } catch {
-      toast('Failed to generate download link. Try again.', 'error')
-    } finally {
-      setLoadingUrl(null)
-    }
+  async function handlePreview(att: Attachment) {
+    setLoadingId(att.id)
+    try { setPreview(await getSignedUrl(att.file_url)) }
+    catch { toast('Failed to load preview', 'error') }
+    finally { setLoadingId(null) }
   }
 
-  async function handlePreview(att: Attachment) {
-    setLoadingUrl(att.id)
+  async function handleDownload(att: Attachment) {
+    setLoadingId(att.id)
     try {
       const url = await getSignedUrl(att.file_url)
-      setPreview(url)
-    } catch {
-      toast('Failed to load preview.', 'error')
-    } finally {
-      setLoadingUrl(null)
-    }
+      const a = document.createElement('a'); a.href = url; a.download = att.filename; a.target = '_blank'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    } catch { toast('Failed to download', 'error') }
+    finally { setLoadingId(null) }
   }
 
   async function handleDelete(att: Attachment) {
     if (!confirm(`Delete "${att.filename}"?`)) return
-    try {
-      await deleteAttachment.mutateAsync({ id: att.id, cardId, fileUrl: att.file_url })
-      toast('File deleted', 'info')
-    } catch {
-      toast('Failed to delete file', 'error')
-    }
+    try { await deleteAttachment.mutateAsync({ id: att.id, cardId, fileUrl: att.file_url }); toast('Deleted', 'info') }
+    catch { toast('Failed to delete', 'error') }
   }
 
   return (
     <div className="space-y-4">
       {/* Upload zone */}
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
         className={cn(
-          'border-2 border-dashed rounded-lg p-6 text-center transition-all cursor-pointer',
+          'border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all',
           dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
         )}
-        onClick={() => inputRef.current?.click()}
       >
-        <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-        <p className="text-sm font-medium mb-1">Drop files here or click to upload</p>
-        <p className="text-xs text-muted-foreground">JPG, PNG, WEBP, PDF — max 10 MB per image, 20 MB per PDF</p>
-        <input
-          ref={inputRef}
-          type="file"
-          className="hidden"
-          multiple
-          accept={ACCEPTED.join(',')}
-          onChange={(e) => uploadFiles(Array.from(e.target.files ?? []))}
-        />
+        <Upload className="h-6 w-6 mx-auto mb-1.5 text-muted-foreground" />
+        <p className="text-sm font-medium">Drop files here or click to upload</p>
+        <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WEBP, PDF — max 10 MB per image, 20 MB per PDF</p>
+        <input ref={inputRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
+          onChange={e => uploadFiles(Array.from(e.target.files ?? []))} />
       </div>
 
       {/* Uploading */}
-      {uploading.map((name) => (
+      {uploading.map(name => (
         <div key={name} className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span>Uploading "{name}"...</span>
+          <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          Uploading "{name}"...
         </div>
       ))}
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading files...</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
 
       {!isLoading && attachments.length === 0 && (
         <div className="text-center py-6 text-muted-foreground">
@@ -135,83 +104,79 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {attachments.map((att) => (
-          <AttachmentItem
-            key={att.id}
-            attachment={att}
-            canDelete={att.user_id === user?.id || user?.role === 'admin'}
-            loading={loadingUrl === att.id}
-            onDownload={() => handleDownload(att)}
-            onPreview={() => handlePreview(att)}
-            onDelete={() => handleDelete(att)}
-          />
-        ))}
-      </div>
+      {/* Timeline */}
+      {attachments.length > 0 && (
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-[18px] top-2 bottom-2 w-px bg-border" />
 
-      {/* Preview lightbox */}
-      {preview && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setPreview(null)}>
-          <button className="absolute top-4 right-4 text-white" onClick={() => setPreview(null)}>
-            <X className="h-6 w-6" />
-          </button>
-          <img src={preview} alt="Preview" className="max-h-[90vh] max-w-[90vw] object-contain rounded" onClick={(e) => e.stopPropagation()} />
+          <div className="space-y-3">
+            {attachments.map(att => {
+              const isImage = att.file_type.startsWith('image/')
+              const canDelete = att.user_id === user?.id || user?.role === 'admin'
+              const isLoading = loadingId === att.id
+
+              return (
+                <div key={att.id} className="flex gap-3 group relative">
+                  {/* Dot */}
+                  <div className={cn(
+                    'h-9 w-9 rounded-full border-2 border-background flex items-center justify-center shrink-0 z-10 mt-0.5',
+                    isImage ? 'bg-blue-100' : 'bg-amber-100'
+                  )}>
+                    {isImage
+                      ? <ImageIcon className="h-4 w-4 text-blue-600" />
+                      : <FileText className="h-4 w-4 text-amber-600" />
+                    }
+                  </div>
+
+                  {/* Card */}
+                  <div className="flex-1 bg-card border border-border rounded-lg p-3 hover:shadow-card-hover transition-all">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate" title={att.filename}>{att.filename}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}
+                        </p>
+                        {att.user && (
+                          <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        {isImage && (
+                          <button onClick={() => handlePreview(att)} disabled={isLoading}
+                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent" title="Preview">
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => handleDownload(att)} disabled={isLoading}
+                          className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent" title="Download">
+                          {isLoading ? <div className="h-3 w-3 border border-primary border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        </button>
+                        {canDelete && (
+                          <button onClick={() => handleDelete(att)}
+                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
-    </div>
-  )
-}
 
-function AttachmentItem({ attachment, canDelete, loading, onDelete, onDownload, onPreview }: {
-  attachment: Attachment
-  canDelete: boolean
-  loading: boolean
-  onDelete: () => void
-  onDownload: () => void
-  onPreview: () => void
-}) {
-  const isImage = attachment.file_type.startsWith('image/')
-
-  return (
-    <div className="group relative border border-border rounded-lg overflow-hidden bg-card hover:shadow-card-hover transition-all">
-      <div
-        className={cn('aspect-video bg-muted flex items-center justify-center', isImage && 'cursor-pointer')}
-        onClick={isImage ? onPreview : undefined}
-      >
-        {isImage ? (
-          <div className="w-full h-full flex items-center justify-center bg-slate-100">
-            <Eye className="h-6 w-6 text-muted-foreground opacity-50" />
-          </div>
-        ) : (
-          <File className="h-8 w-8 text-muted-foreground" />
-        )}
-      </div>
-
-      <div className="p-2">
-        <p className="text-xs font-medium truncate" title={attachment.filename}>{attachment.filename}</p>
-        <p className="text-xs text-muted-foreground">{formatFileSize(attachment.file_size)}</p>
-      </div>
-
-      {/* Actions */}
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={onDownload}
-          disabled={loading}
-          className="h-6 w-6 rounded bg-white/90 flex items-center justify-center shadow-sm hover:bg-white disabled:opacity-50"
-          title="Download"
-        >
-          {loading ? <div className="h-3 w-3 border border-primary border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-        </button>
-        {canDelete && (
-          <button
-            onClick={onDelete}
-            className="h-6 w-6 rounded bg-white/90 flex items-center justify-center shadow-sm hover:bg-red-50 hover:text-red-600"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+      {/* Lightbox */}
+      {preview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setPreview(null)}>
+          <button className="absolute top-4 right-4 text-white"><X className="h-6 w-6" /></button>
+          <img src={preview} alt="Preview" className="max-h-[90vh] max-w-[90vw] object-contain rounded" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   )
 }
