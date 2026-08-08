@@ -19,12 +19,12 @@ const schema = z.object({
   client_name: z.string().optional(),
   collection: z.string().optional(),
   quantity: z.number().positive().optional().or(z.literal('')),
-  value_usd: z.number().positive().optional().or(z.literal('')),
   deadline: z.string().optional(),
   description: z.string().optional(),
-  size: z.string().optional(),
   outside_material: z.string().optional(),
+  outside_material_code: z.string().optional(),
   inside_material: z.string().optional(),
+  inside_material_code: z.string().optional(),
   logo_color: z.string().optional(),
   logo_technique: z.string().optional(),
   reference_code: z.string().optional(),
@@ -53,10 +53,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       client_name: card.client_name ?? '',
       collection: card.collection ?? '',
       quantity: card.quantity ?? '',
-      value_usd: card.value_usd ?? '',
       deadline: card.deadline ? card.deadline.substring(0, 10) : '',
       description: card.description ?? '',
-      size: card.size ?? '',
       outside_material: card.outside_material ?? '',
       inside_material: card.inside_material ?? '',
       logo_color: card.logo_color ?? '',
@@ -76,10 +74,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
-        value_usd: values.value_usd ? Number(values.value_usd) : undefined,
         deadline: values.deadline || undefined,
         description: values.description || undefined,
-        size: values.size || undefined,
         outside_material: values.outside_material || undefined,
         inside_material: values.inside_material || undefined,
         logo_color: values.logo_color || undefined,
@@ -146,25 +142,29 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
               <Input id="quantity" type="number" {...register('quantity', { valueAsNumber: true })} />
             </div>
             <div>
-              <Label htmlFor="value_usd">Value (USD)</Label>
-              <Input id="value_usd" type="number" step="0.01" {...register('value_usd', { valueAsNumber: true })} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="outside_material">Outside Material</Label>
-              <Select id="outside_material" {...register('outside_material')}>
-                <option value="">— Select —</option>
-                {OUTSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
-              </Select>
+            <div className="space-y-1.5">
+              <Label>Outside Material</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select id="outside_material" {...register('outside_material')}>
+                  <option value="">— Select —</option>
+                  {OUTSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <Input placeholder="Material # (e.g. V-023)" {...register('outside_material_code')} />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="inside_material">Inside Material</Label>
-              <Select id="inside_material" {...register('inside_material')}>
-                <option value="">— Select —</option>
-                {INSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
-              </Select>
+            <div className="space-y-1.5">
+              <Label>Inside Material</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select id="inside_material" {...register('inside_material')}>
+                  <option value="">— Select —</option>
+                  {INSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <Input placeholder="Material # (e.g. P-118)" {...register('inside_material_code')} />
+              </div>
             </div>
           </div>
 
@@ -182,15 +182,9 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="size">Size (cm)</Label>
-              <Input id="size" {...register('size')} />
-            </div>
-            <div>
-              <Label htmlFor="deadline">Deadline</Label>
-              <Input id="deadline" type="date" {...register('deadline')} />
-            </div>
+          <div>
+            <Label htmlFor="deadline">Deadline</Label>
+            <Input id="deadline" type="date" {...register('deadline')} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

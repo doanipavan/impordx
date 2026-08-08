@@ -22,12 +22,12 @@ const schema = z.object({
   client_name: z.string().optional(),
   collection: z.string().optional(),
   quantity: z.number().positive().optional().or(z.literal('')),
-  value_usd: z.number().positive().optional().or(z.literal('')),
   deadline: z.string().optional(),
   description: z.string().optional(),
-  size: z.string().optional(),
   outside_material: z.string().optional(),
+  outside_material_code: z.string().optional(),
   inside_material: z.string().optional(),
+  inside_material_code: z.string().optional(),
   logo_color: z.string().optional(),
   logo_technique: z.string().optional(),
   reference_code: z.string().optional(),
@@ -64,13 +64,17 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
     setQueuedFiles(prev => [...prev, ...valid])
   }
 
-  function removeFile(idx: number) {
-    setQueuedFiles(prev => prev.filter((_, i) => i !== idx))
-  }
-
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     try {
+      // Merge material codes into description notes if provided
+      const matNotes = [
+        values.outside_material_code ? `Outside material code: ${values.outside_material_code}` : '',
+        values.inside_material_code  ? `Inside material code: ${values.inside_material_code}`  : '',
+      ].filter(Boolean).join('\n')
+
+      const finalDescription = [values.description, matNotes].filter(Boolean).join('\n\n')
+
       const card = await createCard.mutateAsync({
         board,
         status: values.status as CardStatus,
@@ -79,10 +83,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
-        value_usd: values.value_usd ? Number(values.value_usd) : undefined,
         deadline: values.deadline || undefined,
-        description: values.description || undefined,
-        size: values.size || undefined,
+        description: finalDescription || undefined,
         outside_material: values.outside_material || undefined,
         inside_material: values.inside_material || undefined,
         logo_color: values.logo_color || undefined,
@@ -91,15 +93,9 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         supplier_ref: values.supplier_ref || undefined,
       })
 
-      // Upload queued files
-      if (queuedFiles.length > 0) {
-        for (const file of queuedFiles) {
-          try {
-            await uploadAttachment.mutateAsync({ cardId: card.id, file })
-          } catch {
-            toast(`Failed to upload "${file.name}"`, 'error')
-          }
-        }
+      for (const file of queuedFiles) {
+        try { await uploadAttachment.mutateAsync({ cardId: card.id, file }) }
+        catch { toast(`Failed to upload "${file.name}"`, 'error') }
       }
 
       toast(`Card created${queuedFiles.length > 0 ? ` with ${queuedFiles.length} file(s)` : ''}`, 'success')
@@ -121,17 +117,19 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         </DialogHeader>
 
         <DialogBody className="space-y-4">
+          {/* Title */}
           <div>
             <Label htmlFor="title">Title *</Label>
             <Input id="title" placeholder="e.g. Parma 300pcs Navy Blue — Quote Request" {...register('title')} autoFocus />
             {errors.title && <p className="text-xs text-destructive mt-1">{errors.title.message}</p>}
           </div>
 
+          {/* Status + Priority */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="status">Initial Status</Label>
               <Select id="status" {...register('status')}>
-                {columns.map((s) => <option key={s} value={s}>{s}</option>)}
+                {columns.map(s => <option key={s} value={s}>{s}</option>)}
               </Select>
             </div>
             <div>
@@ -145,6 +143,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             </div>
           </div>
 
+          {/* Client + Collection */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="client_name">Client Name</Label>
@@ -154,39 +153,48 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
               <Label htmlFor="collection">Collection</Label>
               <Select id="collection" {...register('collection')}>
                 <option value="">— Select —</option>
-                {COLLECTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                {COLLECTIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>
 
+          {/* Quantity + Deadline */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="quantity">Quantity</Label>
               <Input id="quantity" type="number" placeholder="300" {...register('quantity', { valueAsNumber: true })} />
             </div>
             <div>
-              <Label htmlFor="value_usd">Value (USD)</Label>
-              <Input id="value_usd" type="number" step="0.01" placeholder="0.00" {...register('value_usd', { valueAsNumber: true })} />
+              <Label htmlFor="deadline">Deadline</Label>
+              <Input id="deadline" type="date" {...register('deadline')} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="outside_material">Outside Material</Label>
+          {/* Outside Material + code */}
+          <div className="space-y-1.5">
+            <Label>Outside Material</Label>
+            <div className="grid grid-cols-2 gap-3">
               <Select id="outside_material" {...register('outside_material')}>
                 <option value="">— Select —</option>
-                {OUTSIDE_MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
+                {OUTSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
               </Select>
-            </div>
-            <div>
-              <Label htmlFor="inside_material">Inside Material</Label>
-              <Select id="inside_material" {...register('inside_material')}>
-                <option value="">— Select —</option>
-                {INSIDE_MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
-              </Select>
+              <Input placeholder="Material # (e.g. V-023)" {...register('outside_material_code')} />
             </div>
           </div>
 
+          {/* Inside Material + code */}
+          <div className="space-y-1.5">
+            <Label>Inside Material</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Select id="inside_material" {...register('inside_material')}>
+                <option value="">— Select —</option>
+                {INSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+              </Select>
+              <Input placeholder="Material # (e.g. P-118)" {...register('inside_material_code')} />
+            </div>
+          </div>
+
+          {/* Logo */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="logo_color">Logo Color</Label>
@@ -196,22 +204,12 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
               <Label htmlFor="logo_technique">Logo Technique</Label>
               <Select id="logo_technique" {...register('logo_technique')}>
                 <option value="">— Select —</option>
-                {LOGO_TECHNIQUES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
               </Select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="size">Size (cm)</Label>
-              <Input id="size" placeholder="16 x 16 x 3.5" {...register('size')} />
-            </div>
-            <div>
-              <Label htmlFor="deadline">Deadline</Label>
-              <Input id="deadline" type="date" {...register('deadline')} />
-            </div>
-          </div>
-
+          {/* References */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="reference_code">Reference Code (RDX)</Label>
@@ -223,6 +221,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             </div>
           </div>
 
+          {/* Description */}
           <div>
             <Label htmlFor="description">Description / Notes</Label>
             <Textarea id="description" placeholder="Additional details, special instructions, color references..." rows={3} {...register('description')} />
@@ -234,15 +233,14 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             <div
               className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-muted-foreground/40 transition-colors"
               onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
             >
               <Paperclip className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Drop files or click to attach (JPG, PNG, PDF)</p>
               <input ref={fileInputRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
-                onChange={(e) => addFiles(Array.from(e.target.files ?? []))} />
+                onChange={e => addFiles(Array.from(e.target.files ?? []))} />
             </div>
-
             {queuedFiles.length > 0 && (
               <div className="mt-2 space-y-1">
                 {queuedFiles.map((file, idx) => (
@@ -250,7 +248,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
                     {file.type.startsWith('image/') ? <ImageIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" /> : <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                     <span className="flex-1 truncate">{file.name}</span>
                     <span className="text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
-                    <button type="button" onClick={() => removeFile(idx)} className="text-muted-foreground hover:text-destructive">
+                    <button type="button" onClick={() => setQueuedFiles(p => p.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive">
                       <X className="h-3 w-3" />
                     </button>
                   </div>
@@ -263,7 +261,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={isSubmitting}>
-            {isSubmitting ? `Creating${queuedFiles.length > 0 ? ' & uploading...' : '...'}` : 'Create Card'}
+            {isSubmitting ? 'Creating...' : 'Create Card'}
           </Button>
         </DialogFooter>
       </form>
