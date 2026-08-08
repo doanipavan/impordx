@@ -47,9 +47,11 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
 
   async function handleArchive() {
     try {
-      const { error } = await (await import('../../lib/supabase')).supabase
-        .from('cards').update({ archived: true }).eq('id', card.id)
+      const { supabase } = await import('../../lib/supabase')
+      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
+      const { error } = await supabase.from('cards').update({ archived: true }).eq('id', card.id)
       if (error) throw error
+      await supabase.from('activity_logs').insert({ card_id: card.id, user_id: uid, action: 'archived' })
       toast('Card archived', 'info')
       onClose()
     } catch {

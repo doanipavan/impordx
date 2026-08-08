@@ -113,9 +113,12 @@ export function useUpdateCard() {
       if (error) throw error
       return data as Card
     },
-    onSuccess: (card) => {
+    onSuccess: async (card) => {
       qc.invalidateQueries({ queryKey: CARDS_QUERY(card.board as BoardType) })
       qc.invalidateQueries({ queryKey: ['card', card.id] })
+      qc.invalidateQueries({ queryKey: ['activity', card.id] })
+      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
+      await supabase.from('activity_logs').insert({ card_id: card.id, user_id: uid, action: 'updated' })
     },
   })
 }
@@ -142,6 +145,7 @@ export function useMoveCard() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: CARDS_QUERY(vars.board) })
       qc.invalidateQueries({ queryKey: ['card', vars.id] })
+      qc.invalidateQueries({ queryKey: ['activity', vars.id] })
     },
   })
 }

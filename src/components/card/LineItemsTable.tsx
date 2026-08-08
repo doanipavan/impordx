@@ -121,7 +121,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
         supplier_ref: card.supplier_ref,
       })
 
-      // Copy items to the new order card
+      // Copy items and log
       const { supabase } = await import('../../lib/supabase')
       for (const item of items) {
         const { id: _id, created_at: _c, card_id: _ci, ...rest } = item
@@ -129,6 +129,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
       }
 
       toast('Order card created successfully!', 'success')
+
+      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
+      await supabase.from('activity_logs').insert({
+        card_id: card.id, user_id: uid, action: 'generated_order', new_value: orderCard.ref_number ?? orderCard.id.substring(0, 8),
+      })
     } catch {
       toast('Failed to generate order', 'error')
     } finally {

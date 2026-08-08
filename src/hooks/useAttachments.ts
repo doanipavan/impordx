@@ -89,8 +89,9 @@ export function useUploadAttachment() {
       if (error) throw error
       return data as Attachment
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] })
+      supabase.from('activity_logs').insert({ card_id: vars.cardId, user_id: user!.id, action: 'uploaded', new_value: vars.file.name })
     },
   })
 }

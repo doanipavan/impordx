@@ -50,6 +50,7 @@ export function useAddComment() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['comments', vars.cardId] })
+      supabase.from('activity_logs').insert({ card_id: vars.cardId, user_id: user!.id, action: 'commented' })
     },
   })
 }

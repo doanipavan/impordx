@@ -4,12 +4,14 @@ import { Avatar } from '../ui/avatar'
 import { formatRelative, formatDateTime } from '../../lib/utils'
 
 const ACTION_CONFIG: Record<string, { label: (e: { old_value?: string; new_value?: string }) => string; icon: typeof Clock; color: string }> = {
-  created:       { label: () => 'created this card', icon: Plus, color: 'text-green-600' },
-  moved:         { label: (e) => `moved to "${e.new_value}"`, icon: ArrowRight, color: 'text-blue-600' },
-  deleted:       { label: () => 'deleted this card', icon: Trash2, color: 'text-red-500' },
-  uploaded:      { label: (e) => `uploaded "${e.new_value}"`, icon: Upload, color: 'text-purple-600' },
-  commented:     { label: () => 'posted a comment', icon: MessageSquare, color: 'text-slate-500' },
-  updated:       { label: (e) => `updated ${e.old_value || 'a field'}${e.new_value ? ` → "${e.new_value}"` : ''}`, icon: Clock, color: 'text-amber-600' },
+  created:          { label: () => 'created this card', icon: Plus, color: 'text-green-600' },
+  moved:            { label: (e) => `moved to "${e.new_value}"`, icon: ArrowRight, color: 'text-blue-600' },
+  updated:          { label: () => 'edited card details', icon: Clock, color: 'text-amber-600' },
+  archived:         { label: () => 'archived this card', icon: Clock, color: 'text-slate-500' },
+  deleted:          { label: () => 'deleted this card', icon: Trash2, color: 'text-red-500' },
+  uploaded:         { label: (e) => `uploaded "${e.new_value ?? 'a file'}"`, icon: Upload, color: 'text-purple-600' },
+  commented:        { label: () => 'posted a comment', icon: MessageSquare, color: 'text-slate-500' },
+  generated_order:  { label: (e) => `generated order ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-green-700' },
 }
 
 export function ActivityLog({ cardId }: { cardId: string }) {
