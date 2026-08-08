@@ -10,8 +10,8 @@ export interface CatalogItem {
 // Cada interno define o tipo de encaixe/forro adequado para o tipo de joia.
 export const CATALOG: CatalogItem[] = [
   // ALIANÇA
-  { id: 'alianca_r1',  category: 'Aliança',        code: 'R1',              label: 'R1',              image: '/catalog/aliança__r1.png' },
-  { id: 'alianca_r10', category: 'Aliança',        code: 'R10',             label: 'R10',             image: '/catalog/aliança__r10.png' },
+  { id: 'alianca_r1',  category: 'Aliança', code: 'R1',  label: 'R1',  image: '/catalog/alianca__r1.png' },
+  { id: 'alianca_r10', category: 'Aliança', code: 'R10', label: 'R10', image: '/catalog/alianca__r10.png' },
   // ANEL
   { id: 'anel_r1',     category: 'Anel',           code: 'R1',              label: 'R1',              image: '/catalog/anel__r1.png' },
   { id: 'anel_r9',     category: 'Anel',           code: 'R9',              label: 'R9',              image: '/catalog/anel__r9.png' },
