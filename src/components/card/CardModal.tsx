@@ -45,6 +45,18 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
     }
   }
 
+  async function handleArchive() {
+    try {
+      const { error } = await (await import('../../lib/supabase')).supabase
+        .from('cards').update({ archived: true }).eq('id', card.id)
+      if (error) throw error
+      toast('Card archived', 'info')
+      onClose()
+    } catch {
+      toast('Failed to archive card', 'error')
+    }
+  }
+
   async function handleStatusChange(newStatus: string) {
     try {
       await moveCard.mutateAsync({ id: card.id, status: newStatus as CardStatus, board })
@@ -96,6 +108,11 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
             <Button variant="ghost" size="icon" onClick={() => setEditing(true)} title="Edit card">
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </Button>
+            {user?.role !== 'viewer' && (
+              <Button variant="ghost" size="icon" onClick={handleArchive} title="Archive card" className="text-muted-foreground hover:text-amber-600">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={handleCopyLink} title="Copy link">
               <Copy className="h-4 w-4" />
             </Button>
