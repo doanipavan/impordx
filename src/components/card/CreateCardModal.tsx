@@ -30,6 +30,8 @@ const schema = z.object({
   inside_material_code: z.string().optional(),
   logo_color: z.string().optional(),
   logo_technique: z.string().optional(),
+  logo_technique_inside: z.string().optional(),
+  logo_technique_outside: z.string().optional(),
   inside_logo: z.string().optional(),
   outside_logo: z.string().optional(),
   reference_code: z.string().optional(),
@@ -71,10 +73,12 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
     try {
       // Merge material codes into description notes if provided
       const matNotes = [
-        values.outside_material_code ? `Outside material code: ${values.outside_material_code}` : '',
-        values.inside_material_code  ? `Inside material code: ${values.inside_material_code}`  : '',
-        values.inside_logo           ? `Inside logo: ${values.inside_logo}`                    : '',
-        values.outside_logo          ? `Outside logo: ${values.outside_logo}`                  : '',
+        values.outside_material_code   ? `Outside material code: ${values.outside_material_code}`    : '',
+        values.inside_material_code    ? `Inside material code: ${values.inside_material_code}`      : '',
+        values.logo_technique_inside   ? `Logo technique (inside): ${values.logo_technique_inside}`  : '',
+        values.inside_logo             ? `Logo text (inside): ${values.inside_logo}`                 : '',
+        values.logo_technique_outside  ? `Logo technique (outside): ${values.logo_technique_outside}`: '',
+        values.outside_logo            ? `Logo text (outside): ${values.outside_logo}`               : '',
       ].filter(Boolean).join('\n')
 
       const finalDescription = [values.description, matNotes].filter(Boolean).join('\n\n')
@@ -199,27 +203,51 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           </div>
 
           {/* Logo */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="logo_technique">Logo Technique</Label>
-              <Select id="logo_technique" {...register('logo_technique')}>
-                <option value="">— Select —</option>
-                {LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="logo_color">Logo Color</Label>
-              <Input id="logo_color" placeholder="e.g. Gold, White" {...register('logo_color')} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="inside_logo">Inside Logo</Label>
-              <Input id="inside_logo" placeholder="e.g. Brand name engraved inside" {...register('inside_logo')} />
-            </div>
-            <div>
-              <Label htmlFor="outside_logo">Outside Logo</Label>
-              <Input id="outside_logo" placeholder="e.g. Brand name hot stamp outside" {...register('outside_logo')} />
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Logo</Label>
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              {/* Inside */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Inside</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="logo_technique_inside">Technique</Label>
+                    <Select id="logo_technique_inside" {...register('logo_technique_inside')}>
+                      <option value="">— Select —</option>
+                      {LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="inside_logo">Logo / Text</Label>
+                    <Input id="inside_logo" placeholder="e.g. Brand name engraved" {...register('inside_logo')} />
+                  </div>
+                </div>
+              </div>
+              {/* Divider */}
+              <div className="h-px bg-border" />
+              {/* Outside */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Outside</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="logo_technique_outside">Technique</Label>
+                    <Select id="logo_technique_outside" {...register('logo_technique_outside')}>
+                      <option value="">— Select —</option>
+                      {LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="outside_logo">Logo / Text</Label>
+                    <Input id="outside_logo" placeholder="e.g. Brand name hot stamp" {...register('outside_logo')} />
+                  </div>
+                </div>
+              </div>
+              {/* Color (shared) */}
+              <div className="h-px bg-border" />
+              <div>
+                <Label htmlFor="logo_color">Logo Color</Label>
+                <Input id="logo_color" placeholder="e.g. Gold, Silver, White" {...register('logo_color')} />
+              </div>
             </div>
           </div>
 
