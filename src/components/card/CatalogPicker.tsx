@@ -30,8 +30,8 @@ export function CatalogPicker({ onSelect, onClose }: CatalogPickerProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div>
-            <h3 className="font-semibold">Internal Catalog</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Select a predefined product or choose Custom</p>
+            <h3 className="font-semibold">Box Internal Catalog</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Select the box internal (lining type) for this jewelry piece</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-5 w-5" />
