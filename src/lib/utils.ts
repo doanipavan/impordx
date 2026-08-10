@@ -89,8 +89,7 @@ export function generateId(): string {
 
 export const LOGO_TECHNIQUES = [
   'UV Spot',
-  'Hot Stamping Gold',
-  'Hot Stamping Silver',
+  'Hot Stamping',
   'Embossing',
   'Debossing',
   'Silk Print',
