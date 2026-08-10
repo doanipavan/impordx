@@ -178,22 +178,18 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             </div>
           </div>
 
-          {/* Outside Material + code */}
-          <div className="space-y-1.5">
-            <Label>Outside Material</Label>
-            <div className="grid grid-cols-2 gap-3">
+          {/* Materials — same row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Outside Material</Label>
               <Select id="outside_material" {...register('outside_material')}>
                 <option value="">— Select —</option>
                 {OUTSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
               </Select>
               <Input placeholder="Material # (e.g. V-023)" {...register('outside_material_code')} />
             </div>
-          </div>
-
-          {/* Inside Material + code */}
-          <div className="space-y-1.5">
-            <Label>Inside Material</Label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Inside Material</Label>
               <Select id="inside_material" {...register('inside_material')}>
                 <option value="">— Select —</option>
                 {INSIDE_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
