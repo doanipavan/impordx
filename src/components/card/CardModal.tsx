@@ -14,6 +14,8 @@ import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { ActivityLog } from './ActivityLog'
 import { LineItemsTable } from './LineItemsTable'
 import { EditCardModal } from './EditCardModal'
+import { SeenBy } from './SeenBy'
+import { useRecordView } from '../../hooks/useCardViews'
 import { cn, formatDate, formatCurrency, isOverdue } from '../../lib/utils'
 
 interface CardModalProps {
@@ -32,6 +34,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   const deleteCard = useDeleteCard()
   const { user } = useAuth()
   const toast = useToast()
+  useRecordView(card.id) // record that this user viewed the card
   const columns = BOARD_COLUMNS[board]
   const overdue = isOverdue(card.deadline)
 
@@ -242,6 +245,11 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
 
               {/* Sidebar */}
               <div className="p-5 space-y-4">
+                {/* Seen by */}
+                <div>
+                  <SeenBy cardId={card.id} />
+                </div>
+
                 {/* Responsible */}
                 {card.responsible && (
                   <div>
