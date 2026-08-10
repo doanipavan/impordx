@@ -21,7 +21,7 @@ const schema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
   client_name: z.string().optional(),
   collection: z.string().optional(),
-  quantity: z.number().positive().optional().or(z.literal('')),
+  quantity: z.union([z.number().positive(), z.nan(), z.literal('')]).optional(),
   deadline: z.string().optional(),
   description: z.string().optional(),
   outside_material: z.string().optional(),
