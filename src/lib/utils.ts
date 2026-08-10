@@ -107,9 +107,12 @@ export const OUTSIDE_MATERIALS = [
   'Linen',
   'Cotton',
   'Microfiber',
+  'Satin',
+  'Foam',
+  'EVA',
   'Custom',
 ]
 
-export const INSIDE_MATERIALS = ['Velvet', 'Suede', 'Satin', 'Foam', 'EVA', 'Custom']
+export const INSIDE_MATERIALS = OUTSIDE_MATERIALS
 
 export const COLLECTIONS = ['Parma', 'Capri', 'Barcelona', 'Genova', 'Trento', 'Turim', 'Monza', 'Custom']
