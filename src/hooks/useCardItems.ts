@@ -12,6 +12,8 @@ export interface CardItem {
   size?: string
   quantity: number
   unit_price_usd?: number
+  file_url?: string
+  file_name?: string
   notes?: string
   sort_order: number
   created_at: string

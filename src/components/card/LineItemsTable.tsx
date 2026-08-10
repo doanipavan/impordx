@@ -1,14 +1,16 @@
-import { useState } from 'react'
-import { Plus, Trash2, ShoppingCart, Check, X, BookOpen } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip } from 'lucide-react'
 import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
 import { useCreateCard } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { cn } from '../../lib/utils'
+import { cn, formatFileSize } from '../../lib/utils'
 import { Card, BoardType } from '../../types'
 import { CatalogPicker } from './CatalogPicker'
+import { ExportRFQ } from './ExportRFQ'
 import { CatalogItem, CATALOG } from '../../lib/catalog'
+import { supabase } from '../../lib/supabase'
 
 function CatalogThumbnail({ code }: { code?: string }) {
   const match = code ? CATALOG.find(c => c.code.toLowerCase() === code.toLowerCase()) : null
@@ -53,7 +55,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
   const [adding, setAdding] = useState(false)
   const [showCatalog, setShowCatalog] = useState(false)
+  const [showExport, setShowExport] = useState(false)
   const [selectedCatalogImage, setSelectedCatalogImage] = useState<string | null>(null)
+  const [customFile, setCustomFile] = useState<File | null>(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [newItem, setNewItem] = useState<NewItem>({ ...EMPTY_ITEM })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Partial<CardItem>>({})
@@ -84,13 +90,28 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
       return
     }
     try {
+      let file_url: string | undefined
+      let file_name: string | undefined
+
+      if (customFile) {
+        setUploadingFile(true)
+        const path = `${card.id}/items/${Date.now()}-${customFile.name}`
+        const { error } = await supabase.storage.from('attachments').upload(path, customFile, { contentType: customFile.type })
+        if (!error) { file_url = path; file_name = customFile.name }
+        setUploadingFile(false)
+      }
+
       await addItem.mutateAsync({
         card_id: card.id,
         ...newItem,
+        file_url,
+        file_name,
         sort_order: items.length,
       })
       setNewItem({ ...EMPTY_ITEM })
       setAdding(false)
+      setCustomFile(null)
+      setSelectedCatalogImage(null)
       toast('Item added', 'success')
     } catch {
       toast('Failed to add item', 'error')
@@ -166,12 +187,20 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Product Line Items {items.length > 0 && `(${items.length})`}
         </p>
-        {canGenerateOrder && (
-          <Button size="sm" onClick={handleGenerateOrder} loading={generatingOrder} className="gap-1.5">
-            <ShoppingCart className="h-3.5 w-3.5" />
-            Generate Order
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {items.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setShowExport(true)}>
+              <Download className="h-3.5 w-3.5" />
+              Export RFQ
+            </Button>
+          )}
+          {canGenerateOrder && (
+            <Button size="sm" onClick={handleGenerateOrder} loading={generatingOrder} className="gap-1.5">
+              <ShoppingCart className="h-3.5 w-3.5" />
+              Generate Order
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -310,9 +339,32 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleAdd} loading={addItem.isPending}>Add item</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }); setSelectedCatalogImage(null) }}>Cancel</Button>
+            <Button size="sm" onClick={handleAdd} loading={addItem.isPending || uploadingFile}>
+              {uploadingFile ? 'Uploading...' : 'Add item'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }); setSelectedCatalogImage(null); setCustomFile(null) }}>Cancel</Button>
           </div>
+
+          {/* File upload for custom items only */}
+          {!selectedCatalogImage && (
+            <div className="border-t border-border pt-2">
+              {customFile ? (
+                <div className="flex items-center gap-2 bg-muted rounded px-2 py-1.5 text-xs">
+                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="flex-1 truncate">{customFile.name}</span>
+                  <span className="text-muted-foreground">{formatFileSize(customFile.size)}</span>
+                  <button onClick={() => setCustomFile(null)} className="text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
+                </div>
+              ) : (
+                <button onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-1 transition-colors">
+                  <Paperclip className="h-3.5 w-3.5" /> Attach reference image or PDF
+                </button>
+              )}
+              <input ref={fileRef} type="file" className="hidden" accept="image/*,application/pdf"
+                onChange={e => setCustomFile(e.target.files?.[0] ?? null)} />
+            </div>
+          )}
         </div>
       )}
 
@@ -321,6 +373,9 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
           "Generate Order" will appear when this sample reaches <strong>Approved</strong> status.
         </p>
       )}
+
+      {showCatalog && <CatalogPicker onSelect={handleCatalogSelect} onClose={() => setShowCatalog(false)} />}
+      {showExport && <ExportRFQ card={card} items={items} onClose={() => setShowExport(false)} />}
     </div>
   )
 }
