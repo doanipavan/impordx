@@ -8,7 +8,21 @@ import { Input } from '../ui/input'
 import { cn } from '../../lib/utils'
 import { Card, BoardType } from '../../types'
 import { CatalogPicker } from './CatalogPicker'
-import { CatalogItem } from '../../lib/catalog'
+import { CatalogItem, CATALOG } from '../../lib/catalog'
+
+function CatalogThumbnail({ code }: { code?: string }) {
+  const match = code ? CATALOG.find(c => c.code.toLowerCase() === code.toLowerCase()) : null
+  return (
+    <div className="flex flex-col items-center gap-1">
+      {match ? (
+        <img src={match.image} alt={match.code} className="h-10 w-10 object-contain rounded border border-border bg-white p-0.5" />
+      ) : (
+        <div className="h-10 w-10 rounded border border-dashed border-border bg-muted/40 flex items-center justify-center text-[9px] text-muted-foreground">—</div>
+      )}
+      <span className="font-mono text-[10px] font-semibold">{code || '—'}</span>
+    </div>
+  )
+}
 
 interface LineItemsTableProps {
   card: Card
@@ -166,7 +180,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
           <table className="w-full">
             <thead className="bg-muted/50">
               <tr>
-                {['Ref', 'Description', 'Ext Color', 'Int Color', 'Size', 'Qty', 'Unit $', ''].map(h => (
+                {['Internal', 'Description', 'Size', 'Qty', 'Unit $', ''].map(h => (
                   <th key={h} className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase">{h}</th>
                 ))}
               </tr>
@@ -176,7 +190,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                 <tr key={item.id} className={cn('group hover:bg-muted/30', editingId === item.id && 'bg-blue-50/50')}>
                   {editingId === item.id ? (
                     <>
-                      {(['reference_code', 'description', 'outside_color', 'inside_color', 'size'] as const).map(field => (
+                      {(['reference_code', 'description', 'size'] as const).map(field => (
                         <td key={field} className="px-1 py-1">
                           <Input className="h-6 text-xs px-1" value={String(editValues[field] ?? item[field] ?? '')}
                             onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))} />
@@ -200,10 +214,14 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                     </>
                   ) : (
                     <>
-                      <td className="px-2 py-1.5 font-mono text-[11px]">{item.reference_code || '—'}</td>
-                      <td className="px-2 py-1.5">{item.description || '—'}</td>
-                      <td className="px-2 py-1.5">{item.outside_color || '—'}</td>
-                      <td className="px-2 py-1.5">{item.inside_color || '—'}</td>
+                      {/* INTERNAL — code + catalog thumbnail */}
+                      <td className="px-2 py-1.5 w-24">
+                        <CatalogThumbnail code={item.reference_code} />
+                      </td>
+                      {/* DESCRIPTION */}
+                      <td className="px-2 py-1.5 max-w-[160px]">
+                        <span className="line-clamp-2">{item.description || '—'}</span>
+                      </td>
                       <td className="px-2 py-1.5">{item.size || '—'}</td>
                       <td className="px-2 py-1.5 font-semibold">{item.quantity}</td>
                       <td className="px-2 py-1.5">{item.unit_price_usd ? `$${item.unit_price_usd}` : '—'}</td>
@@ -276,12 +294,6 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
             </div>
           </div>
           <div className="grid grid-cols-4 gap-2">
-            <div><label className="text-[10px] text-muted-foreground">Ext Color</label>
-              <Input className="h-7 text-xs" value={newItem.outside_color} onChange={e => setNewItem(v => ({ ...v, outside_color: e.target.value }))} />
-            </div>
-            <div><label className="text-[10px] text-muted-foreground">Int Color</label>
-              <Input className="h-7 text-xs" value={newItem.inside_color} onChange={e => setNewItem(v => ({ ...v, inside_color: e.target.value }))} />
-            </div>
             <div><label className="text-[10px] text-muted-foreground">Size</label>
               <Input className="h-7 text-xs" placeholder="16x16x3.5" value={newItem.size} onChange={e => setNewItem(v => ({ ...v, size: e.target.value }))} />
             </div>
