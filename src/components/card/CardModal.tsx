@@ -210,16 +210,40 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 </div>
 
                 {/* Materials */}
-                {(card.outside_material || card.inside_material || card.logo_color) && (
+                {(card.outside_material || card.inside_material) && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Materials & Finish</p>
                     <div className="grid grid-cols-2 gap-3">
                       <InfoField icon={<Paintbrush />} label="Outside" value={card.outside_material} />
                       <InfoField icon={<Paintbrush />} label="Inside" value={card.inside_material} />
-                      <InfoField label="Logo Color" value={card.logo_color} />
-                      <InfoField label="Logo Technique" value={card.logo_technique} />
-                      {card.logo_positions && card.logo_positions.length > 0 && (
-                        <InfoField label="Logo Positions" value={card.logo_positions.join(', ')} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Logo */}
+                {(card.logo_technique_outside || card.logo_technique_inside) && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Logo</p>
+                    <div className="space-y-2">
+                      {(card.logo_technique_outside || card.logo_text_outside || card.logo_color_outside) && (
+                        <div className="rounded-md bg-muted/40 p-2.5">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Outside</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <InfoField label="Technique" value={card.logo_technique_outside} />
+                            <InfoField label="Text" value={card.logo_text_outside} />
+                            <InfoField label="Color" value={card.logo_color_outside} />
+                          </div>
+                        </div>
+                      )}
+                      {(card.logo_technique_inside || card.logo_text_inside || card.logo_color_inside) && (
+                        <div className="rounded-md bg-muted/40 p-2.5">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Inside</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <InfoField label="Technique" value={card.logo_technique_inside} />
+                            <InfoField label="Text" value={card.logo_text_inside} />
+                            <InfoField label="Color" value={card.logo_color_inside} />
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

@@ -39,6 +39,12 @@ export interface Card {
   reference_code?: string
   supplier_ref?: string
   ref_number?: string
+  logo_technique_outside?: string
+  logo_technique_inside?: string
+  logo_text_outside?: string
+  logo_text_inside?: string
+  logo_color_outside?: string
+  logo_color_inside?: string
   tags?: string[]
   created_by: string
   created_at: string
