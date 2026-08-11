@@ -1,14 +1,15 @@
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Package, ShoppingCart, Bell, Archive,
-  Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, X
+  Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../hooks/useAuth'
 import { useUnreadCount } from '../../hooks/useNotifications'
 import { Avatar } from '../ui/avatar'
 import { Button } from '../ui/button'
+import { Spotlight } from '../search/Spotlight'
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
@@ -27,8 +28,21 @@ const ADMIN_NAV = [
 export function Layout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   const { user, signOut } = useAuth()
   const unread = useUnreadCount()
+
+  // Cmd+K / Ctrl+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowSearch(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -47,16 +61,25 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
       >
         {/* Logo */}
-        <div className={cn('flex items-center gap-3 px-3 py-4 border-b border-border shrink-0', collapsed && 'justify-center px-0')}>
+        <div className={cn('flex items-center gap-2 px-3 py-4 border-b border-border shrink-0', collapsed && 'justify-center px-0')}>
           {collapsed ? (
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">R</div>
           ) : (
             <img src="/logo.webp" alt="Redantex" className="h-7 object-contain" />
           )}
           {!collapsed && (
-            <div className="min-w-0 ml-1">
+            <div className="flex-1 min-w-0 ml-1">
               <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase">Supplier Hub</p>
             </div>
+          )}
+          {!collapsed && (
+            <button
+              onClick={() => setShowSearch(true)}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Search (⌘K)"
+            >
+              <Search className="h-4 w-4" />
+            </button>
           )}
         </div>
 
@@ -128,13 +151,18 @@ export function Layout({ children }: { children: ReactNode }) {
           <button onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
-          <p className="font-semibold text-sm">DEQI Hub</p>
+          <p className="font-semibold text-sm flex-1">DEQI Hub</p>
+          <button onClick={() => setShowSearch(true)} className="text-muted-foreground hover:text-foreground">
+            <Search className="h-5 w-5" />
+          </button>
         </div>
 
         <main className="flex-1 overflow-hidden">
           {children}
         </main>
       </div>
+
+      {showSearch && <Spotlight onClose={() => setShowSearch(false)} />}
     </div>
   )
 }
