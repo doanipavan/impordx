@@ -275,7 +275,6 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 </div>
 
                 {/* Approved artwork */}
-                <ApprovedArtwork cardId={card.id} />
 
                 {card.responsible && (
                   <div>
@@ -371,25 +370,6 @@ function InfoField({
     <div>
       <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
       <p className={cn('text-sm font-medium', monospace && 'font-mono')}>{value}</p>
-    </div>
-  )
-}
-
-import { useAttachments } from '../../hooks/useAttachments'
-
-function ApprovedArtwork({ cardId }: { cardId: string }) {
-  const { data: attachments = [] } = useAttachments(cardId)
-  const approved = attachments.find(a => a.approved_at)
-  if (!approved) return null
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide font-medium flex items-center gap-1.5">
-        <span className="text-green-600">✓</span> Approved Artwork
-      </p>
-      <div className="rounded-lg border border-green-300 bg-green-50/50 p-2.5 text-xs">
-        <p className="font-medium truncate">{approved.filename}</p>
-        {approved.approved_by_user && <p className="text-muted-foreground mt-0.5">by {approved.approved_by_user.full_name}</p>}
-      </div>
     </div>
   )
 }
