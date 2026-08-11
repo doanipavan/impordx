@@ -28,7 +28,7 @@ export function useAttachments(cardId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('attachments')
-        .select('*, user:users(id, full_name, email, avatar_url, role, created_at), approved_by_user:users!attachments_approved_by_fkey(full_name)')
+        .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
         .eq('card_id', cardId)
         .order('created_at', { ascending: false })
       if (error) throw error
