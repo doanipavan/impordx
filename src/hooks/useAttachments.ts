@@ -28,7 +28,7 @@ export function useAttachments(cardId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('attachments')
-        .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
+        .select('*, user:users(id, full_name, email, avatar_url, role, created_at), approved_by_user:users!attachments_approved_by_fkey(full_name)')
         .eq('card_id', cardId)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -106,6 +106,30 @@ export function useDeleteAttachment() {
       const { error } = await supabase.from('attachments').delete().eq('id', id)
       if (error) throw error
       return cardId
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] })
+    },
+  })
+}
+
+export function useApproveAttachment() {
+  const qc = useQueryClient()
+  const { user } = useAuth()
+
+  return useMutation({
+    mutationFn: async ({ id, cardId, currentApprovedId }: { id: string; cardId: string; currentApprovedId?: string }) => {
+      // Remove previous approval if any
+      if (currentApprovedId && currentApprovedId !== id) {
+        await supabase.from('attachments')
+          .update({ approved_at: null, approved_by: null })
+          .eq('id', currentApprovedId)
+      }
+      // Set new approval
+      const { error } = await supabase.from('attachments')
+        .update({ approved_at: new Date().toISOString(), approved_by: user!.id })
+        .eq('id', id)
+      if (error) throw error
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] })

@@ -1,10 +1,10 @@
 import { useRef, useState, DragEvent } from 'react'
-import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon } from 'lucide-react'
-import { useAttachments, useUploadAttachment, useDeleteAttachment, getSignedUrl } from '../../hooks/useAttachments'
+import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
+import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
-import { cn, formatFileSize, formatDateTime } from '../../lib/utils'
+import { cn, formatFileSize, formatDateTime, formatRelative } from '../../lib/utils'
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const MAX_PDF_SIZE = 20 * 1024 * 1024
@@ -14,6 +14,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const { data: attachments = [], isLoading } = useAttachments(cardId)
   const uploadAttachment = useUploadAttachment()
   const deleteAttachment = useDeleteAttachment()
+  const approveAttachment = useApproveAttachment()
   const { user } = useAuth()
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -21,6 +22,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const [uploading, setUploading] = useState<string[]>([])
   const [preview, setPreview] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+
+  const approvedAtt = attachments.find(a => a.approved_at)
+  const canApprove = user?.role === 'admin' || user?.role === 'member'
 
   async function uploadFiles(files: File[]) {
     for (const file of files) {
@@ -31,11 +35,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
       try {
         await uploadAttachment.mutateAsync({ cardId, file })
         toast(`"${file.name}" uploaded`, 'success')
-      } catch {
-        toast(`Failed to upload "${file.name}"`, 'error')
-      } finally {
-        setUploading(p => p.filter(n => n !== file.name))
-      }
+      } catch { toast(`Failed to upload "${file.name}"`, 'error') }
+      finally { setUploading(p => p.filter(n => n !== file.name)) }
     }
   }
 
@@ -61,6 +62,13 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
     finally { setLoadingId(null) }
   }
 
+  async function handleApprove(att: Attachment) {
+    try {
+      await approveAttachment.mutateAsync({ id: att.id, cardId, currentApprovedId: approvedAtt?.id })
+      toast(`"${att.filename}" marked as approved artwork`, 'success')
+    } catch { toast('Failed to approve', 'error') }
+  }
+
   async function handleDelete(att: Attachment) {
     if (!confirm(`Delete "${att.filename}"?`)) return
     try { await deleteAttachment.mutateAsync({ id: att.id, cardId, fileUrl: att.file_url }); toast('Deleted', 'info') }
@@ -69,14 +77,41 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Approved artwork banner */}
+      {approvedAtt && (
+        <div className="rounded-lg border-2 border-green-400 bg-green-50 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+            <p className="text-sm font-semibold text-green-800">Approved Artwork</p>
+            <span className="text-xs text-green-600 ml-auto">{formatRelative(approvedAtt.approved_at!)}</span>
+          </div>
+          <div className="flex items-center gap-3 bg-white rounded-md p-2 border border-green-200">
+            <div className="h-10 w-10 bg-green-50 rounded flex items-center justify-center shrink-0">
+              {approvedAtt.file_type.startsWith('image/') ? <ImageIcon className="h-5 w-5 text-green-600" /> : <FileText className="h-5 w-5 text-green-600" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{approvedAtt.filename}</p>
+              <p className="text-xs text-muted-foreground">{formatFileSize(approvedAtt.file_size)}</p>
+            </div>
+            <button onClick={() => handleDownload(approvedAtt)} disabled={loadingId === approvedAtt.id}
+              className="flex items-center gap-1.5 text-xs text-green-700 hover:text-green-900 font-medium px-2 py-1 rounded hover:bg-green-100 transition-colors">
+              {loadingId === approvedAtt.id ? <div className="h-3 w-3 border border-green-600 border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              Download
+            </button>
+          </div>
+          {approvedAtt.approved_by_user && (
+            <p className="text-[10px] text-green-600">Approved by {approvedAtt.approved_by_user.full_name}</p>
+          )}
+        </div>
+      )}
+
       {/* Upload zone */}
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className={cn(
-          'border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all',
+        className={cn('border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all',
           dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
         )}
       >
@@ -87,7 +122,6 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
           onChange={e => uploadFiles(Array.from(e.target.files ?? []))} />
       </div>
 
-      {/* Uploading */}
       {uploading.map(name => (
         <div key={name} className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -107,56 +141,66 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
       {/* Timeline */}
       {attachments.length > 0 && (
         <div className="relative">
-          {/* Vertical line */}
           <div className="absolute left-[18px] top-2 bottom-2 w-px bg-border" />
-
           <div className="space-y-3">
             {attachments.map(att => {
               const isImage = att.file_type.startsWith('image/')
+              const isApproved = !!att.approved_at
               const canDelete = att.user_id === user?.id || user?.role === 'admin'
               const isLoading = loadingId === att.id
 
               return (
                 <div key={att.id} className="flex gap-3 group relative">
-                  {/* Dot */}
                   <div className={cn(
                     'h-9 w-9 rounded-full border-2 border-background flex items-center justify-center shrink-0 z-10 mt-0.5',
-                    isImage ? 'bg-blue-100' : 'bg-amber-100'
+                    isApproved ? 'bg-green-100' : isImage ? 'bg-blue-100' : 'bg-amber-100'
                   )}>
-                    {isImage
-                      ? <ImageIcon className="h-4 w-4 text-blue-600" />
-                      : <FileText className="h-4 w-4 text-amber-600" />
+                    {isApproved
+                      ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      : isImage
+                        ? <ImageIcon className="h-4 w-4 text-blue-600" />
+                        : <FileText className="h-4 w-4 text-amber-600" />
                     }
                   </div>
 
-                  {/* Card */}
-                  <div className="flex-1 bg-card border border-border rounded-lg p-3 hover:shadow-card-hover transition-all">
+                  <div className={cn(
+                    'flex-1 bg-card border rounded-lg p-3 hover:shadow-card-hover transition-all',
+                    isApproved ? 'border-green-300 bg-green-50/30' : 'border-border'
+                  )}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" title={att.filename}>{att.filename}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}
-                        </p>
-                        {att.user && (
-                          <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{att.filename}</p>
+                          {isApproved && (
+                            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
+                        {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
                       </div>
 
-                      {/* Actions */}
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        {/* Approve button — only for member/admin, only images/PDFs */}
+                        {canApprove && !isApproved && (
+                          <button onClick={() => handleApprove(att)}
+                            className="h-7 px-2 rounded flex items-center gap-1 text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 font-medium"
+                            title="Mark as approved artwork">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                          </button>
+                        )}
                         {isImage && (
                           <button onClick={() => handlePreview(att)} disabled={isLoading}
-                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent" title="Preview">
+                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
                             <Eye className="h-3.5 w-3.5" />
                           </button>
                         )}
                         <button onClick={() => handleDownload(att)} disabled={isLoading}
-                          className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent" title="Download">
+                          className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
                           {isLoading ? <div className="h-3 w-3 border border-primary border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                         </button>
-                        {canDelete && (
+                        {canDelete && !isApproved && (
                           <button onClick={() => handleDelete(att)}
-                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -170,7 +214,6 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         </div>
       )}
 
-      {/* Lightbox */}
       {preview && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setPreview(null)}>
           <button className="absolute top-4 right-4 text-white"><X className="h-6 w-6" /></button>

@@ -75,6 +75,9 @@ export interface Attachment {
   file_type: string
   file_size: number
   thumbnail_url?: string
+  approved_at?: string
+  approved_by?: string
+  approved_by_user?: { full_name: string }
   created_at: string
 }
 
