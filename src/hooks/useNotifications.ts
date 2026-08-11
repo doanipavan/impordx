@@ -13,11 +13,7 @@ export function useNotifications() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notifications')
-        .select(`
-          *,
-          card:cards(id, title, board),
-          actor:users!notifications_actor_id_fkey(id, full_name, avatar_url, email, role, created_at)
-        `)
+        .select(`*, card:cards(id, title, board), actor:users!notifications_actor_id_fkey(id, full_name, avatar_url, email, role, created_at)`)
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(50)
@@ -27,17 +23,28 @@ export function useNotifications() {
     enabled: !!user,
   })
 
-  // Realtime for notifications
+  // Single global realtime subscription — use a stable channel name
   useEffect(() => {
     if (!user) return
+    const channelName = `notifications-${user.id}`
+    // Check if channel already exists to avoid duplicate
+    const existing = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`)
+    if (existing) return
+
     const channel = supabase
-      .channel(`notifications:${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => qc.invalidateQueries({ queryKey: ['notifications', user.id] })
-      )
+      .channel(channelName)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        qc.invalidateQueries({ queryKey: ['notifications', user.id] })
+      })
       .subscribe()
+
     return () => { supabase.removeChannel(channel) }
-  }, [user, qc])
+  }, [user?.id])
 
   return query
 }
@@ -45,38 +52,28 @@ export function useNotifications() {
 export function useMarkNotificationRead() {
   const qc = useQueryClient()
   const { user } = useAuth()
-
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications', user?.id] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications', user?.id] }),
   })
 }
 
 export function useMarkAllRead() {
   const qc = useQueryClient()
   const { user } = useAuth()
-
   return useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', user!.id)
-        .eq('read', false)
+      const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', user!.id).eq('read', false)
       if (error) throw error
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications', user?.id] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications', user?.id] }),
   })
 }
 
 export function useUnreadCount() {
   const { data } = useNotifications()
-  return data?.filter((n) => !n.read).length ?? 0
+  return data?.filter(n => !n.read).length ?? 0
 }
