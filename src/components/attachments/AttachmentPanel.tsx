@@ -1,6 +1,6 @@
 import { useRef, useState, DragEvent } from 'react'
-import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
-import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, getSignedUrl } from '../../hooks/useAttachments'
+import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle } from 'lucide-react'
+import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
@@ -15,6 +15,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const uploadAttachment = useUploadAttachment()
   const deleteAttachment = useDeleteAttachment()
   const approveAttachment = useApproveAttachment()
+  const unapproveAttachment = useUnapproveAttachment()
   const { user } = useAuth()
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -25,6 +26,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
   const approvedAtt = attachments.find(a => a.approved_at)
   const canApprove = user?.role === 'admin' || user?.role === 'member'
+  const canUnapprove = user?.role === 'admin'
 
   async function uploadFiles(files: File[]) {
     for (const file of files) {
@@ -69,6 +71,14 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
     } catch { toast('Failed to approve', 'error') }
   }
 
+  async function handleUnapprove(att: Attachment) {
+    if (!confirm(`Remove approval from "${att.filename}"?`)) return
+    try {
+      await unapproveAttachment.mutateAsync({ id: att.id, cardId })
+      toast(`Approval removed from "${att.filename}"`, 'info')
+    } catch { toast('Failed to remove approval', 'error') }
+  }
+
   async function handleDelete(att: Attachment) {
     if (!confirm(`Delete "${att.filename}"?`)) return
     try { await deleteAttachment.mutateAsync({ id: att.id, cardId, fileUrl: att.file_url }); toast('Deleted', 'info') }
@@ -98,6 +108,14 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
               {loadingId === approvedAtt.id ? <div className="h-3 w-3 border border-green-600 border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               Download
             </button>
+            {canUnapprove && (
+              <button onClick={() => handleUnapprove(approvedAtt)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive font-medium px-2 py-1 rounded hover:bg-destructive/10 transition-colors"
+                title="Remove approval">
+                <XCircle className="h-3.5 w-3.5" />
+                Unapprove
+              </button>
+            )}
           </div>
           {approvedAtt.approved_by_user && (
             <p className="text-[10px] text-green-600">Approved by {approvedAtt.approved_by_user.full_name}</p>

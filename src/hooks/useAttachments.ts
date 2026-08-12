@@ -136,3 +136,19 @@ export function useApproveAttachment() {
     },
   })
 }
+
+export function useUnapproveAttachment() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, cardId }: { id: string; cardId: string }) => {
+      const { error } = await supabase.from('attachments')
+        .update({ approved_at: null, approved_by: null })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] })
+    },
+  })
+}
