@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Download } from 'lucide-react'
+import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply } from 'lucide-react'
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
-import { useUploadAttachment, getSignedUrl } from '../../hooks/useAttachments'
+import { useUploadAttachment } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Avatar } from '../ui/avatar'
@@ -14,6 +14,40 @@ const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'applica
 
 export function CommentThread({ cardId }: { cardId: string }) {
   const { data: comments = [], isLoading } = useComments(cardId)
+
+  const topLevel = comments.filter(c => !c.parent_id)
+  const repliesByParent = comments.reduce<Record<string, Comment[]>>((acc, c) => {
+    if (c.parent_id) (acc[c.parent_id] ??= []).push(c)
+    return acc
+  }, {})
+
+  if (isLoading) return <div className="text-sm text-muted-foreground py-4 text-center">Loading...</div>
+
+  return (
+    <div className="space-y-5">
+      {comments.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No comments yet. Start the conversation.</p>
+        </div>
+      )}
+
+      {topLevel.map(comment => (
+        <CommentItem key={comment.id} comment={comment} cardId={cardId} replies={repliesByParent[comment.id] ?? []} />
+      ))}
+
+      <CommentComposer cardId={cardId} />
+    </div>
+  )
+}
+
+function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'Write a comment...' }: {
+  cardId: string
+  parentId?: string
+  onDone?: () => void
+  autoFocus?: boolean
+  placeholder?: string
+}) {
   const { user } = useAuth()
   const addComment = useAddComment()
   const uploadAttachment = useUploadAttachment()
@@ -49,9 +83,10 @@ export function CommentThread({ cardId }: { cardId: string }) {
         finalBody = finalBody ? `${finalBody}\n\n${suffix}` : suffix
       }
 
-      await addComment.mutateAsync({ cardId, body: finalBody })
+      await addComment.mutateAsync({ cardId, body: finalBody, parentId })
       setBody('')
       setFiles([])
+      onDone?.()
     } catch {
       toast('Failed to post comment', 'error')
     } finally {
@@ -59,89 +94,111 @@ export function CommentThread({ cardId }: { cardId: string }) {
     }
   }
 
-  if (isLoading) return <div className="text-sm text-muted-foreground py-4 text-center">Loading...</div>
+  if (!user) return null
 
   return (
-    <div className="space-y-5">
-      {comments.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No comments yet. Start the conversation.</p>
+    <form onSubmit={handleSubmit} className="flex gap-3">
+      <Avatar name={user.full_name} imageUrl={user.avatar_url} size="sm" className="shrink-0 mt-0.5" />
+      <div className="flex-1 space-y-2">
+        <div
+          className={cn('rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring transition-colors', files.length > 0 && 'border-primary/40')}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
+        >
+          <Textarea
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder={placeholder}
+            rows={parentId ? 2 : 3}
+            className="border-0 shadow-none focus-visible:ring-0 resize-none rounded-b-none"
+            autoFocus={autoFocus}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e) }}
+          />
+
+          {/* Queued files */}
+          {files.length > 0 && (
+            <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 bg-muted rounded px-2 py-1 text-xs">
+                  {f.type.startsWith('image/') ? <ImageIcon className="h-3 w-3 text-blue-500" /> : <FileText className="h-3 w-3 text-muted-foreground" />}
+                  <span className="max-w-[120px] truncate">{f.name}</span>
+                  <span className="text-muted-foreground">{formatFileSize(f.size)}</span>
+                  <button type="button" onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-3 py-2 border-t border-border">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              title="Attach files"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              Attach file
+            </button>
+            <div className="flex items-center gap-3">
+              {parentId && (
+                <Button type="button" size="sm" variant="ghost" onClick={onDone}>Cancel</Button>
+              )}
+              <p className="text-xs text-muted-foreground hidden sm:block">Ctrl+Enter to submit</p>
+              <Button type="submit" size="sm" loading={submitting} disabled={!body.trim() && files.length === 0}>
+                {parentId ? 'Reply' : 'Post comment'}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <input ref={fileRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
+          onChange={e => addFiles(Array.from(e.target.files ?? []))} />
+      </div>
+    </form>
+  )
+}
+
+function CommentItem({ comment, cardId, replies = [] }: { comment: Comment; cardId: string; replies?: Comment[] }) {
+  const { user } = useAuth()
+  const [replying, setReplying] = useState(false)
+
+  return (
+    <div>
+      <CommentBody comment={comment} cardId={cardId} isOwn={comment.user_id === user?.id} />
+
+      <div className="ml-11 mt-1.5">
+        {!replying && (
+          <button onClick={() => setReplying(true)}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 -ml-2 rounded hover:bg-accent">
+            <Reply className="h-3 w-3" />Reply
+          </button>
+        )}
+      </div>
+
+      {replies.length > 0 && (
+        <div className="ml-11 mt-3 space-y-4 border-l-2 border-border pl-4">
+          {replies.map(reply => (
+            <CommentBody key={reply.id} comment={reply} cardId={cardId} isOwn={reply.user_id === user?.id} />
+          ))}
         </div>
       )}
 
-      {comments.map(comment => (
-        <CommentItem key={comment.id} comment={comment} cardId={cardId} isOwn={comment.user_id === user?.id} />
-      ))}
-
-      {user && (
-        <form onSubmit={handleSubmit} className="flex gap-3 pt-2">
-          <Avatar name={user.full_name} imageUrl={user.avatar_url} size="sm" className="shrink-0 mt-0.5" />
-          <div className="flex-1 space-y-2">
-            <div
-              className={cn('rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring transition-colors', files.length > 0 && 'border-primary/40')}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
-            >
-              <Textarea
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                placeholder="Write a comment..."
-                rows={3}
-                className="border-0 shadow-none focus-visible:ring-0 resize-none rounded-b-none"
-                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e) }}
-              />
-
-              {/* Queued files */}
-              {files.length > 0 && (
-                <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                  {files.map((f, i) => (
-                    <div key={i} className="flex items-center gap-1.5 bg-muted rounded px-2 py-1 text-xs">
-                      {f.type.startsWith('image/') ? <ImageIcon className="h-3 w-3 text-blue-500" /> : <FileText className="h-3 w-3 text-muted-foreground" />}
-                      <span className="max-w-[120px] truncate">{f.name}</span>
-                      <span className="text-muted-foreground">{formatFileSize(f.size)}</span>
-                      <button type="button" onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Toolbar */}
-              <div className="flex items-center justify-between px-3 py-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  title="Attach files"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                  Attach file
-                </button>
-                <div className="flex items-center gap-3">
-                  <p className="text-xs text-muted-foreground hidden sm:block">Ctrl+Enter to submit</p>
-                  <Button type="submit" size="sm" loading={submitting} disabled={!body.trim() && files.length === 0}>
-                    Post comment
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <input ref={fileRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
-              onChange={e => addFiles(Array.from(e.target.files ?? []))} />
-          </div>
-        </form>
+      {replying && (
+        <div className="ml-11 mt-3">
+          <CommentComposer cardId={cardId} parentId={comment.id} autoFocus placeholder={`Reply to ${comment.user?.full_name ?? 'comment'}...`} onDone={() => setReplying(false)} />
+        </div>
       )}
     </div>
   )
 }
 
-function CommentItem({ comment, cardId, isOwn }: { comment: Comment; cardId: string; isOwn: boolean }) {
+function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: string; isOwn: boolean }) {
   const [editing, setEditing] = useState(false)
   const [editBody, setEditBody] = useState(comment.body)
   const [confirming, setConfirming] = useState(false)
-  const [loadingUrl, setLoadingUrl] = useState<string | null>(null)
   const editComment = useEditComment()
   const deleteComment = useDeleteComment()
   const toast = useToast()

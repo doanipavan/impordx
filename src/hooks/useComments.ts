@@ -39,10 +39,10 @@ export function useAddComment() {
   const { user } = useAuth()
 
   return useMutation({
-    mutationFn: async ({ cardId, body }: { cardId: string; body: string }) => {
+    mutationFn: async ({ cardId, body, parentId }: { cardId: string; body: string; parentId?: string }) => {
       const { data, error } = await supabase
         .from('comments')
-        .insert({ card_id: cardId, user_id: user!.id, body })
+        .insert({ card_id: cardId, user_id: user!.id, body, parent_id: parentId ?? null })
         .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
         .single()
       if (error) throw error

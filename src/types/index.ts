@@ -59,6 +59,7 @@ export interface Comment {
   card_id: string
   user_id: string
   user?: User
+  parent_id?: string
   body: string
   edited: boolean
   created_at: string
