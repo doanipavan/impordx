@@ -28,7 +28,7 @@ export function useAttachments(cardId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('attachments')
-        .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
+        .select('*, user:users!user_id(id, full_name, email, avatar_url, role, created_at), approved_by_user:users!approved_by(full_name)')
         .eq('card_id', cardId)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -84,7 +84,7 @@ export function useUploadAttachment() {
           file_size: file.size,
           thumbnail_url: thumbnailPath, // store path
         })
-        .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
+        .select('*, user:users!user_id(id, full_name, email, avatar_url, role, created_at)')
         .single()
       if (error) throw error
       return data as Attachment
