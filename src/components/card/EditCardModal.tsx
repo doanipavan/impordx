@@ -26,7 +26,12 @@ const schema = z.object({
   inside_material: z.string().optional(),
   inside_material_code: z.string().optional(),
   logo_color: z.string().optional(),
-  logo_technique: z.string().optional(),
+  logo_technique_outside: z.string().optional(),
+  logo_technique_inside: z.string().optional(),
+  logo_text_outside: z.string().optional(),
+  logo_text_inside: z.string().optional(),
+  logo_color_outside: z.string().optional(),
+  logo_color_inside: z.string().optional(),
   reference_code: z.string().optional(),
   supplier_ref: z.string().optional(),
 })
@@ -58,7 +63,12 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       outside_material: card.outside_material ?? '',
       inside_material: card.inside_material ?? '',
       logo_color: card.logo_color ?? '',
-      logo_technique: card.logo_technique ?? '',
+      logo_technique_outside: card.logo_technique_outside ?? '',
+      logo_technique_inside: card.logo_technique_inside ?? '',
+      logo_text_outside: card.logo_text_outside ?? '',
+      logo_text_inside: card.logo_text_inside ?? '',
+      logo_color_outside: card.logo_color_outside ?? '',
+      logo_color_inside: card.logo_color_inside ?? '',
       reference_code: card.reference_code ?? '',
       supplier_ref: card.supplier_ref ?? '',
     },
@@ -79,7 +89,12 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         outside_material: values.outside_material || undefined,
         inside_material: values.inside_material || undefined,
         logo_color: values.logo_color || undefined,
-        logo_technique: values.logo_technique || undefined,
+        logo_technique_outside: values.logo_technique_outside || undefined,
+        logo_technique_inside: values.logo_technique_inside || undefined,
+        logo_text_outside: values.logo_text_outside || undefined,
+        logo_text_inside: values.logo_text_inside || undefined,
+        logo_color_outside: values.logo_color_outside || undefined,
+        logo_color_inside: values.logo_color_inside || undefined,
         reference_code: values.reference_code || undefined,
         supplier_ref: values.supplier_ref || undefined,
       })
@@ -174,11 +189,26 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
               <Input id="logo_color" {...register('logo_color')} />
             </div>
             <div>
-              <Label htmlFor="logo_technique">Logo Technique</Label>
-              <Select id="logo_technique" {...register('logo_technique')}>
-                <option value="">— Select —</option>
-                {LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
-              </Select>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">Logo</Label>
+              <div className="rounded-lg border border-border p-3 space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Outside</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label>Technique</Label><Select {...register('logo_technique_outside')}><option value="">— Select —</option>{LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}</Select></div>
+                    <div><Label>Text / Brand</Label><Input {...register('logo_text_outside')} /></div>
+                    <div><Label>Color</Label><Input {...register('logo_color_outside')} /></div>
+                  </div>
+                </div>
+                <div className="h-px bg-border" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Inside</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label>Technique</Label><Select {...register('logo_technique_inside')}><option value="">— Select —</option>{LOGO_TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}</Select></div>
+                    <div><Label>Text / Brand</Label><Input {...register('logo_text_inside')} /></div>
+                    <div><Label>Color</Label><Input {...register('logo_color_inside')} /></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
