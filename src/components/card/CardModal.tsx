@@ -81,12 +81,14 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
       toast('Failed to duplicate card', 'error')
     }
   }
+
+  async function handleArchive() {
     try {
-      const { supabase } = await import('../../lib/supabase')
-      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
-      const { error } = await supabase.from('cards').update({ archived: true }).eq('id', card.id)
+      const { supabase: sb } = await import('../../lib/supabase')
+      const uid = (await sb.auth.getUser()).data.user?.id ?? ''
+      const { error } = await sb.from('cards').update({ archived: true }).eq('id', card.id)
       if (error) throw error
-      await supabase.from('activity_logs').insert({ card_id: card.id, user_id: uid, action: 'archived' })
+      await sb.from('activity_logs').insert({ card_id: card.id, user_id: uid, action: 'archived' })
       toast('Card archived', 'info')
       onClose()
     } catch {
