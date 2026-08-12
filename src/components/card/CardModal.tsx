@@ -54,7 +54,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
       await createCard.mutateAsync({
         board,
         status: card.status,
-        title: `${card.title} (copy)`,
+        title: card.title + ' (copy)',
         priority: card.priority,
         client_name: card.client_name,
         collection: card.collection,
