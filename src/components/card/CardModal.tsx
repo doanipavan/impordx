@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, Trash2, Copy, Calendar, DollarSign, Package, Layers, Paintbrush, Tag } from 'lucide-react'
 import { Card, BoardType, BOARD_COLUMNS, CardStatus, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS } from '../../types'
-import { useUpdateCard, useMoveCard, useDeleteCard } from '../../hooks/useCards'
+import { useUpdateCard, useMoveCard, useDeleteCard, useCreateCard } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
@@ -32,6 +32,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   const [editing, setEditing] = useState(false)
   const moveCard = useMoveCard()
   const deleteCard = useDeleteCard()
+  const createCard = useCreateCard()
   const { user } = useAuth()
   const toast = useToast()
   useRecordView(card.id) // record that this user viewed the card
@@ -48,7 +49,38 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
     }
   }
 
-  async function handleArchive() {
+  async function handleDuplicate() {
+    try {
+      await createCard.mutateAsync({
+        board,
+        status: card.status,
+        title: `${card.title} (copy)`,
+        priority: card.priority,
+        client_name: card.client_name,
+        collection: card.collection,
+        quantity: card.quantity,
+        value_usd: card.value_usd,
+        deadline: card.deadline,
+        description: card.description,
+        outside_material: card.outside_material,
+        inside_material: card.inside_material,
+        logo_color: card.logo_color,
+        logo_technique: card.logo_technique,
+        logo_technique_outside: card.logo_technique_outside,
+        logo_technique_inside: card.logo_technique_inside,
+        logo_text_outside: card.logo_text_outside,
+        logo_text_inside: card.logo_text_inside,
+        logo_color_outside: card.logo_color_outside,
+        logo_color_inside: card.logo_color_inside,
+        reference_code: card.reference_code,
+        supplier_ref: card.supplier_ref,
+      })
+      toast('Card duplicated', 'success')
+      onClose()
+    } catch {
+      toast('Failed to duplicate card', 'error')
+    }
+  }
     try {
       const { supabase } = await import('../../lib/supabase')
       const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
@@ -118,8 +150,11 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
               </Button>
             )}
-            <Button variant="ghost" size="icon" onClick={handleCopyLink} title="Copy link">
+            <Button variant="ghost" size="icon" onClick={handleDuplicate} title="Duplicate card">
               <Copy className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleCopyLink} title="Copy link">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             </Button>
             {user?.role === 'admin' && (
               !confirmDelete ? (
