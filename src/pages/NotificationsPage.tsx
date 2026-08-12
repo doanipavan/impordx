@@ -36,11 +36,11 @@ export function NotificationsPage() {
         <div className="rounded-lg bg-muted/50 border border-border p-4 mb-5 text-sm text-muted-foreground">
           <p className="font-medium text-foreground mb-1">How notifications work</p>
           <ul className="space-y-1 text-xs list-disc list-inside">
-            <li>New comment on a card you're involved in</li>
+            <li>Someone @mentions you in a comment</li>
             <li>Card status changed</li>
             <li>You're assigned as responsible for a card</li>
           </ul>
-          <p className="text-xs mt-2 text-muted-foreground/70">Automatic triggers will be enabled in the next update.</p>
+          <p className="text-xs mt-2 text-muted-foreground/70">Status change and assignment triggers are coming in a future update.</p>
         </div>
 
         {isLoading && <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}</div>}

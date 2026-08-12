@@ -1,16 +1,20 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, Fragment } from 'react'
 import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply } from 'lucide-react'
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
 import { useUploadAttachment } from '../../hooks/useAttachments'
+import { useUsers } from '../../hooks/useUsers'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Avatar } from '../ui/avatar'
 import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import { formatRelative, cn, formatFileSize } from '../../lib/utils'
-import { Comment } from '../../types'
+import { Comment, User } from '../../types'
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+// Mentions are stored inline as @[Full Name] so we can render them as pills
+// and resolve them back to user ids without a separate rich-text model.
+const MENTION_PATTERN = /@\[([^\]]+)\]/g
 
 export function CommentThread({ cardId }: { cardId: string }) {
   const { data: comments = [], isLoading } = useComments(cardId)
@@ -49,6 +53,7 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   placeholder?: string
 }) {
   const { user } = useAuth()
+  const { data: users = [] } = useUsers()
   const addComment = useAddComment()
   const uploadAttachment = useUploadAttachment()
   const toast = useToast()
@@ -56,12 +61,63 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   const [files, setFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // @mention autocomplete: tracks the "@query" fragment being typed and
+  // where it starts in `body`, so a pick can replace just that fragment.
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStart, setMentionStart] = useState<number | null>(null)
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const mentionMatches = mentionQuery === null ? [] : users
+    .filter(u => u.id !== user?.id && u.full_name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    .slice(0, 6)
 
   function addFiles(incoming: File[]) {
     const valid = incoming.filter(f => ACCEPTED.includes(f.type))
     const invalid = incoming.filter(f => !ACCEPTED.includes(f.type))
     if (invalid.length) toast(`${invalid.length} unsupported file(s) skipped`, 'error')
     setFiles(prev => [...prev, ...valid])
+  }
+
+  function handleBodyChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value
+    setBody(value)
+    const cursor = e.target.selectionStart
+    const match = value.slice(0, cursor).match(/(?:^|\s)@([^\s@]{0,40})$/)
+    if (match) {
+      setMentionQuery(match[1])
+      setMentionStart(cursor - match[1].length - 1)
+      setMentionIndex(0)
+    } else {
+      setMentionQuery(null)
+      setMentionStart(null)
+    }
+  }
+
+  function pickMention(target: User) {
+    if (mentionStart === null) return
+    const cursor = textareaRef.current?.selectionStart ?? body.length
+    const before = body.slice(0, mentionStart)
+    const after = body.slice(cursor)
+    const insertion = `@[${target.full_name}] `
+    setBody(before + insertion + after)
+    setMentionQuery(null)
+    setMentionStart(null)
+    requestAnimationFrame(() => {
+      const pos = before.length + insertion.length
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(pos, pos)
+    })
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionMatches.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => (i + 1) % mentionMatches.length); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(i => (i - 1 + mentionMatches.length) % mentionMatches.length); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionMatches[mentionIndex]); return }
+      if (e.key === 'Escape') { setMentionQuery(null); return }
+    }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -83,7 +139,11 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
         finalBody = finalBody ? `${finalBody}\n\n${suffix}` : suffix
       }
 
-      await addComment.mutateAsync({ cardId, body: finalBody, parentId })
+      const mentionedUserIds = [...finalBody.matchAll(MENTION_PATTERN)]
+        .map(m => users.find(u => u.full_name === m[1])?.id)
+        .filter((id): id is string => !!id)
+
+      await addComment.mutateAsync({ cardId, body: finalBody, parentId, mentionedUserIds })
       setBody('')
       setFiles([])
       onDone?.()
@@ -101,19 +161,37 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
       <Avatar name={user.full_name} imageUrl={user.avatar_url} size="sm" className="shrink-0 mt-0.5" />
       <div className="flex-1 space-y-2">
         <div
-          className={cn('rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring transition-colors', files.length > 0 && 'border-primary/40')}
+          className={cn('relative rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring transition-colors', files.length > 0 && 'border-primary/40')}
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
         >
           <Textarea
+            ref={textareaRef}
             value={body}
-            onChange={e => setBody(e.target.value)}
+            onChange={handleBodyChange}
             placeholder={placeholder}
             rows={parentId ? 2 : 3}
             className="border-0 shadow-none focus-visible:ring-0 resize-none rounded-b-none"
             autoFocus={autoFocus}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e) }}
+            onKeyDown={handleKeyDown}
+            onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
           />
+
+          {mentionMatches.length > 0 && (
+            <div className="absolute left-2 bottom-full mb-1 w-56 bg-popover border border-border rounded-md shadow-lg py-1 z-10 max-h-48 overflow-y-auto">
+              {mentionMatches.map((u, i) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); pickMention(u) }}
+                  className={cn('w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm', i === mentionIndex ? 'bg-accent' : 'hover:bg-accent')}
+                >
+                  <Avatar name={u.full_name} imageUrl={u.avatar_url} size="sm" />
+                  <span className="truncate">{u.full_name}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Queued files */}
           {files.length > 0 && (
@@ -250,7 +328,7 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
           </div>
         ) : (
           <div>
-            {textBody && <p className="text-sm whitespace-pre-wrap leading-relaxed">{textBody}</p>}
+            {textBody && <p className="text-sm whitespace-pre-wrap leading-relaxed">{renderWithMentions(textBody)}</p>}
 
             {/* Attachment badges */}
             {attachmentLines.length > 0 && (
@@ -292,5 +370,15 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
         )}
       </div>
     </div>
+  )
+}
+
+function renderWithMentions(text: string) {
+  const parts = text.split(MENTION_PATTERN)
+  // String.split with a capturing regex interleaves [text, name, text, name, ...text]
+  return parts.map((part, i) =>
+    i % 2 === 1
+      ? <span key={i} className="font-medium text-primary bg-primary/10 rounded px-1">@{part}</span>
+      : <Fragment key={i}>{part}</Fragment>
   )
 }

@@ -39,18 +39,31 @@ export function useAddComment() {
   const { user } = useAuth()
 
   return useMutation({
-    mutationFn: async ({ cardId, body, parentId }: { cardId: string; body: string; parentId?: string }) => {
+    mutationFn: async ({ cardId, body, parentId, mentionedUserIds = [] }: { cardId: string; body: string; parentId?: string; mentionedUserIds?: string[] }) => {
       const { data, error } = await supabase
         .from('comments')
         .insert({ card_id: cardId, user_id: user!.id, body, parent_id: parentId ?? null })
         .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
         .single()
       if (error) throw error
-      return data as Comment
+      return { comment: data as Comment, mentionedUserIds }
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: ({ mentionedUserIds }, vars) => {
       qc.invalidateQueries({ queryKey: ['comments', vars.cardId] })
       supabase.from('activity_logs').insert({ card_id: vars.cardId, user_id: user!.id, action: 'commented' })
+
+      const targets = [...new Set(mentionedUserIds)].filter(id => id !== user!.id)
+      if (targets.length > 0) {
+        supabase.from('notifications').insert(
+          targets.map(uid => ({
+            user_id: uid,
+            card_id: vars.cardId,
+            actor_id: user!.id,
+            type: 'mention',
+            message: `${user!.full_name} mentioned you in a comment`,
+          }))
+        )
+      }
     },
   })
 }
