@@ -1,4 +1,4 @@
-import { useRef, useState, DragEvent } from 'react'
+import { useEffect, useRef, useState, DragEvent } from 'react'
 import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle } from 'lucide-react'
 import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
@@ -23,6 +23,28 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const [uploading, setUploading] = useState<string[]>([])
   const [preview, setPreview] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+
+  // Thumbnails are stored as private paths, so each needs its own signed URL.
+  // The ref tracks which ids were already requested so re-renders don't re-sign.
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({})
+  const requestedThumbs = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const pending = attachments.filter(a => a.thumbnail_url && !requestedThumbs.current.has(a.id))
+    if (pending.length === 0) return
+    pending.forEach(a => requestedThumbs.current.add(a.id))
+
+    let cancelled = false
+    Promise.all(pending.map(async a => {
+      try { return [a.id, await getSignedUrl(a.thumbnail_url!)] as const }
+      catch { return null } // a missing thumbnail just falls back to the icon
+    })).then(entries => {
+      if (cancelled) return
+      const resolved = entries.filter((e): e is readonly [string, string] => e !== null)
+      if (resolved.length > 0) setThumbUrls(prev => ({ ...prev, ...Object.fromEntries(resolved) }))
+    })
+    return () => { cancelled = true }
+  }, [attachments])
 
   const approvedAtt = attachments.find(a => a.approved_at)
   const canApprove = user?.role === 'admin' || user?.role === 'member'
@@ -96,9 +118,16 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
             <span className="text-xs text-green-600 ml-auto">{formatRelative(approvedAtt.approved_at!)}</span>
           </div>
           <div className="flex items-center gap-3 bg-white rounded-md p-2 border border-green-200">
-            <div className="h-10 w-10 bg-green-50 rounded flex items-center justify-center shrink-0">
-              {approvedAtt.file_type.startsWith('image/') ? <ImageIcon className="h-5 w-5 text-green-600" /> : <FileText className="h-5 w-5 text-green-600" />}
-            </div>
+            {thumbUrls[approvedAtt.id] ? (
+              <button onClick={() => handlePreview(approvedAtt)} title="Open preview"
+                className="shrink-0 h-12 w-12 rounded overflow-hidden border border-green-200 hover:border-green-400 transition-colors">
+                <img src={thumbUrls[approvedAtt.id]} alt="" className="h-full w-full object-cover block" />
+              </button>
+            ) : (
+              <div className="h-10 w-10 bg-green-50 rounded flex items-center justify-center shrink-0">
+                {approvedAtt.file_type.startsWith('image/') ? <ImageIcon className="h-5 w-5 text-green-600" /> : <FileText className="h-5 w-5 text-green-600" />}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{approvedAtt.filename}</p>
               <p className="text-xs text-muted-foreground">{formatFileSize(approvedAtt.file_size)}</p>
@@ -185,7 +214,13 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                     'flex-1 bg-card border rounded-lg p-3 hover:shadow-card-hover transition-all',
                     isApproved ? 'border-green-300 bg-green-50/30' : 'border-border'
                   )}>
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-3">
+                      {thumbUrls[att.id] && (
+                        <button onClick={() => handlePreview(att)} title="Open preview"
+                          className="shrink-0 rounded overflow-hidden border border-border hover:border-primary/50 transition-colors">
+                          <img src={thumbUrls[att.id]} alt="" className="h-14 w-14 object-cover block" />
+                        </button>
+                      )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium truncate">{att.filename}</p>
