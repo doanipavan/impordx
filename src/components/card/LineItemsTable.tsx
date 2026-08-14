@@ -149,7 +149,8 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
         collection: card.collection,
         quantity: totalQty,
         value_usd: totalValue > 0 ? totalValue : card.value_usd,
-        description: `Generated from Sample #${card.id.substring(0, 8)}\n\nItems:\n${items.map(i =>
+        source_card_id: card.id,
+        description: `Generated from ${card.ref_number ?? card.title}\n\nItems:\n${items.map(i =>
           `• ${i.reference_code || ''} ${i.description || ''} — ${i.outside_color || ''} / ${i.inside_color || ''} — ${i.size || ''} — ${i.quantity}pcs${i.unit_price_usd ? ` @ $${i.unit_price_usd}` : ''}`
         ).join('\n')}`,
         reference_code: card.reference_code,

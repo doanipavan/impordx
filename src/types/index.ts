@@ -39,6 +39,8 @@ export interface Card {
   reference_code?: string
   supplier_ref?: string
   ref_number?: string
+  ref_root?: string        // shared across the quote/sample/order family
+  source_card_id?: string  // the card this one was generated from
   logo_technique_outside?: string
   logo_technique_inside?: string
   logo_text_outside?: string

@@ -71,16 +71,19 @@ export function useCreateCard() {
 
   return useMutation({
     mutationFn: async (card: Omit<Card, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
-      // Generate ref_number client-side
-      const prefixes: Record<string, string> = { quotes: 'QUO', samples: 'SMP', orders: 'ORD' }
-      const prefix = prefixes[card.board] ?? 'REF'
-      const year = new Date().getFullYear()
-      const rand = String(Math.floor(Math.random() * 9000) + 1000)
-      const ref_number = `${prefix}-${year}-${rand}`
+      // Allocated server-side: the sequence makes it collision-free, and a card
+      // generated from another inherits that family's number (see 005 migration).
+      const { data: ref, error: refError } = await supabase
+        .rpc('allocate_card_ref', {
+          p_board: card.board,
+          p_source_card_id: card.source_card_id ?? null,
+        })
+        .single<{ ref_number: string; ref_root: string }>()
+      if (refError) throw refError
 
       const { data, error } = await supabase
         .from('cards')
-        .insert({ ...card, created_by: user!.id, ref_number })
+        .insert({ ...card, created_by: user!.id, ref_number: ref.ref_number, ref_root: ref.ref_root })
         .select()
         .single()
       if (error) throw error
