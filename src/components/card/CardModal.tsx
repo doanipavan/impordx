@@ -158,22 +158,29 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
             <Button variant="ghost" size="icon" onClick={handleCopyLink} title="Copy link">
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             </Button>
+            {/* Delete gets its own group: it used to sit flush between Copy link
+                and Close, at the same weight, so reaching for Close could hit it. */}
             {user?.role === 'admin' && (
-              !confirmDelete ? (
-                <Button variant="ghost" size="icon" onClick={() => setConfirmDelete(true)} title="Delete card">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              ) : (
-                <div className="flex items-center gap-1 bg-destructive/10 rounded-md px-2 py-1">
-                  <span className="text-xs text-destructive font-medium">Delete?</span>
-                  <Button size="sm" variant="destructive" onClick={handleDelete} loading={deleteCard.isPending}>Yes</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>No</Button>
-                </div>
-              )
+              <div className="flex items-center ml-1 pl-1 border-l border-border">
+                {!confirmDelete ? (
+                  <Button variant="ghost" size="icon" onClick={() => setConfirmDelete(true)} title="Delete card"
+                    className="hover:bg-destructive/10">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1 bg-destructive/10 rounded-md px-2 py-1">
+                    <span className="text-xs text-destructive font-medium">Delete?</span>
+                    <Button size="sm" variant="destructive" onClick={handleDelete} loading={deleteCard.isPending}>Yes</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>No</Button>
+                  </div>
+                )}
+              </div>
             )}
-            <Button variant="ghost" size="icon" onClick={onClose} title="Close">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center ml-1 pl-1 border-l border-border">
+              <Button variant="ghost" size="icon" onClick={onClose} title="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
