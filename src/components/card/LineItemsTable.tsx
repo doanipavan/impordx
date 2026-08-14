@@ -95,10 +95,19 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
       if (customFile) {
         setUploadingFile(true)
-        const path = `${card.id}/items/${Date.now()}-${customFile.name}`
+        // Keep the original name in file_name only — the storage key is derived
+        // so spaces and accents in the filename can't break the upload.
+        const ext = customFile.name.split('.').pop()
+        const path = `${card.id}/items/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
         const { error } = await supabase.storage.from('attachments').upload(path, customFile, { contentType: customFile.type })
-        if (!error) { file_url = path; file_name = customFile.name }
         setUploadingFile(false)
+        if (error) {
+          console.error('Item file upload failed:', error)
+          toast('Could not upload the file — item not added', 'error')
+          return
+        }
+        file_url = path
+        file_name = customFile.name
       }
 
       await addItem.mutateAsync({
@@ -113,7 +122,10 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
       setCustomFile(null)
       setSelectedCatalogImage(null)
       toast('Item added', 'success')
-    } catch {
+    } catch (err) {
+      // Swallowing this is why a missing column looked like a generic failure.
+      console.error('Failed to add item:', err)
+      setUploadingFile(false)
       toast('Failed to add item', 'error')
     }
   }
