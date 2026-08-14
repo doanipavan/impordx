@@ -250,7 +250,9 @@ function CommentItem({ comment, cardId, replies = [] }: { comment: Comment; card
   const [replying, setReplying] = useState(false)
 
   return (
-    <div>
+    // A top-level comment plus its replies is one exchange, so each one closes
+    // with a rule — otherwise consecutive threads read as a single conversation.
+    <div className="pb-5 border-b border-border">
       <CommentBody comment={comment} cardId={cardId} isOwn={comment.user_id === user?.id} />
 
       <div className="ml-11 mt-1.5">
