@@ -110,8 +110,12 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
 
       toast(`Card created${queuedFiles.length > 0 ? ` with ${queuedFiles.length} file(s)` : ''}`, 'success')
       onClose()
-    } catch {
-      toast('Failed to create card. Please try again.', 'error')
+    } catch (err) {
+      // The database says why it refused; showing "please try again" instead
+      // just moves the diagnosis off the screen and into a debugging session.
+      console.error('Failed to create card:', err)
+      const detail = (err as { message?: string })?.message
+      toast(detail ? `Failed to create card: ${detail}` : 'Failed to create card. Please try again.', 'error')
     } finally {
       setIsSubmitting(false)
     }
