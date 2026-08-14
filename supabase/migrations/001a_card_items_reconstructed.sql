@@ -4,7 +4,8 @@
 -- TypeScript interface described columns nobody had ever created.
 --
 -- This file back-fills the definition so a fresh environment gets the table.
--- It is numbered 000 because it must precede 006, which alters this table.
+-- It sorts after 001, which creates the cards table it references, and before
+-- 006, which adds the file columns to it.
 --
 -- VERIFIED against the live database by probing PostgREST — column names and
 -- types are exact, and RLS is on (anon reads return no rows):
