@@ -65,15 +65,6 @@ export function useCard(id: string) {
   })
 }
 
-// Pre-005 ref: four random digits, which could collide with an existing card.
-// TEMPORARY — delete this and the fallback below once migration 005 has run.
-function legacyRef(board: string) {
-  const prefixes: Record<string, string> = { quotes: 'QUO', samples: 'SMP', orders: 'ORD' }
-  const prefix = prefixes[board] ?? 'REF'
-  const rand = String(Math.floor(Math.random() * 9000) + 1000)
-  return `${prefix}-${new Date().getFullYear()}-${rand}`
-}
-
 export function useCreateCard() {
   const qc = useQueryClient()
   const { user } = useAuth()
@@ -84,22 +75,23 @@ export function useCreateCard() {
 
       // Allocated server-side: the sequence makes it collision-free, and a card
       // generated from another inherits that family's number (see 005 migration).
-      const { data: ref } = await supabase
+      const { data: ref, error: refError } = await supabase
         .rpc('allocate_card_ref', {
           p_board: card.board,
           p_source_card_id: source_card_id ?? null,
         })
         .single<{ ref_number: string; ref_root: string }>()
-
-      // Where 005 has not run there is no function and no ref_root/source_card_id
-      // column, so fall back to the old ref and omit the columns that don't exist.
-      const lineage = ref
-        ? { ref_number: ref.ref_number, ref_root: ref.ref_root, source_card_id: source_card_id ?? null }
-        : { ref_number: legacyRef(card.board) }
+      if (refError) throw refError
 
       const { data, error } = await supabase
         .from('cards')
-        .insert({ ...rest, created_by: user!.id, ...lineage })
+        .insert({
+          ...rest,
+          created_by: user!.id,
+          ref_number: ref.ref_number,
+          ref_root: ref.ref_root,
+          source_card_id: source_card_id ?? null,
+        })
         .select()
         .single()
       if (error) throw error

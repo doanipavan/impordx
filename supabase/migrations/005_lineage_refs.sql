@@ -58,4 +58,9 @@ begin
 end;
 $$;
 
+-- Postgres grants EXECUTE to PUBLIC by default, which let an unauthenticated
+-- caller burn sequence values and read any card's ref_root through the definer
+-- rights. Revoke first, then grant only to signed-in users.
+revoke execute on function allocate_card_ref(text, uuid) from public;
+revoke execute on function allocate_card_ref(text, uuid) from anon;
 grant execute on function allocate_card_ref(text, uuid) to authenticated;
