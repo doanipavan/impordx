@@ -119,18 +119,29 @@ export const BOARD_LABELS: Record<BoardType, string> = {
   orders: 'Orders',
 }
 
+// Every status across every board resolves to one of three meanings, so the
+// same colour always says the same thing: WAITING is on someone else / not
+// started, ACTIVE is in progress on our side, DONE is settled. The column a
+// card sits in already says which stage it is — colour only says how it's going.
+const WAITING = 'bg-slate-100 text-slate-700'
+const ACTIVE = 'bg-amber-50 text-amber-700'
+const DONE = 'bg-green-50 text-green-700'
+
 export const STATUS_COLORS: Record<CardStatus, string> = {
-  Requested: 'bg-slate-100 text-slate-700',
-  Quoted: 'bg-blue-50 text-blue-700',
-  Confirmed: 'bg-green-50 text-green-700',
-  Declined: 'bg-red-50 text-red-700',
-  'In Preparation': 'bg-purple-50 text-purple-700',
-  'Under Revision': 'bg-amber-50 text-amber-700',
-  Approved: 'bg-green-50 text-green-700',
-  Placed: 'bg-slate-100 text-slate-700',
-  'In Production': 'bg-blue-50 text-blue-700',
-  'Ready to Ship': 'bg-teal-50 text-teal-700',
-  Shipped: 'bg-green-50 text-green-700',
+  // Quotes
+  Requested: WAITING,
+  Quoted: ACTIVE,
+  Confirmed: DONE,
+  Declined: WAITING,
+  // Samples
+  'In Preparation': ACTIVE,
+  'Under Revision': ACTIVE,
+  Approved: DONE,
+  // Orders
+  Placed: WAITING,
+  'In Production': ACTIVE,
+  'Ready to Ship': ACTIVE,
+  Shipped: DONE,
 }
 
 export const PRIORITY_COLORS: Record<Priority, string> = {
