@@ -71,6 +71,7 @@ export interface Attachment {
   card_id: string
   user_id: string
   user?: User
+  comment_id?: string
   filename: string
   file_url: string
   file_type: string

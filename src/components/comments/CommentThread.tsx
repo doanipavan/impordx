@@ -1,7 +1,7 @@
 import { useState, useRef, Fragment } from 'react'
 import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply } from 'lucide-react'
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
-import { useAttachments, useUploadAttachment, getSignedUrl } from '../../hooks/useAttachments'
+import { useAttachments, useUploadAttachment, useLinkAttachmentsToComment, getSignedUrl } from '../../hooks/useAttachments'
 import { useUsers } from '../../hooks/useUsers'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
@@ -56,6 +56,7 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   const { data: users = [] } = useUsers()
   const addComment = useAddComment()
   const uploadAttachment = useUploadAttachment()
+  const linkAttachments = useLinkAttachmentsToComment()
   const toast = useToast()
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -127,9 +128,11 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
     try {
       // Upload files first
       const uploadedNames: string[] = []
+      const uploadedIds: string[] = []
       for (const file of files) {
-        await uploadAttachment.mutateAsync({ cardId, file })
+        const attachment = await uploadAttachment.mutateAsync({ cardId, file })
         uploadedNames.push(file.name)
+        uploadedIds.push(attachment.id)
       }
 
       // Build comment body — append file refs if any
@@ -143,7 +146,10 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
         .map(m => users.find(u => u.full_name === m[1])?.id)
         .filter((id): id is string => !!id)
 
-      await addComment.mutateAsync({ cardId, body: finalBody, parentId, mentionedUserIds })
+      const { comment } = await addComment.mutateAsync({ cardId, body: finalBody, parentId, mentionedUserIds })
+      if (uploadedIds.length > 0) {
+        await linkAttachments.mutateAsync({ attachmentIds: uploadedIds, commentId: comment.id, cardId })
+      }
       setBody('')
       setFiles([])
       onDone?.()
@@ -284,8 +290,12 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
   const [preview, setPreview] = useState<{ url: string; filename: string; isImage: boolean } | null>(null)
   const [loadingFile, setLoadingFile] = useState<string | null>(null)
 
+  const linkedAttachments = attachments.filter(a => a.comment_id === comment.id)
+
   async function handleAttachmentClick(filename: string) {
-    const match = attachments.find(a => a.filename === filename)
+    // Prefer the id-based link (robust to renames/duplicates); fall back to
+    // filename matching for comments posted before that link existed.
+    const match = linkedAttachments.find(a => a.filename === filename) ?? attachments.find(a => a.filename === filename)
     if (!match) { toast('File not found here — check the Files tab', 'error'); return }
     setLoadingFile(filename)
     try {

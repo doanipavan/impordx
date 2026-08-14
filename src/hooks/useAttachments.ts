@@ -96,6 +96,21 @@ export function useUploadAttachment() {
   })
 }
 
+export function useLinkAttachmentsToComment() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ attachmentIds, commentId }: { attachmentIds: string[]; commentId: string; cardId: string }) => {
+      if (attachmentIds.length === 0) return
+      const { error } = await supabase.from('attachments').update({ comment_id: commentId }).in('id', attachmentIds)
+      if (error) throw error
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] })
+    },
+  })
+}
+
 export function useDeleteAttachment() {
   const qc = useQueryClient()
 
