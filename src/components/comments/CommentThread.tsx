@@ -1,7 +1,7 @@
 import { useState, useRef, Fragment } from 'react'
 import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply } from 'lucide-react'
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
-import { useUploadAttachment } from '../../hooks/useAttachments'
+import { useAttachments, useUploadAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useUsers } from '../../hooks/useUsers'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
@@ -280,6 +280,20 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
   const editComment = useEditComment()
   const deleteComment = useDeleteComment()
   const toast = useToast()
+  const { data: attachments = [] } = useAttachments(cardId)
+  const [preview, setPreview] = useState<{ url: string; filename: string; isImage: boolean } | null>(null)
+  const [loadingFile, setLoadingFile] = useState<string | null>(null)
+
+  async function handleAttachmentClick(filename: string) {
+    const match = attachments.find(a => a.filename === filename)
+    if (!match) { toast('File not found here — check the Files tab', 'error'); return }
+    setLoadingFile(filename)
+    try {
+      const url = await getSignedUrl(match.file_url)
+      setPreview({ url, filename, isImage: match.file_type.startsWith('image/') })
+    } catch { toast('Failed to load preview', 'error') }
+    finally { setLoadingFile(null) }
+  }
 
   async function handleEdit() {
     const text = editBody.trim()
@@ -335,12 +349,21 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {attachmentLines.map((line, i) => {
                   const filename = line.replace('📎 ', '')
+                  const isLoading = loadingFile === filename
                   return (
-                    <div key={i} className="flex items-center gap-1.5 bg-muted rounded-md px-2 py-1 text-xs border border-border">
-                      <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleAttachmentClick(filename)}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 bg-muted hover:bg-accent rounded-md px-2 py-1 text-xs border border-border transition-colors"
+                    >
+                      {isLoading
+                        ? <div className="h-3 w-3 border border-muted-foreground border-t-transparent rounded-full animate-spin shrink-0" />
+                        : <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />}
                       <span className="font-medium truncate max-w-[180px]">{filename}</span>
-                      <span className="text-muted-foreground text-[10px]">→ Files tab</span>
-                    </div>
+                      <span className="text-muted-foreground text-[10px]">→ Preview</span>
+                    </button>
                   )
                 })}
               </div>
@@ -369,6 +392,23 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
           </div>
         )}
       </div>
+
+      {preview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setPreview(null)}>
+          <button className="absolute top-4 right-4 text-white" onClick={() => setPreview(null)}><X className="h-6 w-6" /></button>
+          {preview.isImage ? (
+            <img src={preview.url} alt={preview.filename} className="max-h-[90vh] max-w-[90vw] object-contain rounded" onClick={e => e.stopPropagation()} />
+          ) : (
+            <div className="bg-white rounded-lg w-[90vw] h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0">
+                <p className="text-sm font-medium truncate">{preview.filename}</p>
+                <a href={preview.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline shrink-0 ml-2">Open in new tab</a>
+              </div>
+              <iframe src={preview.url} title={preview.filename} className="flex-1 w-full" />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
