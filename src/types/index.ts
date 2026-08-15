@@ -41,6 +41,12 @@ export interface Card {
   ref_number?: string
   ref_root?: string        // shared across the quote/sample/order family
   source_card_id?: string  // the card this one was generated from
+  // Order fulfilment. pi_number and delivery_date come from DEQI; the two
+  // Redantex order numbers are ours. delivery_date is a plain 'YYYY-MM-DD'.
+  pi_number?: string
+  delivery_date?: string
+  sales_order?: string
+  purchase_order?: string
   logo_technique_outside?: string
   logo_technique_inside?: string
   logo_text_outside?: string

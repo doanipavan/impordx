@@ -12,6 +12,7 @@ export interface CardItem {
   size?: string
   quantity: number
   unit_price_usd?: number
+  erp_code?: string        // the item's code in DEV, Redantex's ERP
   file_url?: string
   file_name?: string
   notes?: string

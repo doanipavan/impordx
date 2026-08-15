@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip } from 'lucide-react'
 import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
-import { useCreateCard } from '../../hooks/useCards'
+import { usePromoteToOrder } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -33,6 +33,7 @@ interface LineItemsTableProps {
 
 const EMPTY_ITEM = {
   reference_code: '',
+  erp_code: '',
   collection: '',
   description: '',
   outside_color: '',
@@ -50,7 +51,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const addItem = useAddCardItem()
   const updateItem = useUpdateCardItem()
   const deleteItem = useDeleteCardItem()
-  const createCard = useCreateCard()
+  const promoteToOrder = usePromoteToOrder()
   const toast = useToast()
 
   const [adding, setAdding] = useState(false)
@@ -151,39 +152,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
     if (items.length === 0) { toast('Add at least one item first', 'error'); return }
     setGeneratingOrder(true)
     try {
-      // Create the order card
-      const orderCard = await createCard.mutateAsync({
-        board: 'orders' as BoardType,
-        status: 'Placed',
-        title: `Order from: ${card.title}`,
-        priority: card.priority,
-        client_name: card.client_name,
-        collection: card.collection,
-        quantity: totalQty,
-        value_usd: totalValue > 0 ? totalValue : card.value_usd,
-        source_card_id: card.id,
-        description: `Generated from ${card.ref_number ?? card.title}\n\nItems:\n${items.map(i =>
-          `• ${i.reference_code || ''} ${i.description || ''} — ${i.outside_color || ''} / ${i.inside_color || ''} — ${i.size || ''} — ${i.quantity}pcs${i.unit_price_usd ? ` @ $${i.unit_price_usd}` : ''}`
-        ).join('\n')}`,
-        reference_code: card.reference_code,
-        supplier_ref: card.supplier_ref,
-      })
-
-      // Copy items and log
-      const { supabase } = await import('../../lib/supabase')
-      for (const item of items) {
-        const { id: _id, created_at: _c, card_id: _ci, ...rest } = item
-        await supabase.from('card_items').insert({ ...rest, card_id: orderCard.id })
-      }
-
-      toast('Order card created successfully!', 'success')
-
-      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
-      await supabase.from('activity_logs').insert({
-        card_id: card.id, user_id: uid, action: 'generated_order', new_value: orderCard.ref_number ?? orderCard.id.substring(0, 8),
-      })
-    } catch {
-      toast('Failed to generate order', 'error')
+      const order = await promoteToOrder.mutateAsync({ id: card.id, fromBoard: card.board as BoardType })
+      toast(`Moved to Orders as ${order.ref_number ?? 'a new order'}`, 'success')
+    } catch (err) {
+      console.error('Failed to move card to Orders:', err)
+      toast('Failed to move to Orders', 'error')
     } finally {
       setGeneratingOrder(false)
     }
@@ -222,7 +195,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
           <table className="w-full">
             <thead className="bg-muted/50">
               <tr>
-                {['Internal', 'Description', 'Size', 'Qty', 'Unit $', ''].map(h => (
+                {['Internal', 'ERP (DEV)', 'Description', 'Size', 'Qty', 'Unit $', ''].map(h => (
                   <th key={h} className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase">{h}</th>
                 ))}
               </tr>
@@ -232,7 +205,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                 <tr key={item.id} className={cn('group hover:bg-muted/30', editingId === item.id && 'bg-blue-50/50')}>
                   {editingId === item.id ? (
                     <>
-                      {(['reference_code', 'description', 'size'] as const).map(field => (
+                      {(['reference_code', 'erp_code', 'description', 'size'] as const).map(field => (
                         <td key={field} className="px-1 py-1">
                           <Input className="h-6 text-xs px-1" value={String(editValues[field] ?? item[field] ?? '')}
                             onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))} />
@@ -259,6 +232,12 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                       {/* INTERNAL — code + catalog thumbnail */}
                       <td className="px-2 py-1.5 w-24">
                         <CatalogThumbnail code={item.reference_code} />
+                      </td>
+                      {/* ERP code in DEV */}
+                      <td className="px-2 py-1.5">
+                        {item.erp_code
+                          ? <span className="font-mono text-[11px]">{item.erp_code}</span>
+                          : <span className="text-muted-foreground">—</span>}
                       </td>
                       {/* DESCRIPTION */}
                       <td className="px-2 py-1.5 max-w-[160px]">
@@ -331,7 +310,10 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
             <div><label className="text-[10px] text-muted-foreground">Reference</label>
               <Input className="h-7 text-xs" value={newItem.reference_code} onChange={e => setNewItem(v => ({ ...v, reference_code: e.target.value }))} />
             </div>
-            <div className="col-span-2"><label className="text-[10px] text-muted-foreground">Description</label>
+            <div><label className="text-[10px] text-muted-foreground">ERP (DEV)</label>
+              <Input className="h-7 text-xs font-mono" placeholder="código no DEV" value={newItem.erp_code} onChange={e => setNewItem(v => ({ ...v, erp_code: e.target.value }))} />
+            </div>
+            <div><label className="text-[10px] text-muted-foreground">Description</label>
               <Input className="h-7 text-xs" placeholder="e.g. Parma — Navy Blue" value={newItem.description} onChange={e => setNewItem(v => ({ ...v, description: e.target.value }))} />
             </div>
           </div>

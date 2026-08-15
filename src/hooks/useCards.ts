@@ -161,6 +161,75 @@ export function useMoveCard() {
   })
 }
 
+// Promoting a quote or sample moves the card itself onto the Orders board
+// rather than copying it, so the approved artwork, the conversation and the
+// history stay attached to the piece the factory is about to produce.
+export function usePromoteToOrder() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, fromBoard }: { id: string; fromBoard: BoardType }) => {
+      // Re-number under the Orders prefix, keeping the family key. Passing the
+      // card as its own source is what makes it inherit its own ref_root.
+      const { data: ref, error: refError } = await supabase
+        .rpc('allocate_card_ref', { p_board: 'orders', p_source_card_id: id })
+        .single<{ ref_number: string; ref_root: string }>()
+      if (refError) throw refError
+
+      const { data, error } = await supabase
+        .from('cards')
+        .update({
+          board: 'orders',
+          status: 'Placed',
+          ref_number: ref.ref_number,
+          ref_root: ref.ref_root,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) throw error
+
+      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
+      await supabase.from('activity_logs').insert({
+        card_id: id, user_id: uid, action: 'promoted_to_order',
+        old_value: fromBoard, new_value: ref.ref_number,
+      })
+
+      return data as Card
+    },
+    onSuccess: (_d, vars) => {
+      // Both boards change: the card leaves one and arrives on the other.
+      qc.invalidateQueries({ queryKey: CARDS_QUERY(vars.fromBoard) })
+      qc.invalidateQueries({ queryKey: CARDS_QUERY('orders') })
+      qc.invalidateQueries({ queryKey: ['card', vars.id] })
+      qc.invalidateQueries({ queryKey: ['activity', vars.id] })
+    },
+  })
+}
+
+// PI number and delivery date are DEQI's to supply, but DEQI is the `viewer`
+// role and RLS blocks them from updating cards. This function is the narrow
+// opening: those two columns, on an order, and nothing else.
+export function useSetDeliveryInfo() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ cardId, piNumber, deliveryDate }: { cardId: string; piNumber: string; deliveryDate: string }) => {
+      const { error } = await supabase.rpc('set_order_delivery_info', {
+        p_card_id: cardId,
+        p_pi_number: piNumber || null,
+        p_delivery_date: deliveryDate || null,
+      })
+      if (error) throw error
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: CARDS_QUERY('orders') })
+      qc.invalidateQueries({ queryKey: ['card', vars.cardId] })
+    },
+  })
+}
+
 export function useDeleteCard() {
   const qc = useQueryClient()
 

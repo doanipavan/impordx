@@ -13,6 +13,7 @@ import { CommentThread } from '../comments/CommentThread'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { ActivityLog } from './ActivityLog'
 import { LineItemsTable } from './LineItemsTable'
+import { OrderFulfilment } from './OrderFulfilment'
 import { EditCardModal } from './EditCardModal'
 import { SeenBy } from './SeenBy'
 import { useRecordView } from '../../hooks/useCardViews'
@@ -209,6 +210,10 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
             <div className="grid md:grid-cols-3 gap-0 h-full">
               {/* Main */}
               <div className="md:col-span-2 p-6 space-y-5 border-r border-border">
+
+                {/* On an order, the PI and the delivery date are the first thing
+                    anyone opens the card to check, so they lead. */}
+                {card.board === 'orders' && <OrderFulfilment card={card} />}
 
                 {/* Status change */}
                 <div>
