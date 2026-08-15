@@ -8,7 +8,7 @@ import { useToast } from '../ui/toast'
 import { Avatar } from '../ui/avatar'
 import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
-import { formatRelative, cn, formatFileSize } from '../../lib/utils'
+import { formatRelative, formatDateTime, cn, formatFileSize } from '../../lib/utils'
 import { Comment, User } from '../../types'
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
@@ -19,7 +19,10 @@ const MENTION_PATTERN = /@\[([^\]]+)\]/g
 export function CommentThread({ cardId }: { cardId: string }) {
   const { data: comments = [], isLoading } = useComments(cardId)
 
-  const topLevel = comments.filter(c => !c.parent_id)
+  // Newest exchange first, so what just happened is the first thing on screen.
+  // Replies stay oldest-first inside their thread — a conversation read
+  // backwards is a conversation you have to reassemble.
+  const topLevel = comments.filter(c => !c.parent_id).slice().reverse()
   const repliesByParent = comments.reduce<Record<string, Comment[]>>((acc, c) => {
     if (c.parent_id) (acc[c.parent_id] ??= []).push(c)
     return acc
@@ -29,6 +32,12 @@ export function CommentThread({ cardId }: { cardId: string }) {
 
   return (
     <div className="space-y-5">
+      {/* Composer leads: with newest first, writing at the bottom would mean
+          scrolling past the whole history to say anything. */}
+      <div className="pb-5 border-b border-border">
+        <CommentComposer cardId={cardId} />
+      </div>
+
       {comments.length === 0 && (
         <div className="text-center py-8 text-muted-foreground">
           <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -39,8 +48,6 @@ export function CommentThread({ cardId }: { cardId: string }) {
       {topLevel.map(comment => (
         <CommentItem key={comment.id} comment={comment} cardId={cardId} replies={repliesByParent[comment.id] ?? []} />
       ))}
-
-      <CommentComposer cardId={cardId} />
     </div>
   )
 }
@@ -252,7 +259,7 @@ function CommentItem({ comment, cardId, replies = [] }: { comment: Comment; card
   return (
     // A top-level comment plus its replies is one exchange, so each one closes
     // with a rule — otherwise consecutive threads read as a single conversation.
-    <div className="pb-5 border-b border-border">
+    <div className="pb-5 border-b border-border last:border-b-0 last:pb-0">
       <CommentBody comment={comment} cardId={cardId} isOwn={comment.user_id === user?.id} />
 
       <div className="ml-11 mt-1.5">
@@ -344,7 +351,9 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
             author.role === 'admin' || author.role === 'member' ? 'bg-primary/10 text-primary' : 'bg-amber-50 text-amber-700')}>
             {author.role === 'viewer' ? 'DEQI' : 'Redantex'}
           </span>
-          <span className="text-xs text-muted-foreground">{formatRelative(comment.created_at)}</span>
+          <span className="text-xs text-muted-foreground" title={formatRelative(comment.created_at)}>
+            {formatDateTime(comment.created_at)}
+          </span>
           {comment.edited && <span className="text-xs text-muted-foreground italic">(edited)</span>}
         </div>
 

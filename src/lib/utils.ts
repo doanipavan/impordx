@@ -15,10 +15,22 @@ export function formatDate(date: string | null | undefined): string {
   }
 }
 
+// Timestamps are pinned to São Paulo rather than the viewer's clock: Redantex
+// and the supplier are ten-plus hours apart, and the same event rendering as
+// two different times is how people end up arguing about when something landed.
+const SAO_PAULO = 'America/Sao_Paulo'
+
 export function formatDateTime(date: string | null | undefined): string {
   if (!date) return '—'
   try {
-    return format(parseISO(date), 'MMM d, yyyy • h:mm a')
+    const at = parseISO(date)
+    const day = new Intl.DateTimeFormat('en-US', {
+      timeZone: SAO_PAULO, month: 'short', day: 'numeric', year: 'numeric',
+    }).format(at)
+    const time = new Intl.DateTimeFormat('en-US', {
+      timeZone: SAO_PAULO, hour: 'numeric', minute: '2-digit',
+    }).format(at)
+    return `${day} • ${time} BRT`
   } catch {
     return '—'
   }
