@@ -6,6 +6,7 @@ import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Card } from '../../types'
+import { orderClock, formatDate, cn, ORDER_LEG_DAYS, OrderClock, LegClock } from '../../lib/utils'
 
 // A delivery date is a calendar day, stored as a `date` and never parsed into an
 // instant — that is what keeps it from sliding a day between São Paulo and DEQI.
@@ -34,6 +35,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
   // DEQI supplies the PI and the date; the Redantex order numbers are ours.
   const isDeqi = user?.role === 'viewer'
   const waiting = !card.pi_number || !card.delivery_date
+  const clock = orderClock(card.order_confirmed_at, card.status)
 
   function startEditing() {
     setPi(card.pi_number ?? '')
@@ -84,6 +86,8 @@ export function OrderFulfilment({ card }: { card: Card }) {
           </button>
         )}
       </div>
+
+      {clock && !editing && <OrderClockPanel clock={clock} />}
 
       {editing ? (
         <div className="space-y-3">
@@ -167,6 +171,74 @@ function Field({ label, value, missing, mono, emphasis }: {
           mono ? 'font-mono' : '',
         ].join(' ')}>{value}</p>
       )}
+    </div>
+  )
+}
+
+// The 120-day journey as one headline number, with the two 60-day legs that
+// make it up underneath — so a slip is attributable, not just visible.
+function OrderClockPanel({ clock }: { clock: OrderClock }) {
+  const { total, deqi, rdx, activeLeg } = clock
+  const late = total.daysLeft < 0
+
+  return (
+    <div className="mb-4 pb-4 border-b border-border/70">
+      <div className="flex items-baseline gap-2">
+        <span className={cn(
+          'text-4xl font-bold tabular-nums leading-none',
+          late ? 'text-red-600' : total.daysLeft <= 14 ? 'text-amber-600' : 'text-foreground'
+        )}>
+          {Math.abs(total.daysLeft)}
+        </span>
+        <span className={cn('text-sm font-medium', late ? 'text-red-600' : 'text-muted-foreground')}>
+          {late ? 'days over' : 'days to Brazil'}
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {ORDER_LEG_DAYS * 2}-day target · {formatDate(total.target)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-3">
+        <LegBox label="DEQI" caption="production" leg={deqi} active={activeLeg === 'deqi'} />
+        <LegBox label="RDX" caption="to Brazil" leg={rdx} active={activeLeg === 'rdx'} />
+      </div>
+    </div>
+  )
+}
+
+function LegBox({ label, caption, leg, active }: {
+  label: string
+  caption: string
+  leg: LegClock
+  active: boolean
+}) {
+  const late = !leg.done && leg.daysLeft < 0
+  const status = leg.done ? 'done'
+    : !leg.started ? `${ORDER_LEG_DAYS}d — not started`
+    : late ? `${Math.abs(leg.daysLeft)}d over`
+    : `${leg.daysLeft}d left`
+
+  return (
+    <div className={cn(
+      'rounded-md border px-3 py-2',
+      active ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30'
+    )}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-bold tracking-wide">{label}</span>
+        <span className="text-[10px] text-muted-foreground">{caption}</span>
+        {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" title="Running now" />}
+      </div>
+      <p className={cn(
+        'text-sm font-semibold mt-0.5 tabular-nums',
+        leg.done ? 'text-green-700'
+          : late ? 'text-red-600'
+          : !leg.started ? 'text-muted-foreground'
+          : leg.daysLeft <= 14 ? 'text-amber-600'
+          : 'text-foreground'
+      )}>
+        {status}
+      </p>
+      <p className="text-[10px] text-muted-foreground mt-0.5">by {formatDate(leg.target)}</p>
     </div>
   )
 }

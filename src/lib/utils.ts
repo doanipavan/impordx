@@ -64,28 +64,56 @@ function todayInSaoPaulo(): Date {
   return calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: SAO_PAULO }).format(new Date()))!
 }
 
-export interface OrderCountdown {
-  leg: 'deqi' | 'brazil'
+export interface LegClock {
   daysLeft: number   // negative once the leg is blown
-  targetDate: string // 'YYYY-MM-DD'
+  target: string     // 'YYYY-MM-DD'
+  started: boolean
+  done: boolean
 }
 
-export function orderCountdown(
+export interface OrderClock {
+  activeLeg: 'deqi' | 'rdx'
+  total: { daysLeft: number; target: string }
+  deqi: LegClock
+  rdx: LegClock
+}
+
+export function orderClock(
   confirmedAt: string | null | undefined,
   status: string,
-): OrderCountdown | null {
+): OrderClock | null {
   if (!confirmedAt) return null
   const start = calendarDay(confirmedAt)
   if (!start) return null
 
-  // Once the goods are ready the clock belongs to shipping, not to the factory.
+  const today = todayInSaoPaulo().getTime()
+  const daysUntil = (offset: number) =>
+    Math.round((start.getTime() + offset * MS_PER_DAY - today) / MS_PER_DAY)
+  const dateAt = (offset: number) =>
+    new Date(start.getTime() + offset * MS_PER_DAY).toISOString().slice(0, 10)
+
+  // Status is the truth about which leg is running: goods that are ready have
+  // left the factory's hands even if the calendar disagrees.
   const shipping = status === 'Ready to Ship' || status === 'Shipped'
-  const target = new Date(start.getTime() + (shipping ? ORDER_LEG_DAYS * 2 : ORDER_LEG_DAYS) * MS_PER_DAY)
+  const deqiDaysLeft = daysUntil(ORDER_LEG_DAYS)
+  const deqiDone = shipping
 
   return {
-    leg: shipping ? 'brazil' : 'deqi',
-    daysLeft: Math.round((target.getTime() - todayInSaoPaulo().getTime()) / MS_PER_DAY),
-    targetDate: target.toISOString().slice(0, 10),
+    activeLeg: shipping ? 'rdx' : 'deqi',
+    total: { daysLeft: daysUntil(ORDER_LEG_DAYS * 2), target: dateAt(ORDER_LEG_DAYS * 2) },
+    deqi: {
+      daysLeft: deqiDaysLeft,
+      target: dateAt(ORDER_LEG_DAYS),
+      started: true,
+      done: deqiDone,
+    },
+    rdx: {
+      // Before the factory hands over, shipping has its full window untouched.
+      daysLeft: shipping ? daysUntil(ORDER_LEG_DAYS * 2) : ORDER_LEG_DAYS,
+      target: dateAt(ORDER_LEG_DAYS * 2),
+      started: shipping,
+      done: status === 'Shipped' && daysUntil(ORDER_LEG_DAYS * 2) >= 0,
+    },
   }
 }
 
