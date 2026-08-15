@@ -57,7 +57,7 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
       if (items.length > 0) {
         const itemRows = [
           ['INTERNAL REF', 'DESCRIPTION', 'SIZE', 'QTY', 'UNIT PRICE (USD)'],
-          ...items.map(i => [f(i.reference_code), f(i.description), f(i.size), i.quantity, i.unit_price_usd ?? '']),
+          ...items.map(i => [f(i.reference_code), f(i.description), f(i.size), i.quantity, i.unit_price_usd != null ? i.unit_price_usd.toFixed(3) : '']),
         ]
         const totalQty = items.reduce((s, i) => s + i.quantity, 0)
         const totalVal = items.reduce((s, i) => s + (i.quantity * (i.unit_price_usd ?? 0)), 0)
@@ -89,7 +89,7 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
           <td style="padding:6px">${f(item.description)}</td>
           <td style="padding:6px;text-align:center">${f(item.size)}</td>
           <td style="padding:6px;text-align:center;font-weight:600">${item.quantity}</td>
-          <td style="padding:6px;text-align:center">${item.unit_price_usd ? '$' + item.unit_price_usd : '—'}</td>
+          <td style="padding:6px;text-align:center">${item.unit_price_usd != null ? '$' + item.unit_price_usd.toFixed(3) : '—'}</td>
         </tr>`
     }).join('')
 

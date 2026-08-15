@@ -40,11 +40,25 @@ const EMPTY_ITEM = {
   inside_color: '',
   size: '',
   quantity: 1,
-  unit_price_usd: undefined as number | undefined,
+  // Kept as typed, parsed only on save. Holding it as a number meant "1.190"
+  // round-tripped to 1.19 mid-keystroke and ate the zero you were typing.
+  unit_price_input: '',
   notes: '',
 }
 
 type NewItem = typeof EMPTY_ITEM
+
+// DEQI quotes to three decimals, and types the comma a Brazilian keyboard gives.
+function parsePrice(raw: string): number | undefined {
+  const text = raw.trim().replace(',', '.')
+  if (!text) return undefined
+  const value = Number(text)
+  return Number.isFinite(value) ? value : undefined
+}
+
+function formatPrice(value: number | null | undefined): string {
+  return value == null ? '—' : `$${value.toFixed(3)}`
+}
 
 export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const { data: items = [], isLoading } = useCardItems(card.id)
@@ -64,6 +78,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const [newItem, setNewItem] = useState<NewItem>({ ...EMPTY_ITEM })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Partial<CardItem>>({})
+  const [editPrice, setEditPrice] = useState('')
   const [generatingOrder, setGeneratingOrder] = useState(false)
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0)
@@ -111,9 +126,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
         file_name = customFile.name
       }
 
+      const { unit_price_input, ...fields } = newItem
       await addItem.mutateAsync({
         card_id: card.id,
-        ...newItem,
+        ...fields,
+        unit_price_usd: parsePrice(unit_price_input),
         file_url,
         file_name,
         sort_order: items.length,
@@ -133,7 +150,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
   async function handleUpdate(id: string) {
     try {
-      await updateItem.mutateAsync({ id, cardId: card.id, ...editValues })
+      await updateItem.mutateAsync({ id, cardId: card.id, ...editValues, unit_price_usd: parsePrice(editPrice) })
       setEditingId(null)
     } catch {
       toast('Failed to update item', 'error')
@@ -216,9 +233,9 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                           onChange={e => setEditValues(v => ({ ...v, quantity: Number(e.target.value) }))} />
                       </td>
                       <td className="px-1 py-1 w-16">
-                        <Input type="number" step="0.01" className="h-6 text-xs px-1"
-                          value={String(editValues.unit_price_usd ?? item.unit_price_usd ?? '')}
-                          onChange={e => setEditValues(v => ({ ...v, unit_price_usd: e.target.value ? Number(e.target.value) : undefined }))} />
+                        <Input type="text" inputMode="decimal" className="h-6 text-xs px-1"
+                          value={editPrice}
+                          onChange={e => setEditPrice(e.target.value)} />
                       </td>
                       <td className="px-1 py-1">
                         <div className="flex gap-1">
@@ -245,11 +262,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                       </td>
                       <td className="px-2 py-1.5">{item.size || '—'}</td>
                       <td className="px-2 py-1.5 font-semibold">{item.quantity}</td>
-                      <td className="px-2 py-1.5">{item.unit_price_usd ? `$${item.unit_price_usd}` : '—'}</td>
+                      <td className="px-2 py-1.5">{formatPrice(item.unit_price_usd)}</td>
                       <td className="px-2 py-1.5">
                         {!readonly && (
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { setEditingId(item.id); setEditValues({}) }}
+                            <button onClick={() => { setEditingId(item.id); setEditValues({}); setEditPrice(item.unit_price_usd != null ? String(item.unit_price_usd) : '') }}
                               className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted">
                               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
@@ -327,7 +344,9 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div><label className="text-[10px] text-muted-foreground">Unit Price (USD)</label>
-              <Input type="number" step="0.01" className="h-7 text-xs" value={newItem.unit_price_usd ?? ''} onChange={e => setNewItem(v => ({ ...v, unit_price_usd: e.target.value ? Number(e.target.value) : undefined }))} />
+              <Input type="text" inputMode="decimal" placeholder="1.195" className="h-7 text-xs"
+                value={newItem.unit_price_input}
+                onChange={e => setNewItem(v => ({ ...v, unit_price_input: e.target.value }))} />
             </div>
             <div className="col-span-2"><label className="text-[10px] text-muted-foreground">Notes</label>
               <Input className="h-7 text-xs" value={newItem.notes} onChange={e => setNewItem(v => ({ ...v, notes: e.target.value }))} />
