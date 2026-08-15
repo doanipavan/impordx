@@ -45,6 +45,57 @@ export function formatRelative(date: string | null | undefined): string {
   }
 }
 
+// An order runs on two consecutive 60-day legs from the day it is confirmed:
+// DEQI has 60 days to have it ready, then Redantex has 60 to land it in Brazil.
+export const ORDER_LEG_DAYS = 60
+
+const MS_PER_DAY = 86_400_000
+
+// 'YYYY-MM-DD' -> a UTC midnight instant. Day counts are done on plain calendar
+// days so the number never changes with the reader's clock.
+function calendarDay(ymd: string): Date | null {
+  const [y, m, d] = ymd.split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(Date.UTC(y, m - 1, d))
+}
+
+function todayInSaoPaulo(): Date {
+  // en-CA formats as YYYY-MM-DD.
+  return calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: SAO_PAULO }).format(new Date()))!
+}
+
+export interface OrderCountdown {
+  leg: 'deqi' | 'brazil'
+  daysLeft: number   // negative once the leg is blown
+  targetDate: string // 'YYYY-MM-DD'
+}
+
+export function orderCountdown(
+  confirmedAt: string | null | undefined,
+  status: string,
+): OrderCountdown | null {
+  if (!confirmedAt) return null
+  const start = calendarDay(confirmedAt)
+  if (!start) return null
+
+  // Once the goods are ready the clock belongs to shipping, not to the factory.
+  const shipping = status === 'Ready to Ship' || status === 'Shipped'
+  const target = new Date(start.getTime() + (shipping ? ORDER_LEG_DAYS * 2 : ORDER_LEG_DAYS) * MS_PER_DAY)
+
+  return {
+    leg: shipping ? 'brazil' : 'deqi',
+    daysLeft: Math.round((target.getTime() - todayInSaoPaulo().getTime()) / MS_PER_DAY),
+    targetDate: target.toISOString().slice(0, 10),
+  }
+}
+
+// What the red "Overdue" flag actually measures. On an order that is the
+// delivery date DEQI committed to; the deadline it inherited from the sample
+// describes a milestone that has already passed and would flag every order.
+export function dueDateFor(card: { board?: string; deadline?: string; delivery_date?: string }): string | undefined {
+  return card.board === 'orders' ? card.delivery_date : card.deadline
+}
+
 export function isOverdue(deadline: string | null | undefined): boolean {
   if (!deadline) return false
   try {

@@ -4,7 +4,7 @@ import { MessageSquare, Paperclip, AlertCircle, Calendar } from 'lucide-react'
 import { Card, PRIORITY_COLORS, STATUS_COLORS } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { cn, formatDate, isOverdue, isDueSoon } from '../../lib/utils'
+import { cn, formatDate, isOverdue, isDueSoon, dueDateFor } from '../../lib/utils'
 
 interface KanbanCardProps {
   card: Card
@@ -29,8 +29,10 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
     transition,
   }
 
-  const overdue = isOverdue(card.deadline)
-  const dueSoon = !overdue && isDueSoon(card.deadline)
+  // On an order the live date is the delivery date, not the sample's deadline.
+  const dueDate = dueDateFor(card)
+  const overdue = isOverdue(dueDate)
+  const dueSoon = !overdue && isDueSoon(dueDate)
 
   return (
     <div
@@ -100,14 +102,14 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
               {card.attachments_count}
             </span>
           )}
-          {card.deadline && (
+          {dueDate && (
             <span className={cn(
               'flex items-center gap-1 text-xs',
               overdue ? 'text-red-500 font-medium' : dueSoon ? 'text-amber-500' : 'text-muted-foreground'
             )}>
               {overdue && <AlertCircle className="h-3 w-3" />}
               {!overdue && <Calendar className="h-3 w-3" />}
-              {formatDate(card.deadline)}
+              {formatDate(dueDate)}
             </span>
           )}
         </div>

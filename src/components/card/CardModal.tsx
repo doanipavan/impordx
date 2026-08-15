@@ -17,7 +17,7 @@ import { OrderFulfilment } from './OrderFulfilment'
 import { EditCardModal } from './EditCardModal'
 import { SeenBy } from './SeenBy'
 import { useRecordView } from '../../hooks/useCardViews'
-import { cn, formatDate, formatCurrency, isOverdue } from '../../lib/utils'
+import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, orderCountdown, OrderCountdown } from '../../lib/utils'
 
 interface CardModalProps {
   card: Card
@@ -38,7 +38,8 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   const toast = useToast()
   useRecordView(card.id) // record that this user viewed the card
   const columns = BOARD_COLUMNS[board]
-  const overdue = isOverdue(card.deadline)
+  const overdue = isOverdue(dueDateFor(card))
+  const countdown = card.board === 'orders' ? orderCountdown(card.order_confirmed_at, card.status) : null
 
   async function handleDelete() {
     try {
@@ -140,6 +141,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 </span>
               )}
               {overdue && <Badge variant="destructive">Overdue</Badge>}
+              {countdown && <CountdownChip countdown={countdown} />}
             </div>
             <h2 className="text-lg font-semibold leading-snug">{card.title}</h2>
           </div>
@@ -352,10 +354,16 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                       <span>Created: {formatDate(card.created_at)}</span>
                     </div>
                     {card.deadline && (
-                      <div className={cn('flex items-center gap-2 text-xs', overdue ? 'text-red-500 font-medium' : 'text-muted-foreground')}>
+                      // On an order this is the sample's old milestone, kept for
+                      // reference — the live date is the delivery date above.
+                      <div className={cn('flex items-center gap-2 text-xs',
+                        overdue && card.board !== 'orders' ? 'text-red-500 font-medium' : 'text-muted-foreground')}>
                         <Calendar className="h-3 w-3" />
-                        <span>Deadline: {formatDate(card.deadline)}</span>
-                        {overdue && <Badge variant="destructive">Overdue</Badge>}
+                        <span>
+                          {card.board === 'orders' ? 'Original deadline: ' : 'Deadline: '}
+                          {formatDate(card.deadline)}
+                        </span>
+                        {overdue && card.board !== 'orders' && <Badge variant="destructive">Overdue</Badge>}
                       </div>
                     )}
                   </div>
@@ -420,5 +428,28 @@ function InfoField({
       <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
       <p className={cn('text-sm font-medium', monospace && 'font-mono')}>{value}</p>
     </div>
+  )
+}
+
+// The order clock, in the header where the status badges are: which leg is
+// running, and how many days are left on it.
+function CountdownChip({ countdown }: { countdown: OrderCountdown }) {
+  const { leg, daysLeft, targetDate } = countdown
+  const owner = leg === 'deqi' ? 'DEQI' : 'BRASIL'
+  const late = daysLeft < 0
+  const tight = !late && daysLeft <= 14
+
+  return (
+    <span
+      title={`${leg === 'deqi' ? 'DEQI has 60 days to have it ready' : 'Redantex has 60 days to land it in Brazil'} — due ${formatDate(targetDate)}`}
+      className={cn(
+        'text-xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1',
+        late ? 'bg-red-50 text-red-700'
+          : tight ? 'bg-amber-50 text-amber-700'
+          : 'bg-slate-100 text-slate-700'
+      )}
+    >
+      {owner} · {late ? `${Math.abs(daysLeft)}d over` : `${daysLeft}d left`}
+    </span>
   )
 }

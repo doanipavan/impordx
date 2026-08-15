@@ -47,6 +47,7 @@ export interface Card {
   delivery_date?: string
   sales_order?: string
   purchase_order?: string
+  order_confirmed_at?: string  // day the order clock starts, 'YYYY-MM-DD'
   logo_technique_outside?: string
   logo_technique_inside?: string
   logo_text_outside?: string

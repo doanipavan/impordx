@@ -183,6 +183,8 @@ export function usePromoteToOrder() {
           status: 'Placed',
           ref_number: ref.ref_number,
           ref_root: ref.ref_root,
+          // Promotion is the confirmation, so this is where the 60+60 starts.
+          order_confirmed_at: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
