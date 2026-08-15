@@ -1,5 +1,5 @@
 import { useState, useRef, Fragment } from 'react'
-import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply } from 'lucide-react'
+import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply, CheckCircle2 } from 'lucide-react'
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
 import { useAttachments, useUploadAttachment, useLinkAttachmentsToComment, getSignedUrl } from '../../hooks/useAttachments'
 import { useUsers } from '../../hooks/useUsers'
@@ -294,10 +294,14 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
 
   const linkedAttachments = attachments.filter(a => a.comment_id === comment.id)
 
+  // Prefer the id-based link (robust to renames/duplicates); fall back to
+  // filename matching for comments posted before that link existed.
+  function findAttachment(filename: string) {
+    return linkedAttachments.find(a => a.filename === filename) ?? attachments.find(a => a.filename === filename)
+  }
+
   async function handleAttachmentClick(filename: string) {
-    // Prefer the id-based link (robust to renames/duplicates); fall back to
-    // filename matching for comments posted before that link existed.
-    const match = linkedAttachments.find(a => a.filename === filename) ?? attachments.find(a => a.filename === filename)
+    const match = findAttachment(filename)
     if (!match) { toast('File not found here — check the Files tab', 'error'); return }
     setLoadingFile(filename)
     try {
@@ -362,19 +366,32 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
                 {attachmentLines.map((line, i) => {
                   const filename = line.replace('📎 ', '')
                   const isLoading = loadingFile === filename
+                  // The chip and the Files tab point at one file, so approval
+                  // shows here too rather than only where it was granted.
+                  const approved = !!findAttachment(filename)?.approved_at
                   return (
                     <button
                       key={i}
                       type="button"
                       onClick={() => handleAttachmentClick(filename)}
                       disabled={isLoading}
-                      className="flex items-center gap-1.5 bg-muted hover:bg-accent rounded-md px-2 py-1 text-xs border border-border transition-colors"
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs border transition-colors',
+                        approved
+                          ? 'bg-green-50 hover:bg-green-100 border-green-300 text-green-900'
+                          : 'bg-muted hover:bg-accent border-border'
+                      )}
                     >
                       {isLoading
                         ? <div className="h-3 w-3 border border-muted-foreground border-t-transparent rounded-full animate-spin shrink-0" />
-                        : <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />}
+                        : approved
+                          ? <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" />
+                          : <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />}
                       <span className="font-medium truncate max-w-[180px]">{filename}</span>
-                      <span className="text-muted-foreground text-[10px]">→ Preview</span>
+                      {approved && (
+                        <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
+                      )}
+                      <span className={cn('text-[10px]', approved ? 'text-green-700' : 'text-muted-foreground')}>→ Preview</span>
                     </button>
                   )
                 })}

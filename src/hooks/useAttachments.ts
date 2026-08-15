@@ -133,16 +133,16 @@ export function useApproveAttachment() {
   const { user } = useAuth()
 
   return useMutation({
-    mutationFn: async ({ id, cardId, currentApprovedId }: { id: string; cardId: string; currentApprovedId?: string }) => {
+    mutationFn: async ({ id, cardId, currentApprovedId, note }: { id: string; cardId: string; currentApprovedId?: string; note?: string }) => {
       // Remove previous approval if any
       if (currentApprovedId && currentApprovedId !== id) {
         await supabase.from('attachments')
-          .update({ approved_at: null, approved_by: null })
+          .update({ approved_at: null, approved_by: null, approval_note: null })
           .eq('id', currentApprovedId)
       }
       // Set new approval
       const { error } = await supabase.from('attachments')
-        .update({ approved_at: new Date().toISOString(), approved_by: user!.id })
+        .update({ approved_at: new Date().toISOString(), approved_by: user!.id, approval_note: note?.trim() || null })
         .eq('id', id)
       if (error) throw error
     },
@@ -158,7 +158,7 @@ export function useUnapproveAttachment() {
   return useMutation({
     mutationFn: async ({ id, cardId }: { id: string; cardId: string }) => {
       const { error } = await supabase.from('attachments')
-        .update({ approved_at: null, approved_by: null })
+        .update({ approved_at: null, approved_by: null, approval_note: null })
         .eq('id', id)
       if (error) throw error
     },

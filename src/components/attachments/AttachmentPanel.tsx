@@ -23,6 +23,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const [uploading, setUploading] = useState<string[]>([])
   const [preview, setPreview] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [approvalNote, setApprovalNote] = useState('')
 
   // Thumbnails are stored as private paths, so each needs its own signed URL.
   // The ref tracks which ids were already requested so re-renders don't re-sign.
@@ -88,9 +90,14 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
   async function handleApprove(att: Attachment) {
     try {
-      await approveAttachment.mutateAsync({ id: att.id, cardId, currentApprovedId: approvedAtt?.id })
+      await approveAttachment.mutateAsync({ id: att.id, cardId, currentApprovedId: approvedAtt?.id, note: approvalNote })
       toast(`"${att.filename}" marked as approved artwork`, 'success')
-    } catch { toast('Failed to approve', 'error') }
+      setApprovingId(null)
+      setApprovalNote('')
+    } catch (err) {
+      console.error('Failed to approve:', err)
+      toast('Failed to approve', 'error')
+    }
   }
 
   async function handleUnapprove(att: Attachment) {
@@ -115,7 +122,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
             <p className="text-sm font-semibold text-green-800">Approved Artwork</p>
-            <span className="text-xs text-green-600 ml-auto">{formatRelative(approvedAtt.approved_at!)}</span>
+            <span className="text-xs text-green-700 ml-auto" title={formatRelative(approvedAtt.approved_at!)}>
+              {formatDateTime(approvedAtt.approved_at!)}
+            </span>
           </div>
           <div className="flex items-center gap-3 bg-white rounded-md p-2 border border-green-200">
             {thumbUrls[approvedAtt.id] ? (
@@ -146,6 +155,12 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
               </button>
             )}
           </div>
+          {approvedAtt.approval_note && (
+            <div className="bg-white rounded-md p-2 border border-green-200">
+              <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide mb-0.5">Approval note</p>
+              <p className="text-sm text-green-900 whitespace-pre-wrap">{approvedAtt.approval_note}</p>
+            </div>
+          )}
           {approvedAtt.approved_by_user && (
             <p className="text-[10px] text-green-600">Approved by {approvedAtt.approved_by_user.full_name}</p>
           )}
@@ -234,8 +249,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                         {/* Approve button — only for member/admin, only images/PDFs */}
-                        {canApprove && !isApproved && (
-                          <button onClick={() => handleApprove(att)}
+                        {canApprove && !isApproved && approvingId !== att.id && (
+                          <button onClick={() => { setApprovingId(att.id); setApprovalNote('') }}
                             className="h-7 px-2 rounded flex items-center gap-1 text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 font-medium"
                             title="Mark as approved artwork">
                             <CheckCircle2 className="h-3.5 w-3.5" /> Approve
@@ -259,6 +274,34 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                         )}
                       </div>
                     </div>
+
+                    {/* Approving is the moment the reason is known, so the note is
+                        captured here rather than left to a later comment. */}
+                    {approvingId === att.id && (
+                      <div className="mt-3 pt-3 border-t border-green-200 space-y-2">
+                        <label className="text-xs font-medium text-green-800 block">
+                          Approval note <span className="text-muted-foreground font-normal">(optional)</span>
+                        </label>
+                        <textarea
+                          value={approvalNote}
+                          onChange={e => setApprovalNote(e.target.value)}
+                          rows={2}
+                          autoFocus
+                          placeholder="What is being approved, and any condition attached to it..."
+                          className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={() => handleApprove(att)} disabled={approveAttachment.isPending}
+                            className="h-7 px-3 rounded flex items-center gap-1 text-xs text-white bg-green-600 hover:bg-green-700 font-medium disabled:opacity-60">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Confirm approval
+                          </button>
+                          <button onClick={() => { setApprovingId(null); setApprovalNote('') }}
+                            className="h-7 px-3 rounded text-xs text-muted-foreground hover:bg-accent">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )

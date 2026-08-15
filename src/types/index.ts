@@ -82,6 +82,7 @@ export interface Attachment {
   approved_at?: string
   approved_by?: string
   approved_by_user?: { full_name: string }
+  approval_note?: string
   created_at: string
 }
 
