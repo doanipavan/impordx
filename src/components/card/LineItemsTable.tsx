@@ -5,7 +5,7 @@ import { usePromoteToOrder } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { cn, formatFileSize } from '../../lib/utils'
+import { cn, formatFileSize, COLLECTION_SIZES } from '../../lib/utils'
 import { Card, BoardType } from '../../types'
 import { CatalogPicker } from './CatalogPicker'
 import { ExportRFQ } from './ExportRFQ'
@@ -80,6 +80,10 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const [editValues, setEditValues] = useState<Partial<CardItem>>({})
   const [editPrice, setEditPrice] = useState('')
   const [generatingOrder, setGeneratingOrder] = useState(false)
+  const [customSize, setCustomSize] = useState(false)
+
+  // The card's collection decides whether Size is a fixed list or free text.
+  const sizeOptions = card.collection ? COLLECTION_SIZES[card.collection] ?? null : null
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0)
   const totalValue = items.reduce((s, i) => s + (i.quantity * (i.unit_price_usd ?? 0)), 0)
@@ -334,10 +338,52 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
               <Input className="h-7 text-xs" placeholder="e.g. Parma — Navy Blue" value={newItem.description} onChange={e => setNewItem(v => ({ ...v, description: e.target.value }))} />
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            <div><label className="text-[10px] text-muted-foreground">Size</label>
-              <Input className="h-7 text-xs" placeholder="16x16x3.5" value={newItem.size} onChange={e => setNewItem(v => ({ ...v, size: e.target.value }))} />
+          {sizeOptions && !customSize ? (
+            <div>
+              <label className="text-[10px] text-muted-foreground">
+                Size <span className="text-muted-foreground/70">· {card.collection}</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5 mt-0.5">
+                {sizeOptions.map(size => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setNewItem(v => ({ ...v, size }))}
+                    className={cn(
+                      'text-xs px-2.5 py-1 rounded-full border transition-colors tabular-nums',
+                      newItem.size === size
+                        ? 'bg-primary text-primary-foreground border-primary font-semibold'
+                        : 'bg-muted/50 border-border hover:bg-accent'
+                    )}
+                  >
+                    {size}
+                  </button>
+                ))}
+                {/* A closed table would trap you the day a new measurement shows up. */}
+                <button type="button"
+                  onClick={() => { setCustomSize(true); setNewItem(v => ({ ...v, size: '' })) }}
+                  className="text-xs px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground italic hover:bg-accent transition-colors">
+                  Outro…
+                </button>
+              </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              <div className="col-span-2"><label className="text-[10px] text-muted-foreground">Size</label>
+                <Input className="h-7 text-xs" placeholder="16 x 16 x 3,5 cm" value={newItem.size} onChange={e => setNewItem(v => ({ ...v, size: e.target.value }))} autoFocus={customSize} />
+              </div>
+              {sizeOptions && (
+                <div className="flex items-end">
+                  <button type="button" onClick={() => { setCustomSize(false); setNewItem(v => ({ ...v, size: '' })) }}
+                    className="h-7 text-xs px-2 rounded text-muted-foreground hover:bg-accent transition-colors">
+                    ← lista
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-4 gap-2">
             <div><label className="text-[10px] text-muted-foreground">Qty *</label>
               <Input type="number" className="h-7 text-xs" value={newItem.quantity} onChange={e => setNewItem(v => ({ ...v, quantity: Number(e.target.value) }))} />
             </div>

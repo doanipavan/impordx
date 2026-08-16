@@ -207,3 +207,22 @@ export const OUTSIDE_MATERIALS = [
 export const INSIDE_MATERIALS = OUTSIDE_MATERIALS
 
 export const COLLECTIONS = ['Parma', 'Capri', 'Barcelona', 'Genova', 'Trento', 'Turim', 'Monza', 'Custom']
+
+// Comprimento x Largura x Altura, in cm. Rendered in the format line items
+// already use, so the RFQ the supplier receives does not change shape.
+function formatSize([comp, larg, alt]: readonly [number, number, number]): string {
+  const br = (n: number) => String(n).replace('.', ',')
+  return `${br(comp)} x ${br(larg)} x ${br(alt)} cm`
+}
+
+const PARMA_SIZES = [
+  [4.6, 5.2, 3.8], [5.9, 5.9, 4.5], [7, 7, 4.5], [7, 8, 3.2], [7, 10, 3.3],
+  [6, 6.5, 5.3], [7.5, 5, 3.7], [8.8, 9.1, 3.3], [9, 9, 5.2], [7.1, 9.2, 3.7],
+  [22, 5.2, 2.5], [10.2, 10.2, 3.8], [10.2, 10.2, 5.6], [11, 16, 3.5],
+  [16, 16, 3.5], [15.5, 11, 3.8], [19, 19.5, 3.5],
+] as const
+
+// A collection missing from this map keeps the free-text size field.
+export const COLLECTION_SIZES: Record<string, string[]> = {
+  Parma: PARMA_SIZES.map(formatSize),
+}
