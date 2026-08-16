@@ -227,8 +227,14 @@ const TURIM_SIZES = [
   [9, 9, 3.7], [21.7, 5.5, 2.6], [11, 16, 3.8], [19, 19, 3.8],
 ] as const
 
+const TRENTO_SIZES = [
+  [7, 7, 4.5], [9, 9, 4.5], [20, 5.5, 4.5], [13.5, 16, 4.5],
+  [10, 10, 4.5], [12, 12, 9.5], [20, 25.5, 4.5],
+] as const
+
 // A collection missing from this map keeps the free-text size field.
 export const COLLECTION_SIZES: Record<string, string[]> = {
   Parma: PARMA_SIZES.map(formatSize),
   Turim: TURIM_SIZES.map(formatSize),
+  Trento: TRENTO_SIZES.map(formatSize),
 }
