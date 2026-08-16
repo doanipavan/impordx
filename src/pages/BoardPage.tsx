@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { BoardType, BOARD_LABELS, Card } from '../types'
 import { Board } from '../components/board/Board'
+import { OrdersGantt } from '../components/board/OrdersGantt'
 import { supabase } from '../lib/supabase'
 
 export function QuotesPage()  { return <BoardPage board="quotes" /> }
@@ -48,8 +49,12 @@ function BoardPage({ board }: { board: BoardType }) {
           </p>
         )}
       </div>
-      <div className="flex-1 overflow-hidden py-4">
-        <Board board={board} autoOpenCard={autoOpenCard} onAutoOpenClear={() => { setAutoOpenCard(null); navigate('/' + board, { replace: true }) }} />
+      <div className="flex-1 overflow-hidden py-4 flex flex-col">
+        {/* Only orders run a 120-day clock, so only orders get a timeline. */}
+        {board === 'orders' && <OrdersGantt />}
+        <div className="flex-1 overflow-hidden">
+          <Board board={board} autoOpenCard={autoOpenCard} onAutoOpenClear={() => { setAutoOpenCard(null); navigate('/' + board, { replace: true }) }} />
+        </div>
       </div>
     </div>
   )
