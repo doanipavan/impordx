@@ -32,10 +32,17 @@ export function useCards(board: BoardType) {
     },
   })
 
-  // Realtime subscription
+  // Realtime subscription. Two components can read the same board at once —
+  // the Orders timeline sits above the board that renders the same cards — and
+  // subscribing twice to one channel name is what took the page white before
+  // (see 4042d96, same failure on notifications). First mount owns the channel.
   useEffect(() => {
+    const channelName = `cards:${board}`
+    const existing = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`)
+    if (existing) return
+
     const channel = supabase
-      .channel(`cards:${board}`)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter: `board=eq.${board}` },
         () => { qc.invalidateQueries({ queryKey: CARDS_QUERY(board) }) }
       )
