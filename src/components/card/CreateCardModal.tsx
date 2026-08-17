@@ -48,6 +48,7 @@ interface CreateCardModalProps {
 }
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+const MAX_FILE_SIZE = 20 * 1024 * 1024
 
 export function CreateCardModal({ board, initialStatus, onClose }: CreateCardModalProps) {
   const createCard = useCreateCard()
@@ -63,10 +64,16 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   })
 
   function addFiles(files: File[]) {
-    const valid = files.filter(f => ACCEPTED.includes(f.type))
-    const invalid = files.filter(f => !ACCEPTED.includes(f.type))
-    if (invalid.length) toast(`${invalid.length} file(s) not supported`, 'error')
-    setQueuedFiles(prev => [...prev, ...valid])
+    const supported = files.filter(f => ACCEPTED.includes(f.type))
+    const unsupported = files.filter(f => !ACCEPTED.includes(f.type))
+    if (unsupported.length) {
+      toast(`Not supported: ${unsupported.map(f => f.name).join(', ')} — JPG, PNG, WEBP or PDF only`, 'error')
+    }
+    const tooBig = supported.filter(f => f.size > MAX_FILE_SIZE)
+    if (tooBig.length) {
+      toast(`Too large: ${tooBig.map(f => f.name).join(', ')} — 20 MB max`, 'error')
+    }
+    setQueuedFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_FILE_SIZE)])
   }
 
   const onSubmit = async (values: FormValues) => {
@@ -104,8 +111,15 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
       })
 
       for (const file of queuedFiles) {
-        try { await uploadAttachment.mutateAsync({ cardId: card.id, file }) }
-        catch { toast(`Failed to upload "${file.name}"`, 'error') }
+        try {
+          await uploadAttachment.mutateAsync({ cardId: card.id, file })
+        } catch (err) {
+          // The card is already saved at this point, so the upload failing is
+          // recoverable — but only if it says why.
+          console.error(`Upload failed for ${file.name}:`, err)
+          const detail = (err as { message?: string })?.message
+          toast(detail ? `"${file.name}": ${detail}` : `Failed to upload "${file.name}"`, 'error')
+        }
       }
 
       toast(`Card created${queuedFiles.length > 0 ? ` with ${queuedFiles.length} file(s)` : ''}`, 'success')
