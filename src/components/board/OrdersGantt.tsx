@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
+import { useAuth } from '../../hooks/useAuth'
 import { cn, ORDER_LEG_DAYS } from '../../lib/utils'
 import { Card } from '../../types'
 
@@ -28,7 +29,7 @@ function daysBetween(from: Date, to: Date) {
 }
 
 function shortDate(date: Date) {
-  return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }
 
 interface Row {
@@ -65,6 +66,10 @@ function buildRow(card: Card, today: Date): Row | null {
 
 export function OrdersGantt() {
   const { data: cards = [] } = useCards('orders')
+  const { user } = useAuth()
+  // Shipping to Brazil is Redantex's leg. The supplier sees its own 60 days
+  // and nothing past the handover.
+  const deqiOnly = user?.role === 'viewer'
   const [open, setOpen] = useState(() => localStorage.getItem(STORAGE_KEY) !== 'false')
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
@@ -76,15 +81,21 @@ export function OrdersGantt() {
       .map(c => buildRow(c, today))
       .filter((r): r is Row => r !== null)
       // Most urgent first; anything already shipped sinks to the bottom.
-      .sort((a, b) => (a.shipped !== b.shipped ? (a.shipped ? 1 : -1) : a.totalLeft - b.totalLeft))
-  }, [cards, today])
+      .sort((a, b) => {
+        const aDone = deqiOnly ? a.shipping : a.shipped
+        const bDone = deqiOnly ? b.shipping : b.shipped
+        if (aDone !== bDone) return aDone ? 1 : -1
+        return deqiOnly ? a.deqiLeft - b.deqiLeft : a.totalLeft - b.totalLeft
+      })
+  }, [cards, today, deqiOnly])
 
   // The window spans every bar on screen, padded to whole months.
   const { start, end, months } = useMemo(() => {
     const starts = rows.map(r => r.confirmed.getTime())
     // Delivery dates count toward the range: a date DEQI commits to beyond day
     // 120 is the one most worth seeing, and it would fall off the right edge.
-    const ends = rows.flatMap(r => r.delivery ? [r.arrival.getTime(), r.delivery.getTime()] : [r.arrival.getTime()])
+    const finish = (r: Row) => (deqiOnly ? r.handover : r.arrival).getTime()
+    const ends = rows.flatMap(r => r.delivery ? [finish(r), r.delivery.getTime()] : [finish(r)])
     const min = new Date(Math.min(today.getTime(), ...(starts.length ? starts : [today.getTime()])))
     const max = new Date(Math.max(today.getTime(), ...(ends.length ? ends : [addDays(today, 120).getTime()])))
 
@@ -98,7 +109,7 @@ export function OrdersGantt() {
       cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1))
     }
     return { start: from, end: to, months: list }
-  }, [rows, today])
+  }, [rows, today, deqiOnly])
 
   const pct = (date: Date) => ((date.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100
 
@@ -132,17 +143,17 @@ export function OrdersGantt() {
         <button onClick={toggle} aria-expanded={open}
           className="flex items-center gap-1.5 text-sm font-semibold hover:text-primary transition-colors">
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Linha do tempo
+          {deqiOnly ? 'Production schedule' : 'Timeline'}
         </button>
         <span className="text-[11px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-          {rows.length} {rows.length === 1 ? 'pedido' : 'pedidos'}
+          {rows.length} {rows.length === 1 ? 'order' : 'orders'}
         </span>
 
         <div className="ml-auto hidden md:flex items-center gap-3.5">
-          <Key className="bg-amber-100 border-amber-500" label="DEQI · produção" />
-          <Key className="bg-slate-200 border-slate-400" label="RDX · até o Brasil" />
-          <Key className="bg-green-100 border-green-600" label="concluído" />
-          <Key className="bg-red-100 border-red-500" label="estourado" />
+          <Key className="bg-amber-100 border-amber-500" label={deqiOnly ? 'In production' : 'DEQI · production'} />
+          {!deqiOnly && <Key className="bg-slate-200 border-slate-400" label="RDX · to Brazil" />}
+          <Key className="bg-green-100 border-green-600" label={deqiOnly ? 'Ready' : 'Done'} />
+          <Key className="bg-red-100 border-red-500" label="Overdue" />
         </div>
       </div>
 
@@ -153,20 +164,20 @@ export function OrdersGantt() {
             {/* month axis */}
             <div className="grid border-b border-border bg-muted/40" style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
               <div className="px-3 py-1.5 border-r border-border">
-                <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Pedido</span>
+                <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Order</span>
               </div>
               <div className="flex">
                 {months.map(m => (
                   <div key={m.toISOString()}
                     className="flex-1 border-l border-border/60 first:border-l-0 px-2 py-1.5 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                    {m.toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }).replace('.', '')}
+                    {m.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}
                   </div>
                 ))}
               </div>
             </div>
 
             {rows.map(row => (
-              <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} />
+              <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} deqiOnly={deqiOnly} />
             ))}
 
             {/* today */}
@@ -188,11 +199,11 @@ export function OrdersGantt() {
   )
 }
 
-function GanttRow({ row, months, pct }: { row: Row; months: number; pct: (d: Date) => number }) {
+function GanttRow({ row, months, pct, deqiOnly }: { row: Row; months: number; pct: (d: Date) => number; deqiOnly: boolean }) {
   const left = pct(row.confirmed)
-  const right = pct(row.arrival)
+  const right = pct(deqiOnly ? row.handover : row.arrival)
   const mid = pct(row.handover)
-  const deqiWidth = ((mid - left) / (right - left)) * 100
+  const deqiWidth = deqiOnly ? 100 : ((mid - left) / (right - left)) * 100
 
   const deqiState = row.shipping ? 'done' : row.deqiLeft < 0 ? 'late' : 'deqi'
   const rdxState = row.shipped ? 'done' : row.totalLeft < 0 ? 'late' : 'rdx'
@@ -204,9 +215,11 @@ function GanttRow({ row, months, pct }: { row: Row; months: number; pct: (d: Dat
     late: 'bg-red-100 text-red-700',
   }
 
-  const chip = row.shipped ? 'bg-green-100 text-green-700'
-    : row.totalLeft < 0 ? 'bg-red-100 text-red-700'
-    : row.totalLeft <= 21 ? 'bg-amber-100 text-amber-700'
+  const daysLeft = deqiOnly ? row.deqiLeft : row.totalLeft
+  const finished = deqiOnly ? row.shipping : row.shipped
+  const chip = finished ? 'bg-green-100 text-green-700'
+    : daysLeft < 0 ? 'bg-red-100 text-red-700'
+    : daysLeft <= 21 ? 'bg-amber-100 text-amber-700'
     : 'bg-muted text-muted-foreground'
 
   return (
@@ -218,7 +231,7 @@ function GanttRow({ row, months, pct }: { row: Row; months: number; pct: (d: Dat
           {row.card.client_name || row.card.title}
           {row.card.collection && <span className="text-muted-foreground font-normal"> · {row.card.collection}</span>}
         </p>
-        <p className="text-[11px] text-muted-foreground/80">confirmado {shortDate(row.confirmed)}</p>
+        <p className="text-[11px] text-muted-foreground/80">confirmed {shortDate(row.confirmed)}</p>
       </div>
 
       <div className="relative py-3.5">
@@ -231,16 +244,20 @@ function GanttRow({ row, months, pct }: { row: Row; months: number; pct: (d: Dat
 
         <div className="absolute top-1/2 -translate-y-1/2 h-5 rounded border border-border flex overflow-hidden"
           style={{ left: `${left}%`, width: `${right - left}%` }}
-          title={`${shortDate(row.confirmed)} → ${shortDate(row.arrival)}`}>
+          title={`${shortDate(row.confirmed)} → ${shortDate(deqiOnly ? row.handover : row.arrival)}`}>
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
             style={{ width: `${deqiWidth}%` }}>
             <span className="text-[10px] font-bold tracking-wide px-1.5 truncate">DEQI</span>
           </div>
-          <div className="w-px bg-card" />
-          <div className={cn('h-full flex items-center justify-center min-w-0', segment[rdxState])}
-            style={{ width: `${100 - deqiWidth}%` }}>
-            <span className="text-[10px] font-bold tracking-wide px-1.5 truncate">RDX</span>
-          </div>
+          {!deqiOnly && (
+            <>
+              <div className="w-px bg-card" />
+              <div className={cn('h-full flex items-center justify-center min-w-0', segment[rdxState])}
+                style={{ width: `${100 - deqiWidth}%` }}>
+                <span className="text-[10px] font-bold tracking-wide px-1.5 truncate">RDX</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* the date DEQI committed to */}
@@ -250,16 +267,16 @@ function GanttRow({ row, months, pct }: { row: Row; months: number; pct: (d: Dat
               row.missedPromise ? 'border-red-500' : 'border-foreground')}
             style={{ left: `${pct(row.delivery)}%`, transform: 'translate(-50%, -50%) rotate(45deg)' }}
             title={row.missedPromise
-              ? `DEQI informou ${shortDate(row.delivery)} — depois dos ${ORDER_LEG_DAYS} dias`
-              : `Entrega informada pela DEQI: ${shortDate(row.delivery)}`}
+              ? `DEQI gave ${shortDate(row.delivery)} — past the ${ORDER_LEG_DAYS}-day window`
+              : `Delivery date from DEQI: ${shortDate(row.delivery)}`}
           />
         )}
 
         <div className={cn('absolute top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap', chip)}
           style={{ left: `calc(${right}% + 10px)` }}>
-          {row.shipped ? 'entregue'
-            : row.totalLeft < 0 ? `${Math.abs(row.totalLeft)}d estourado`
-            : `${row.totalLeft}d`}
+          {finished ? (deqiOnly ? 'ready' : 'delivered')
+            : daysLeft < 0 ? `${Math.abs(daysLeft)}d over`
+            : `${daysLeft}d`}
         </div>
       </div>
     </div>

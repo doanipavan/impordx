@@ -332,7 +332,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
               <Input className="h-7 text-xs" value={newItem.reference_code} onChange={e => setNewItem(v => ({ ...v, reference_code: e.target.value }))} />
             </div>
             <div><label className="text-[10px] text-muted-foreground">ERP (DEV)</label>
-              <Input className="h-7 text-xs font-mono" placeholder="código no DEV" value={newItem.erp_code} onChange={e => setNewItem(v => ({ ...v, erp_code: e.target.value }))} />
+              <Input className="h-7 text-xs font-mono" placeholder="code in DEV" value={newItem.erp_code} onChange={e => setNewItem(v => ({ ...v, erp_code: e.target.value }))} />
             </div>
             <div><label className="text-[10px] text-muted-foreground">Description</label>
               <Input className="h-7 text-xs" placeholder="e.g. Parma — Navy Blue" value={newItem.description} onChange={e => setNewItem(v => ({ ...v, description: e.target.value }))} />
@@ -363,7 +363,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                 <button type="button"
                   onClick={() => { setCustomSize(true); setNewItem(v => ({ ...v, size: '' })) }}
                   className="text-xs px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground italic hover:bg-accent transition-colors">
-                  Outro…
+                  Other…
                 </button>
               </div>
             </div>
@@ -376,7 +376,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                 <div className="flex items-end">
                   <button type="button" onClick={() => { setCustomSize(false); setNewItem(v => ({ ...v, size: '' })) }}
                     className="h-7 text-xs px-2 rounded text-muted-foreground hover:bg-accent transition-colors">
-                    ← lista
+                    ← list
                   </button>
                 </div>
               )}

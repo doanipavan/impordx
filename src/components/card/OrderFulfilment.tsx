@@ -87,7 +87,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
         )}
       </div>
 
-      {clock && !editing && <OrderClockPanel clock={clock} />}
+      {clock && !editing && <OrderClockPanel clock={clock} deqiOnly={isDeqi} />}
 
       {editing ? (
         <div className="space-y-3">
@@ -107,12 +107,12 @@ export function OrderFulfilment({ card }: { card: Card }) {
           {!isDeqi && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Pedido de venda</label>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Sales order</label>
                 <Input className="h-8 text-sm font-mono" value={salesOrder}
                   onChange={e => setSalesOrder(e.target.value)} />
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Pedido de compra</label>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Purchase order</label>
                 <Input className="h-8 text-sm font-mono" value={purchaseOrder}
                   onChange={e => setPurchaseOrder(e.target.value)} />
               </div>
@@ -133,8 +133,8 @@ export function OrderFulfilment({ card }: { card: Card }) {
           <Field label="PI Number" mono value={card.pi_number} missing="Awaiting DEQI" />
           <Field label="Delivery Date" value={formatDeliveryDate(card.delivery_date)}
             missing={card.delivery_date ? undefined : 'Awaiting DEQI'} emphasis />
-          <Field label="Pedido de venda" mono value={card.sales_order} />
-          <Field label="Pedido de compra" mono value={card.purchase_order} />
+          <Field label="Sales order" mono value={card.sales_order} />
+          <Field label="Purchase order" mono value={card.purchase_order} />
         </div>
       )}
     </div>
@@ -177,31 +177,36 @@ function Field({ label, value, missing, mono, emphasis }: {
 
 // The 120-day journey as one headline number, with the two 60-day legs that
 // make it up underneath — so a slip is attributable, not just visible.
-function OrderClockPanel({ clock }: { clock: OrderClock }) {
+function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boolean }) {
   const { total, deqi, rdx, activeLeg } = clock
-  const late = total.daysLeft < 0
+  // The supplier is accountable for the first leg only, so that is the whole
+  // clock on their screen — otherwise hiding transit on the board is cosmetic.
+  const headline = deqiOnly ? deqi : total
+  const late = headline.daysLeft < 0
 
   return (
     <div className="mb-4 pb-4 border-b border-border/70">
       <div className="flex items-baseline gap-2">
         <span className={cn(
           'text-4xl font-bold tabular-nums leading-none',
-          late ? 'text-red-600' : total.daysLeft <= 14 ? 'text-amber-600' : 'text-foreground'
+          late ? 'text-red-600' : headline.daysLeft <= 14 ? 'text-amber-600' : 'text-foreground'
         )}>
-          {Math.abs(total.daysLeft)}
+          {Math.abs(headline.daysLeft)}
         </span>
         <span className={cn('text-sm font-medium', late ? 'text-red-600' : 'text-muted-foreground')}>
-          {late ? 'days over' : 'days to Brazil'}
+          {late ? 'days over' : deqiOnly ? 'days to ready' : 'days to Brazil'}
         </span>
         <span className="ml-auto text-xs text-muted-foreground">
-          {ORDER_LEG_DAYS * 2}-day target · {formatDate(total.target)}
+          {deqiOnly ? ORDER_LEG_DAYS : ORDER_LEG_DAYS * 2}-day target · {formatDate(headline.target)}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mt-3">
-        <LegBox label="DEQI" caption="production" leg={deqi} active={activeLeg === 'deqi'} />
-        <LegBox label="RDX" caption="to Brazil" leg={rdx} active={activeLeg === 'rdx'} />
-      </div>
+      {!deqiOnly && (
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <LegBox label="DEQI" caption="production" leg={deqi} active={activeLeg === 'deqi'} />
+          <LegBox label="RDX" caption="to Brazil" leg={rdx} active={activeLeg === 'rdx'} />
+        </div>
+      )}
     </div>
   )
 }
