@@ -9,6 +9,15 @@ const DAY = 86_400_000
 const LABEL_WIDTH = 210
 const STORAGE_KEY = 'rdx.ordersGantt.open'
 
+// localStorage throws in some in-app browsers and private modes. Remembering
+// a panel is open is never worth taking the page down with it.
+function readOpen(): boolean {
+  try { return localStorage.getItem(STORAGE_KEY) !== 'false' } catch { return true }
+}
+function writeOpen(value: boolean) {
+  try { localStorage.setItem(STORAGE_KEY, String(value)) } catch { /* not worth failing over */ }
+}
+
 function calendarDay(ymd?: string): Date | null {
   if (!ymd) return null
   const [y, m, d] = ymd.slice(0, 10).split('-').map(Number)
@@ -70,7 +79,7 @@ export function OrdersGantt() {
   // Shipping to Brazil is Redantex's leg. The supplier sees its own 60 days
   // and nothing past the handover.
   const deqiOnly = user?.role === 'viewer'
-  const [open, setOpen] = useState(() => localStorage.getItem(STORAGE_KEY) !== 'false')
+  const [open, setOpen] = useState(readOpen)
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
 
@@ -130,7 +139,7 @@ export function OrdersGantt() {
 
   function toggle() {
     setOpen(o => {
-      localStorage.setItem(STORAGE_KEY, String(!o))
+      writeOpen(!o)
       return !o
     })
   }

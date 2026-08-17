@@ -22,8 +22,13 @@ export function useComments(cardId: string) {
   })
 
   useEffect(() => {
+    // Same guard as useCards and useNotifications: subscribing twice to one
+    // topic tears the page down. Reopening a card fast can overlap the two.
+    const channelName = `comments:${cardId}`
+    if (supabase.getChannels().some(c => c.topic === `realtime:${channelName}`)) return
+
     const channel = supabase
-      .channel(`comments:${cardId}`)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `card_id=eq.${cardId}` },
         () => qc.invalidateQueries({ queryKey: ['comments', cardId] })
       )
