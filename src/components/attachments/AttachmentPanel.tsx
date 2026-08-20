@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, DragEvent } from 'react'
 import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle } from 'lucide-react'
-import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, getSignedUrl } from '../../hooks/useAttachments'
+import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAsSample, useReviewSample, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
@@ -16,6 +16,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const deleteAttachment = useDeleteAttachment()
   const approveAttachment = useApproveAttachment()
   const unapproveAttachment = useUnapproveAttachment()
+  const markAsSample = useMarkAsSample()
+  const reviewSample = useReviewSample()
   const { user } = useAuth()
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -25,6 +27,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [approvalNote, setApprovalNote] = useState('')
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectNote, setRejectNote] = useState('')
 
   // Thumbnails are stored as private paths, so each needs its own signed URL.
   // The ref tracks which ids were already requested so re-renders don't re-sign.
@@ -106,6 +110,29 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
       await unapproveAttachment.mutateAsync({ id: att.id, cardId })
       toast(`Approval removed from "${att.filename}"`, 'info')
     } catch { toast('Failed to remove approval', 'error') }
+  }
+
+  async function handleToggleSample(att: Attachment) {
+    try {
+      await markAsSample.mutateAsync({ id: att.id, cardId, isSample: !att.is_sample })
+      toast(att.is_sample ? 'No longer marked as a sample' : 'Marked as a digital sample', 'info')
+    } catch (err) {
+      console.error('Failed to flag sample:', err)
+      toast('Failed to update', 'error')
+    }
+  }
+
+  async function handleReview(att: Attachment, status: 'approved' | 'rejected', note?: string) {
+    try {
+      await reviewSample.mutateAsync({ id: att.id, cardId, status, note })
+      toast(status === 'approved' ? 'Sample approved' : 'Sample rejected', status === 'approved' ? 'success' : 'info')
+      setRejectingId(null)
+      setRejectNote('')
+    } catch (err) {
+      console.error('Failed to review sample:', err)
+      const detail = (err as { message?: string })?.message
+      toast(detail ?? 'Failed to review sample', 'error')
+    }
   }
 
   async function handleDelete(att: Attachment) {
@@ -242,6 +269,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                           {isApproved && (
                             <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
                           )}
+                          {att.is_sample && <SampleBadge status={att.sample_status} />}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
                         {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
@@ -256,6 +284,14 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                             <CheckCircle2 className="h-3.5 w-3.5" /> Approve
                           </button>
                         )}
+                        <button onClick={() => handleToggleSample(att)}
+                          className={cn('h-7 px-2 rounded flex items-center gap-1 text-xs font-medium border',
+                            att.is_sample
+                              ? 'text-muted-foreground bg-muted border-border hover:bg-accent'
+                              : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100')}
+                          title={att.is_sample ? 'Remove the sample flag' : 'Flag this file as a digital sample'}>
+                          {att.is_sample ? 'Not a sample' : 'It is a sample'}
+                        </button>
                         {isImage && (
                           <button onClick={() => handlePreview(att)} disabled={isLoading}
                             className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
@@ -274,6 +310,73 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                         )}
                       </div>
                     </div>
+
+                    {/* A sample carries its verdict and, when refused, the reason —
+                        so the factory is never sent back to work without one. */}
+                    {att.is_sample && (
+                      <div className="mt-2.5 pt-2.5 border-t border-border/70">
+                        {att.sample_review_note && (
+                          <p className={cn('text-xs mb-2 whitespace-pre-wrap',
+                            att.sample_status === 'rejected' ? 'text-red-700' : 'text-green-800')}>
+                            <span className="font-semibold">
+                              {att.sample_status === 'rejected' ? 'Rejected: ' : 'Note: '}
+                            </span>
+                            {att.sample_review_note}
+                          </p>
+                        )}
+
+                        {att.sample_reviewed_at && (
+                          <p className="text-[10px] text-muted-foreground mb-2">
+                            Reviewed {formatDateTime(att.sample_reviewed_at)}
+                            {att.sample_reviewer && ` by ${att.sample_reviewer.full_name}`}
+                          </p>
+                        )}
+
+                        {canApprove && rejectingId !== att.id && (
+                          <div className="flex flex-wrap gap-2">
+                            {att.sample_status !== 'approved' && (
+                              <button onClick={() => handleReview(att, 'approved')}
+                                className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Approve sample
+                              </button>
+                            )}
+                            {att.sample_status !== 'rejected' && (
+                              <button onClick={() => { setRejectingId(att.id); setRejectNote('') }}
+                                className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200">
+                                <XCircle className="h-3.5 w-3.5" /> Reject
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {canApprove && rejectingId === att.id && (
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-red-800 block">
+                              Why is it rejected? <span className="text-muted-foreground font-normal">(required)</span>
+                            </label>
+                            <textarea
+                              value={rejectNote}
+                              onChange={e => setRejectNote(e.target.value)}
+                              rows={2}
+                              autoFocus
+                              placeholder="What is wrong, and what should change..."
+                              className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                            <div className="flex gap-2">
+                              <button onClick={() => handleReview(att, 'rejected', rejectNote)}
+                                disabled={!rejectNote.trim() || reviewSample.isPending}
+                                className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
+                                <XCircle className="h-3.5 w-3.5" /> Confirm rejection
+                              </button>
+                              <button onClick={() => { setRejectingId(null); setRejectNote('') }}
+                                className="h-7 px-3 rounded text-xs text-muted-foreground hover:bg-accent">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Approving is the moment the reason is known, so the note is
                         captured here rather than left to a later comment. */}
@@ -317,5 +420,21 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         </div>
       )}
     </div>
+  )
+}
+
+// A sample's verdict, readable at a glance without opening anything.
+function SampleBadge({ status }: { status?: 'pending' | 'approved' | 'rejected' }) {
+  const style = status === 'approved' ? 'text-green-700 bg-green-100'
+    : status === 'rejected' ? 'text-red-700 bg-red-100'
+    : 'text-blue-700 bg-blue-100'
+  const label = status === 'approved' ? 'SAMPLE · APPROVED'
+    : status === 'rejected' ? 'SAMPLE · REJECTED'
+    : 'SAMPLE · AWAITING REVIEW'
+
+  return (
+    <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0', style)}>
+      {label}
+    </span>
   )
 }

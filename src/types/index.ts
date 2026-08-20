@@ -90,6 +90,14 @@ export interface Attachment {
   approved_by?: string
   approved_by_user?: { full_name: string }
   approval_note?: string
+  // Digital sample review — independent per file, unlike the single
+  // approved artwork. Redantex judges; a rejection carries its reason.
+  is_sample?: boolean
+  sample_status?: 'pending' | 'approved' | 'rejected'
+  sample_reviewed_at?: string
+  sample_reviewed_by?: string
+  sample_reviewer?: { full_name: string }
+  sample_review_note?: string
   created_at: string
 }
 

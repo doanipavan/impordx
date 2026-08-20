@@ -28,7 +28,7 @@ export function useAttachments(cardId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('attachments')
-        .select('*, user:users!user_id(id, full_name, email, avatar_url, role, created_at), approved_by_user:users!approved_by(full_name)')
+        .select('*, user:users!user_id(id, full_name, email, avatar_url, role, created_at), approved_by_user:users!approved_by(full_name), sample_reviewer:users!sample_reviewed_by(full_name)')
         .eq('card_id', cardId)
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -108,6 +108,47 @@ export function useLinkAttachmentsToComment() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] })
     },
+  })
+}
+
+export function useMarkAsSample() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, isSample }: { id: string; cardId: string; isSample: boolean }) => {
+      const { error } = await supabase
+        .from('attachments')
+        .update({
+          is_sample: isSample,
+          // Un-flagging clears the review with it; a verdict on a file that is
+          // no longer a sample is just a leftover.
+          ...(isSample ? { sample_status: 'pending' } : {
+            sample_status: null, sample_reviewed_at: null,
+            sample_reviewed_by: null, sample_review_note: null,
+          }),
+        })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] }),
+  })
+}
+
+// Goes through the database function, which enforces both rules the form
+// cannot: only Redantex reviews, and a rejection must say why.
+export function useReviewSample() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, status, note }: { id: string; cardId: string; status: 'approved' | 'rejected'; note?: string }) => {
+      const { error } = await supabase.rpc('review_sample', {
+        p_attachment_id: id,
+        p_status: status,
+        p_note: note ?? null,
+      })
+      if (error) throw error
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] }),
   })
 }
 
