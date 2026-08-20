@@ -53,22 +53,12 @@ export function useAddComment() {
       if (error) throw error
       return { comment: data as Comment, mentionedUserIds }
     },
-    onSuccess: ({ mentionedUserIds }, vars) => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['comments', vars.cardId] })
       supabase.from('activity_logs').insert({ card_id: vars.cardId, user_id: user!.id, action: 'commented' })
-
-      const targets = [...new Set(mentionedUserIds)].filter(id => id !== user!.id)
-      if (targets.length > 0) {
-        supabase.from('notifications').insert(
-          targets.map(uid => ({
-            user_id: uid,
-            card_id: vars.cardId,
-            actor_id: user!.id,
-            type: 'mention',
-            message: `${user!.full_name} mentioned you in a comment`,
-          }))
-        )
-      }
+      // Notifications are raised by the comments_notify trigger (migration 013).
+      // Doing it here meant a fire-and-forget insert that failed silently, and
+      // it only ever covered mentions — never a plain comment on your own card.
     },
   })
 }
