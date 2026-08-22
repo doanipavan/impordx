@@ -6,7 +6,7 @@ import { cn, ORDER_LEG_DAYS } from '../../lib/utils'
 import { Card } from '../../types'
 
 const DAY = 86_400_000
-const LABEL_WIDTH = 210
+const LABEL_WIDTH = 150
 const STORAGE_KEY = 'rdx.ordersGantt.open'
 
 // localStorage throws in some in-app browsers and private modes. Remembering
@@ -148,7 +148,7 @@ export function OrdersGantt() {
 
   return (
     <section className="mx-4 mb-3 border border-border rounded-lg bg-card overflow-hidden shrink-0">
-      <div className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border bg-muted/40">
+      <div className="flex items-center gap-2.5 px-3 py-1.5 border-b border-border bg-muted/40">
         <button onClick={toggle} aria-expanded={open}
           className="flex items-center gap-1.5 text-sm font-semibold hover:text-primary transition-colors">
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -168,17 +168,17 @@ export function OrdersGantt() {
 
       {open && (
         <div className="overflow-x-auto scrollbar-thin">
-          <div ref={chartRef} className="min-w-[860px] relative">
+          <div ref={chartRef} className="min-w-[620px] relative">
 
             {/* month axis */}
             <div className="grid border-b border-border bg-muted/40" style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
-              <div className="px-3 py-1.5 border-r border-border">
+              <div className="px-2.5 py-1 border-r border-border">
                 <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Order</span>
               </div>
               <div className="flex">
                 {months.map(m => (
                   <div key={m.toISOString()}
-                    className="flex-1 border-l border-border/60 first:border-l-0 px-2 py-1.5 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                    className="flex-1 border-l border-border/60 first:border-l-0 px-2 py-1 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
                     {m.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}
                   </div>
                 ))}
@@ -234,16 +234,17 @@ function GanttRow({ row, months, pct, deqiOnly }: { row: Row; months: number; pc
   return (
     <div className="grid border-b border-border/60 last:border-b-0 hover:bg-muted/30 transition-colors"
       style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
-      <div className="px-3 py-2.5 border-r border-border min-w-0">
-        <p className="text-[11px] font-mono text-muted-foreground tabular-nums">{row.card.ref_number}</p>
-        <p className="text-[13px] font-semibold truncate">
+      <div className="px-2.5 py-1.5 border-r border-border min-w-0"
+        title={`${row.card.ref_number ?? ''} · confirmed ${shortDate(row.confirmed)}`}>
+        <p className="text-[12px] font-semibold truncate leading-tight">
           {row.card.client_name || row.card.title}
-          {row.card.collection && <span className="text-muted-foreground font-normal"> · {row.card.collection}</span>}
         </p>
-        <p className="text-[11px] text-muted-foreground/80">confirmed {shortDate(row.confirmed)}</p>
+        <p className="text-[10px] font-mono text-muted-foreground/80 tabular-nums truncate leading-tight">
+          {row.card.ref_number}
+        </p>
       </div>
 
-      <div className="relative py-3.5">
+      <div className="relative py-2">
         {/* month gridlines */}
         <div className="absolute inset-0 flex pointer-events-none">
           {Array.from({ length: months }).map((_, i) => (
@@ -251,19 +252,19 @@ function GanttRow({ row, months, pct, deqiOnly }: { row: Row; months: number; pc
           ))}
         </div>
 
-        <div className="absolute top-1/2 -translate-y-1/2 h-5 rounded border border-border flex overflow-hidden"
+        <div className="absolute top-1/2 -translate-y-1/2 h-4 rounded-sm border border-border flex overflow-hidden"
           style={{ left: `${left}%`, width: `${right - left}%` }}
           title={`${shortDate(row.confirmed)} → ${shortDate(deqiOnly ? row.handover : row.arrival)}`}>
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
             style={{ width: `${deqiWidth}%` }}>
-            <span className="text-[10px] font-bold tracking-wide px-1.5 truncate">DEQI</span>
+            <span className="text-[9px] font-bold tracking-wide px-1 truncate">DEQI</span>
           </div>
           {!deqiOnly && (
             <>
               <div className="w-px bg-card" />
               <div className={cn('h-full flex items-center justify-center min-w-0', segment[rdxState])}
                 style={{ width: `${100 - deqiWidth}%` }}>
-                <span className="text-[10px] font-bold tracking-wide px-1.5 truncate">RDX</span>
+                <span className="text-[9px] font-bold tracking-wide px-1 truncate">RDX</span>
               </div>
             </>
           )}
