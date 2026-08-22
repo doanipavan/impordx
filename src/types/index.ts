@@ -1,7 +1,8 @@
 export type BoardType = 'quotes' | 'samples' | 'orders'
 
 export type QuoteStatus = 'Requested' | 'Quoted' | 'Confirmed' | 'Declined'
-export type SampleStatus = 'Requested' | 'In Preparation' | 'Under Revision' | 'Approved'
+export type SampleStatus = 'Requested' | 'In Preparation' | 'Under RDX Revision'
+  | 'Under DEQI Revision' | 'Approved' | 'Lost'
 export type OrderStatus = 'Placed' | 'In Production' | 'Ready to Ship' | 'Shipped'
 export type CardStatus = QuoteStatus | SampleStatus | OrderStatus
 
@@ -127,7 +128,7 @@ export interface ActivityLog {
 
 export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {
   quotes: ['Requested', 'Quoted', 'Confirmed', 'Declined'],
-  samples: ['Requested', 'In Preparation', 'Under Revision', 'Approved'],
+  samples: ['Requested', 'In Preparation', 'Under RDX Revision', 'Under DEQI Revision', 'Approved', 'Lost'],
   orders: ['Placed', 'In Production', 'Ready to Ship', 'Shipped'],
 }
 
@@ -153,8 +154,11 @@ export const STATUS_COLORS: Record<CardStatus, string> = {
   Declined: WAITING,
   // Samples
   'In Preparation': ACTIVE,
-  'Under Revision': ACTIVE,
+  'Under RDX Revision': ACTIVE,
+  'Under DEQI Revision': ACTIVE,
   Approved: DONE,
+  // Closed and out of the pipeline, like a declined quote — not a warning.
+  Lost: WAITING,
   // Orders
   Placed: WAITING,
   'In Production': ACTIVE,
