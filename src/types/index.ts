@@ -49,6 +49,7 @@ export interface Card {
   sales_order?: string
   purchase_order?: string
   order_confirmed_at?: string  // day the order clock starts, 'YYYY-MM-DD'
+  shipped_at?: string          // stamped by trigger when status becomes Shipped
   logo_technique_outside?: string
   logo_technique_inside?: string
   logo_text_outside?: string

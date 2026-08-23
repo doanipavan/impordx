@@ -17,7 +17,7 @@ import { OrderFulfilment } from './OrderFulfilment'
 import { EditCardModal } from './EditCardModal'
 import { SeenBy } from './SeenBy'
 import { useRecordView } from '../../hooks/useCardViews'
-import { cn, formatDate, formatCurrency, isOverdue, dueDateFor } from '../../lib/utils'
+import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge } from '../../lib/utils'
 
 interface CardModalProps {
   card: Card
@@ -39,6 +39,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   useRecordView(card.id) // record that this user viewed the card
   const columns = BOARD_COLUMNS[board]
   const overdue = isOverdue(dueDateFor(card))
+  const age = cardAge(card.created_at, card.shipped_at)
 
   async function handleDelete() {
     try {
@@ -351,6 +352,25 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                       <Calendar className="h-3 w-3" />
                       <span>Created: {formatDate(card.created_at)}</span>
                     </div>
+                    {/* Measured from creation through every board it passed, so it
+                        is the age of the job rather than of the current stage. */}
+                    {age && (
+                      <div className={cn('flex items-center gap-2 text-xs',
+                        age.done ? 'text-green-700 font-medium' : 'text-muted-foreground')}>
+                        <Calendar className="h-3 w-3" />
+                        <span>
+                          {age.done
+                            ? `Shipped after ${age.days} day${age.days === 1 ? '' : 's'}`
+                            : `Open for ${age.days} day${age.days === 1 ? '' : 's'}`}
+                        </span>
+                      </div>
+                    )}
+                    {card.shipped_at && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        <span>Shipped: {formatDate(card.shipped_at)}</span>
+                      </div>
+                    )}
                     {card.deadline && (
                       // On an order this is the sample's old milestone, kept for
                       // reference — the live date is the delivery date above.

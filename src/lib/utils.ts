@@ -64,6 +64,29 @@ function todayInSaoPaulo(): Date {
   return calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: SAO_PAULO }).format(new Date()))!
 }
 
+export interface CardAge {
+  days: number
+  done: boolean   // shipped — the count is final
+}
+
+// A card keeps its creation date through promotion, so this is the whole
+// journey from the day it was opened to the day it shipped, not the age of the
+// current stage. Counted in São Paulo calendar days.
+export function cardAge(createdAt?: string, shippedAt?: string | null): CardAge | null {
+  if (!createdAt) return null
+  const sp = (iso: string) =>
+    calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: SAO_PAULO }).format(parseISO(iso)))
+
+  const start = sp(createdAt)
+  const end = shippedAt ? sp(shippedAt) : todayInSaoPaulo()
+  if (!start || !end) return null
+
+  return {
+    days: Math.max(0, Math.round((end.getTime() - start.getTime()) / MS_PER_DAY)),
+    done: !!shippedAt,
+  }
+}
+
 export interface LegClock {
   daysLeft: number   // negative once the leg is blown
   target: string     // 'YYYY-MM-DD'

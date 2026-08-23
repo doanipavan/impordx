@@ -1,10 +1,10 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { MessageSquare, Paperclip, AlertCircle, Calendar } from 'lucide-react'
+import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock } from 'lucide-react'
 import { Card, PRIORITY_COLORS, STATUS_COLORS } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { cn, formatDate, isOverdue, isDueSoon, dueDateFor } from '../../lib/utils'
+import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge } from '../../lib/utils'
 
 interface KanbanCardProps {
   card: Card
@@ -30,6 +30,7 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
   }
 
   // On an order the live date is the delivery date, not the sample's deadline.
+  const age = cardAge(card.created_at, card.shipped_at)
   const dueDate = dueDateFor(card)
   const overdue = isOverdue(dueDate)
   const dueSoon = !overdue && isDueSoon(dueDate)
@@ -100,6 +101,16 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Paperclip className="h-3 w-3" />
               {card.attachments_count}
+            </span>
+          )}
+          {age && (
+            <span className={cn('flex items-center gap-1 text-xs tabular-nums',
+              age.done ? 'text-green-600' : 'text-muted-foreground')}
+              title={age.done
+                ? `Shipped ${age.days} days after it was opened`
+                : `Open for ${age.days} days`}>
+              <Clock className="h-3 w-3" />
+              {age.days}d
             </span>
           )}
           {dueDate && (
