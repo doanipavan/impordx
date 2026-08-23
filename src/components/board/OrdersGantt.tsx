@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
+import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
 import { cn, ORDER_LEG_DAYS } from '../../lib/utils'
 import { Card } from '../../types'
 
@@ -79,6 +80,8 @@ export function OrdersGantt() {
   // Shipping to Brazil is Redantex's leg. The supplier sees its own 60 days
   // and nothing past the handover.
   const deqiOnly = user?.role === 'viewer'
+  // Where the order actually was, from the history already being recorded.
+  const { data: checkpoints = [] } = useCheckpoints(cards.map(c => c.id))
   const [open, setOpen] = useState(readOpen)
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
@@ -186,7 +189,8 @@ export function OrdersGantt() {
             </div>
 
             {rows.map(row => (
-              <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} deqiOnly={deqiOnly} />
+              <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} deqiOnly={deqiOnly}
+                checkpoints={checkpoints.filter(c => c.card_id === row.card.id)} />
             ))}
 
             {/* today */}
@@ -208,7 +212,9 @@ export function OrdersGantt() {
   )
 }
 
-function GanttRow({ row, months, pct, deqiOnly }: { row: Row; months: number; pct: (d: Date) => number; deqiOnly: boolean }) {
+function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
+  row: Row; months: number; pct: (d: Date) => number; deqiOnly: boolean; checkpoints: Checkpoint[]
+}) {
   const left = pct(row.confirmed)
   const right = pct(deqiOnly ? row.handover : row.arrival)
   const mid = pct(row.handover)
@@ -269,6 +275,24 @@ function GanttRow({ row, months, pct, deqiOnly }: { row: Row; months: number; pc
             </>
           )}
         </div>
+
+        {/* Each status change, on the day it happened. No planned marker:
+            there is no agreed schedule inside the 60 days to compare against,
+            and drawing an invented one would be worse than drawing nothing. */}
+        {checkpoints.map(cp => {
+          const day = calendarDay(cp.at.slice(0, 10))
+          if (!day) return null
+          const x = pct(day)
+          if (x < 0 || x > 100) return null
+          return (
+            <div
+              key={cp.at}
+              className="absolute top-1/2 h-2.5 w-2.5 rounded-full bg-foreground border-2 border-card z-10"
+              style={{ left: `${x}%`, transform: 'translate(-50%, -50%)' }}
+              title={`${cp.status} · ${shortDate(day)} · ${cp.by}`}
+            />
+          )
+        })}
 
         {/* the date DEQI committed to */}
         {row.delivery && (
