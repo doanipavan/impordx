@@ -38,6 +38,7 @@ export function NotificationsPage() {
           <ul className="space-y-1 text-xs list-disc list-inside">
             <li>Someone @mentions you in a comment</li>
             <li>Someone comments on a card you opened, own, or have replied to</li>
+            <li>A card you are part of moves to another status</li>
           </ul>
           <p className="text-xs mt-2 text-muted-foreground/70">Click a notification to open the card it refers to.</p>
         </div>
