@@ -107,7 +107,7 @@ export interface Notification {
   id: string
   user_id: string
   card_id?: string
-  card?: Pick<Card, 'id' | 'title' | 'board'>
+  card?: Pick<Card, 'id' | 'title' | 'board' | 'ref_number'>
   actor_id?: string
   actor?: User
   type: 'comment' | 'status_change' | 'assignment' | 'mention' | 'due_soon'

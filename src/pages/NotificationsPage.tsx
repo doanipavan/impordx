@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Bell, Check, ArrowLeft } from 'lucide-react'
+import { Bell, Check, ArrowLeft, ChevronRight } from 'lucide-react'
 import { useNotifications, useMarkNotificationRead, useMarkAllRead } from '../hooks/useNotifications'
 import { Button } from '../components/ui/button'
 import { Avatar } from '../components/ui/avatar'
@@ -37,10 +37,9 @@ export function NotificationsPage() {
           <p className="font-medium text-foreground mb-1">How notifications work</p>
           <ul className="space-y-1 text-xs list-disc list-inside">
             <li>Someone @mentions you in a comment</li>
-            <li>Card status changed</li>
-            <li>You're assigned as responsible for a card</li>
+            <li>Someone comments on a card you opened, own, or have replied to</li>
           </ul>
-          <p className="text-xs mt-2 text-muted-foreground/70">Status change and assignment triggers are coming in a future update.</p>
+          <p className="text-xs mt-2 text-muted-foreground/70">Click a notification to open the card it refers to.</p>
         </div>
 
         {isLoading && <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}</div>}
@@ -54,9 +53,22 @@ export function NotificationsPage() {
         )}
 
         <div className="space-y-2">
-          {notifications.map(n => (
-            <div key={n.id} onClick={() => !n.read && markRead.mutate(n.id)}
-              className={cn('flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-all',
+          {notifications.map(n => {
+            // The card route resolves by ref_number. A deleted card leaves the
+            // notification behind with card_id nulled, so there is nowhere to go.
+            const target = n.card?.ref_number ? `/${n.card.board}/${n.card.ref_number}` : null
+
+            function open() {
+              if (!n.read) markRead.mutate(n.id)
+              if (target) navigate(target)
+            }
+
+            return (
+            <div key={n.id} onClick={open} role={target ? 'link' : undefined}
+              tabIndex={target ? 0 : undefined}
+              onKeyDown={e => { if (target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open() } }}
+              className={cn('flex items-start gap-3 p-4 rounded-lg border transition-all',
+                target ? 'cursor-pointer hover:border-primary/40 hover:shadow-card-hover' : 'cursor-default',
                 n.read ? 'bg-card border-border opacity-70' : 'bg-card border-border border-l-2 border-l-primary shadow-card')}>
               {n.actor ? (
                 <Avatar name={n.actor.full_name} imageUrl={n.actor.avatar_url} size="sm" className="shrink-0 mt-0.5" />
@@ -67,12 +79,22 @@ export function NotificationsPage() {
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm">{n.message}</p>
-                {n.card && <p className="text-xs text-muted-foreground mt-0.5 truncate">{n.card.title}</p>}
-                <p className="text-xs text-muted-foreground mt-1">{formatRelative(n.created_at)}</p>
+                {n.card && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {n.card.ref_number && <span className="font-mono">{n.card.ref_number} · </span>}
+                    {n.card.title}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatRelative(n.created_at)}
+                  {!target && <span className="ml-1.5 italic">· card no longer available</span>}
+                </p>
               </div>
+              {target && <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-0.5" />}
               {!n.read && <div className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1.5" />}
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

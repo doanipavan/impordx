@@ -13,7 +13,7 @@ export function useNotifications() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('notifications')
-        .select(`*, card:cards(id, title, board), actor:users!notifications_actor_id_fkey(id, full_name, avatar_url, email, role, created_at)`)
+        .select(`*, card:cards(id, title, board, ref_number), actor:users!notifications_actor_id_fkey(id, full_name, avatar_url, email, role, created_at)`)
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(50)
