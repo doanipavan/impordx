@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Trash2, Copy, Calendar, DollarSign, Package, Layers, Paintbrush, Tag } from 'lucide-react'
+import { X, Trash2, Copy, DollarSign, Package, Layers, Paintbrush, Tag } from 'lucide-react'
 import { Card, BoardType, BOARD_COLUMNS, CardStatus, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS } from '../../types'
 import { useUpdateCard, useMoveCard, useDeleteCard, useCreateCard } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
@@ -16,10 +16,9 @@ import { LineItemsTable } from './LineItemsTable'
 import { OrderFulfilment } from './OrderFulfilment'
 import { PiPanel } from './PiPanel'
 import { EditCardModal } from './EditCardModal'
-import { SeenBy } from './SeenBy'
+import { CardMetaStrip } from './CardMetaStrip'
 import { useRecordView } from '../../hooks/useCardViews'
 import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge, sampleSla } from '../../lib/utils'
-import { salespersonLabel } from '../../types'
 
 interface CardModalProps {
   card: Card
@@ -189,6 +188,9 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
           </div>
         </div>
 
+        {/* Client, owners and dates, in one line instead of a column. */}
+        <CardMetaStrip card={card} />
+
         {/* Tabs */}
         <div className="flex gap-1 px-6 pt-3 border-b border-border shrink-0">
           {tabs.map((t) => (
@@ -211,9 +213,8 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
         <div className="flex-1 overflow-y-auto scrollbar-thin">
 
           {tab === 'details' && (
-            <div className="grid md:grid-cols-3 gap-0 h-full">
-              {/* Main */}
-              <div className="md:col-span-2 p-6 space-y-5 border-r border-border">
+            <div className="h-full">
+              <div className="p-6 space-y-5">
 
                 {/* On an order, the PI and the delivery date are the first thing
                     anyone opens the card to check, so they lead. */}
@@ -347,88 +348,6 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
 
               </div>
 
-              {/* Sidebar */}
-              <div className="p-5 space-y-4">
-                {/* Seen by */}
-                <div>
-                  <SeenBy cardId={card.id} />
-                </div>
-
-                {/* Approved artwork */}
-
-                {(salespersonLabel(card) || card.project_manager) && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Owners</p>
-                    <div className="space-y-2">
-                      <OwnerRow label="Sales" user={card.salesperson} name={salespersonLabel(card)} />
-                      <OwnerRow label="Project" user={card.project_manager} />
-                    </div>
-                  </div>
-                )}
-
-                {/* Client */}
-                {card.client_name && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide font-medium">Client</p>
-                    <p className="text-sm font-medium">{card.client_name}</p>
-                  </div>
-                )}
-
-                {/* Dates */}
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Dates</p>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>Created: {formatDate(card.created_at)}</span>
-                    </div>
-                    {/* Measured from creation through every board it passed, so it
-                        is the age of the job rather than of the current stage. */}
-                    {age && (
-                      <div className={cn('flex items-center gap-2 text-xs',
-                        age.done ? 'text-green-700 font-medium' : 'text-muted-foreground')}>
-                        <Calendar className="h-3 w-3" />
-                        <span>
-                          {age.done
-                            ? `Shipped after ${age.days} day${age.days === 1 ? '' : 's'}`
-                            : `Open for ${age.days} day${age.days === 1 ? '' : 's'}`}
-                        </span>
-                      </div>
-                    )}
-                    {card.shipped_at && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>Shipped: {formatDate(card.shipped_at)}</span>
-                      </div>
-                    )}
-                    {card.deadline && (
-                      // On an order this is the sample's old milestone, kept for
-                      // reference — the live date is the delivery date above.
-                      <div className={cn('flex items-center gap-2 text-xs',
-                        overdue && card.board !== 'orders' ? 'text-red-500 font-medium' : 'text-muted-foreground')}>
-                        <Calendar className="h-3 w-3" />
-                        <span>
-                          {card.board === 'orders' ? 'Original deadline: ' : 'Deadline: '}
-                          {formatDate(card.deadline)}
-                        </span>
-                        {overdue && card.board !== 'orders' && <Badge variant="destructive">Overdue</Badge>}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Tags */}
-                {card.tags && card.tags.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Tags</p>
-                    <div className="flex flex-wrap gap-1">
-                      {card.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary">{tag}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -482,26 +401,3 @@ function InfoField({
 
 // The two people accountable for a card, side by side so it is obvious when
 // one of them is missing.
-function OwnerRow({ label, user, name }: {
-  label: string
-  user?: { full_name: string; avatar_url?: string }
-  name?: string | null
-}) {
-  // A salesperson without an account still gets an avatar from their initials,
-  // so the row reads the same whether or not they use the hub.
-  const shown = user?.full_name ?? name ?? null
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-12 shrink-0">{label}</span>
-      {shown ? (
-        <>
-          <Avatar name={shown} imageUrl={user?.avatar_url} size="sm" />
-          <span className="text-sm truncate">{shown}</span>
-          {!user && <span className="text-[10px] text-muted-foreground shrink-0">no account</span>}
-        </>
-      ) : (
-        <span className="text-sm text-amber-600">— not set</span>
-      )}
-    </div>
-  )
-}
