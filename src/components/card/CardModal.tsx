@@ -14,6 +14,7 @@ import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { ActivityLog } from './ActivityLog'
 import { LineItemsTable } from './LineItemsTable'
 import { OrderFulfilment } from './OrderFulfilment'
+import { PiPanel } from './PiPanel'
 import { EditCardModal } from './EditCardModal'
 import { SeenBy } from './SeenBy'
 import { useRecordView } from '../../hooks/useCardViews'
@@ -217,6 +218,10 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 {/* On an order, the PI and the delivery date are the first thing
                     anyone opens the card to check, so they lead. */}
                 {card.board === 'orders' && <OrderFulfilment card={card} />}
+
+                {/* The PI leads while it is still being decided; once approved
+                    it settles below the order details it unlocked. */}
+                {card.board === 'orders' && <PiPanel card={card} />}
 
                 {/* Status change */}
                 {/* The clock for the stage the card is sitting in right now. */}

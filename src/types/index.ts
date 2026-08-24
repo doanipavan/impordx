@@ -102,14 +102,14 @@ export interface Attachment {
   approved_by?: string
   approved_by_user?: { full_name: string }
   approval_note?: string
-  // Digital sample review — independent per file, unlike the single
-  // approved artwork. Redantex judges; a rejection carries its reason.
-  is_sample?: boolean
-  sample_status?: 'pending' | 'approved' | 'rejected'
-  sample_reviewed_at?: string
-  sample_reviewed_by?: string
-  sample_reviewer?: { full_name: string }
-  sample_review_note?: string
+  // One review mechanic for two kinds of document: a digital sample, and the
+  // proforma invoice. Redantex judges; a rejection carries its reason.
+  kind?: 'sample' | 'pi'
+  review_status?: 'pending' | 'approved' | 'rejected'
+  reviewed_at?: string
+  reviewed_by?: string
+  reviewer?: { full_name: string }
+  review_note?: string
   created_at: string
 }
 

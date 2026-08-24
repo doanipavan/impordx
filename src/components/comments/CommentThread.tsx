@@ -381,7 +381,7 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
                   const approved = !!found?.approved_at
                   // A sample's verdict belongs where the file was handed over,
                   // not only in the Files tab nobody scrolls to.
-                  const sample = found?.is_sample ? found.sample_status ?? 'pending' : null
+                  const review = found?.kind ? { kind: found.kind, status: found.review_status ?? 'pending' } : null
                   return (
                     <button
                       key={i}
@@ -404,12 +404,14 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
                       {approved && (
                         <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
                       )}
-                      {sample && (
+                      {review && (
                         <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0',
-                          sample === 'approved' ? 'text-green-700 bg-green-100'
-                            : sample === 'rejected' ? 'text-red-700 bg-red-100'
+                          review.status === 'approved' ? 'text-green-700 bg-green-100'
+                            : review.status === 'rejected' ? 'text-red-700 bg-red-100'
+                            : review.kind === 'pi' ? 'text-purple-700 bg-purple-100'
                             : 'text-blue-700 bg-blue-100')}>
-                          {sample === 'approved' ? 'SAMPLE ✓' : sample === 'rejected' ? 'SAMPLE ✗' : 'SAMPLE'}
+                          {(review.kind === 'pi' ? 'PI' : 'SAMPLE')}
+                          {review.status === 'approved' ? ' ✓' : review.status === 'rejected' ? ' ✗' : ''}
                         </span>
                       )}
                       <span className={cn('text-[10px]', approved ? 'text-green-700' : 'text-muted-foreground')}>→ Preview</span>

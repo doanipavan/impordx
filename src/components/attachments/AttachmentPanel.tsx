@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, DragEvent } from 'react'
 import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle } from 'lucide-react'
-import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAsSample, useReviewSample, getSignedUrl } from '../../hooks/useAttachments'
+import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAttachment, useReviewAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
@@ -16,8 +16,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const deleteAttachment = useDeleteAttachment()
   const approveAttachment = useApproveAttachment()
   const unapproveAttachment = useUnapproveAttachment()
-  const markAsSample = useMarkAsSample()
-  const reviewSample = useReviewSample()
+  const markAttachment = useMarkAttachment()
+  const reviewAttachment = useReviewAttachment()
   const { user } = useAuth()
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -112,10 +112,12 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
     } catch { toast('Failed to remove approval', 'error') }
   }
 
-  async function handleToggleSample(att: Attachment) {
+  async function handleMark(att: Attachment, kind: 'sample' | 'pi' | null) {
     try {
-      await markAsSample.mutateAsync({ id: att.id, cardId, isSample: !att.is_sample })
-      toast(att.is_sample ? 'No longer marked as a sample' : 'Marked as a digital sample', 'info')
+      await markAttachment.mutateAsync({ id: att.id, cardId, kind })
+      toast(kind === null ? 'Mark removed'
+        : kind === 'pi' ? 'Marked as the proforma invoice'
+        : 'Marked as a digital sample', 'info')
     } catch (err) {
       console.error('Failed to flag sample:', err)
       toast('Failed to update', 'error')
@@ -124,12 +126,12 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
   async function handleReview(att: Attachment, status: 'approved' | 'rejected', note?: string) {
     try {
-      await reviewSample.mutateAsync({ id: att.id, cardId, status, note })
-      toast(status === 'approved' ? 'Sample approved' : 'Sample rejected', status === 'approved' ? 'success' : 'info')
+      await reviewAttachment.mutateAsync({ id: att.id, cardId, status, note })
+      toast(status === 'approved' ? 'Approved' : 'Rejected', status === 'approved' ? 'success' : 'info')
       setRejectingId(null)
       setRejectNote('')
     } catch (err) {
-      console.error('Failed to review sample:', err)
+      console.error('Failed to review:', err)
       const detail = (err as { message?: string })?.message
       toast(detail ?? 'Failed to review sample', 'error')
     }
@@ -269,7 +271,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                           {isApproved && (
                             <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
                           )}
-                          {att.is_sample && <SampleBadge status={att.sample_status} />}
+                          {att.kind && <ReviewBadge kind={att.kind} status={att.review_status} />}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
                         {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
@@ -284,14 +286,26 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                             <CheckCircle2 className="h-3.5 w-3.5" /> Approve
                           </button>
                         )}
-                        <button onClick={() => handleToggleSample(att)}
-                          className={cn('h-7 px-2 rounded flex items-center gap-1 text-xs font-medium border',
-                            att.is_sample
-                              ? 'text-muted-foreground bg-muted border-border hover:bg-accent'
-                              : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100')}
-                          title={att.is_sample ? 'Remove the sample flag' : 'Flag this file as a digital sample'}>
-                          {att.is_sample ? 'Not a sample' : 'It is a sample'}
-                        </button>
+                        {att.kind ? (
+                          <button onClick={() => handleMark(att, null)}
+                            className="h-7 px-2 rounded flex items-center gap-1 text-xs font-medium border text-muted-foreground bg-muted border-border hover:bg-accent"
+                            title="Remove the mark and its verdict">
+                            Unmark
+                          </button>
+                        ) : (
+                          <>
+                            <button onClick={() => handleMark(att, 'sample')}
+                              className="h-7 px-2 rounded text-xs font-medium border text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                              title="Flag this file as a digital sample">
+                              Sample
+                            </button>
+                            <button onClick={() => handleMark(att, 'pi')}
+                              className="h-7 px-2 rounded text-xs font-medium border text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100"
+                              title="Flag this file as the proforma invoice">
+                              PI
+                            </button>
+                          </>
+                        )}
                         {isImage && (
                           <button onClick={() => handlePreview(att)} disabled={isLoading}
                             className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
@@ -313,34 +327,34 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
                     {/* A sample carries its verdict and, when refused, the reason —
                         so the factory is never sent back to work without one. */}
-                    {att.is_sample && (
+                    {att.kind && (
                       <div className="mt-2.5 pt-2.5 border-t border-border/70">
-                        {att.sample_review_note && (
+                        {att.review_note && (
                           <p className={cn('text-xs mb-2 whitespace-pre-wrap',
-                            att.sample_status === 'rejected' ? 'text-red-700' : 'text-green-800')}>
+                            att.review_status === 'rejected' ? 'text-red-700' : 'text-green-800')}>
                             <span className="font-semibold">
-                              {att.sample_status === 'rejected' ? 'Rejected: ' : 'Note: '}
+                              {att.review_status === 'rejected' ? 'Rejected: ' : 'Note: '}
                             </span>
-                            {att.sample_review_note}
+                            {att.review_note}
                           </p>
                         )}
 
-                        {att.sample_reviewed_at && (
+                        {att.reviewed_at && (
                           <p className="text-[10px] text-muted-foreground mb-2">
-                            Reviewed {formatDateTime(att.sample_reviewed_at)}
-                            {att.sample_reviewer && ` by ${att.sample_reviewer.full_name}`}
+                            Reviewed {formatDateTime(att.reviewed_at)}
+                            {att.reviewer && ` by ${att.reviewer.full_name}`}
                           </p>
                         )}
 
                         {canApprove && rejectingId !== att.id && (
                           <div className="flex flex-wrap gap-2">
-                            {att.sample_status !== 'approved' && (
+                            {att.review_status !== 'approved' && (
                               <button onClick={() => handleReview(att, 'approved')}
                                 className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700">
                                 <CheckCircle2 className="h-3.5 w-3.5" /> Approve sample
                               </button>
                             )}
-                            {att.sample_status !== 'rejected' && (
+                            {att.review_status !== 'rejected' && (
                               <button onClick={() => { setRejectingId(att.id); setRejectNote('') }}
                                 className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200">
                                 <XCircle className="h-3.5 w-3.5" /> Reject
@@ -364,7 +378,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                             />
                             <div className="flex gap-2">
                               <button onClick={() => handleReview(att, 'rejected', rejectNote)}
-                                disabled={!rejectNote.trim() || reviewSample.isPending}
+                                disabled={!rejectNote.trim() || reviewAttachment.isPending}
                                 className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
                                 <XCircle className="h-3.5 w-3.5" /> Confirm rejection
                               </button>
@@ -424,13 +438,17 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 }
 
 // A sample's verdict, readable at a glance without opening anything.
-function SampleBadge({ status }: { status?: 'pending' | 'approved' | 'rejected' }) {
+function ReviewBadge({ kind, status }: {
+  kind: 'sample' | 'pi'
+  status?: 'pending' | 'approved' | 'rejected'
+}) {
+  const what = kind === 'pi' ? 'PI' : 'SAMPLE'
   const style = status === 'approved' ? 'text-green-700 bg-green-100'
     : status === 'rejected' ? 'text-red-700 bg-red-100'
-    : 'text-blue-700 bg-blue-100'
-  const label = status === 'approved' ? 'SAMPLE · APPROVED'
-    : status === 'rejected' ? 'SAMPLE · REJECTED'
-    : 'SAMPLE · AWAITING REVIEW'
+    : kind === 'pi' ? 'text-purple-700 bg-purple-100' : 'text-blue-700 bg-blue-100'
+  const label = status === 'approved' ? `${what} · APPROVED`
+    : status === 'rejected' ? `${what} · REJECTED`
+    : `${what} · AWAITING REVIEW`
 
   return (
     <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0', style)}>
