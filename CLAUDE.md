@@ -39,6 +39,11 @@ usually being discarded rather than absent.
 
 ## Conventions
 
+**The interface is English, all of it.** Doani writes in Portuguese and the
+supplier reads English, so Portuguese has slipped into the UI twice — labels
+once, and a `pt-BR` date format once. Includes anything `Intl` produces:
+locale-aware dates and month names are interface text too.
+
 **Status colour is semantic, not per-status.** Three families only — neutral
 (waiting/closed), amber (running), green (done) — reused across all boards, so
 one colour always means one thing. `STATUS_COLORS` in `src/types/index.ts`.
