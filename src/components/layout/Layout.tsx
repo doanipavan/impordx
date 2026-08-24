@@ -5,6 +5,7 @@ import {
   Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { Clocks } from './Clocks'
 import { useAuth } from '../../hooks/useAuth'
 import { useUnreadCount } from '../../hooks/useNotifications'
 import { Avatar } from '../ui/avatar'
@@ -145,13 +146,19 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Sits in the empty space beside the page title rather than in a bar
+            of its own, which would cost every page a strip of height. */}
+        <Clocks className="hidden md:flex absolute top-4 right-6 z-20 bg-card/80 backdrop-blur-sm
+                           rounded-full border border-border px-3 py-1.5 shadow-sm" />
+
         {/* Mobile topbar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
           <button onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
           <p className="font-semibold text-sm flex-1">DEQI Hub</p>
+          <Clocks className="mr-1" />
           <button onClick={() => setShowSearch(true)} className="text-muted-foreground hover:text-foreground">
             <Search className="h-5 w-5" />
           </button>
