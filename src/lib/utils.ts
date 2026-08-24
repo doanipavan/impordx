@@ -64,6 +64,51 @@ function todayInSaoPaulo(): Date {
   return calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: SAO_PAULO }).format(new Date()))!
 }
 
+// Samples get two business days per stage. Weekends are excluded; holidays
+// are not, so this over-reports around Chinese New Year and Carnival until a
+// holiday calendar per side exists.
+export const SAMPLE_SLA_DAYS = 2
+
+const SLA_STAGES = ['Requested', 'In Preparation', 'Under RDX Revision', 'Under DEQI Revision']
+
+export interface SlaState {
+  used: number
+  limit: number
+  state: 'ok' | 'due' | 'breached'
+}
+
+function businessDaysSince(iso: string): number {
+  const start = calendarDay(
+    new Intl.DateTimeFormat('en-CA', { timeZone: SAO_PAULO }).format(parseISO(iso)))
+  if (!start) return 0
+  const today = todayInSaoPaulo()
+
+  let days = 0
+  for (let d = start.getTime(); d < today.getTime(); d += MS_PER_DAY) {
+    const dow = new Date(d).getUTCDay()
+    if (dow !== 0 && dow !== 6) days++
+  }
+  return days
+}
+
+// Null where the clock does not apply: other boards, and the terminal
+// statuses, where a card is finished rather than late.
+export function sampleSla(card: {
+  board?: string
+  status?: string
+  status_since?: string
+}): SlaState | null {
+  if (card.board !== 'samples' || !card.status || !card.status_since) return null
+  if (!SLA_STAGES.includes(card.status)) return null
+
+  const used = businessDaysSince(card.status_since)
+  return {
+    used,
+    limit: SAMPLE_SLA_DAYS,
+    state: used > SAMPLE_SLA_DAYS ? 'breached' : used === SAMPLE_SLA_DAYS ? 'due' : 'ok',
+  }
+}
+
 export interface CardAge {
   days: number
   done: boolean   // shipped — the count is final

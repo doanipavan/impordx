@@ -17,7 +17,7 @@ import { OrderFulfilment } from './OrderFulfilment'
 import { EditCardModal } from './EditCardModal'
 import { SeenBy } from './SeenBy'
 import { useRecordView } from '../../hooks/useCardViews'
-import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge } from '../../lib/utils'
+import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge, sampleSla } from '../../lib/utils'
 import { salespersonLabel } from '../../types'
 
 interface CardModalProps {
@@ -41,6 +41,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   const columns = BOARD_COLUMNS[board]
   const overdue = isOverdue(dueDateFor(card))
   const age = cardAge(card.created_at, card.shipped_at)
+  const sla = sampleSla(card)
 
   async function handleDelete() {
     try {
@@ -218,6 +219,29 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 {card.board === 'orders' && <OrderFulfilment card={card} />}
 
                 {/* Status change */}
+                {/* The clock for the stage the card is sitting in right now. */}
+                {sla && (
+                  <div className={cn('rounded-lg border px-3 py-2 flex items-center gap-2.5',
+                    sla.state === 'breached' ? 'border-red-300 bg-red-50'
+                      : sla.state === 'due' ? 'border-amber-300 bg-amber-50'
+                      : 'border-border bg-muted/40')}>
+                    <span className={cn('text-lg font-bold tabular-nums leading-none',
+                      sla.state === 'breached' ? 'text-red-600'
+                        : sla.state === 'due' ? 'text-amber-600' : 'text-foreground')}>
+                      {sla.used}<span className="text-xs font-medium text-muted-foreground">/{sla.limit}</span>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold">
+                        {sla.state === 'breached' ? 'SLA passed'
+                          : sla.state === 'due' ? 'Last day of SLA' : 'Within SLA'}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        business days in {card.status}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Move to status</p>
                   <div className="flex gap-2 flex-wrap">

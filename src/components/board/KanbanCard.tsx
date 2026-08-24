@@ -4,7 +4,7 @@ import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock } from 'lucide-r
 import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge } from '../../lib/utils'
+import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla } from '../../lib/utils'
 
 interface KanbanCardProps {
   card: Card
@@ -31,6 +31,7 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
 
   // On an order the live date is the delivery date, not the sample's deadline.
   const age = cardAge(card.created_at, card.shipped_at)
+  const sla = sampleSla(card)
   const dueDate = dueDateFor(card)
   const overdue = isOverdue(dueDate)
   const dueSoon = !overdue && isDueSoon(dueDate)
@@ -46,7 +47,8 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
         'group relative bg-card rounded-lg border border-border p-3 shadow-card cursor-pointer select-none',
         'hover:shadow-card-hover hover:border-border/80 transition-all duration-150',
         isDragging || isSortDragging ? 'opacity-40 shadow-modal rotate-1' : '',
-        overdue && 'border-l-2 border-l-red-400'
+        overdue && 'border-l-2 border-l-red-400',
+        sla?.state === 'breached' && 'border-l-2 border-l-red-500'
       )}
     >
       {/* Priority + Status */}
@@ -101,6 +103,16 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Paperclip className="h-3 w-3" />
               {card.attachments_count}
+            </span>
+          )}
+          {sla && sla.state !== 'ok' && (
+            <span className={cn('flex items-center gap-1 text-xs font-semibold tabular-nums',
+              sla.state === 'breached' ? 'text-red-600' : 'text-amber-600')}
+              title={sla.state === 'breached'
+                ? `${sla.used} business days in ${card.status} — SLA is ${sla.limit}`
+                : `Day ${sla.used} of ${sla.limit} in ${card.status}`}>
+              <AlertCircle className="h-3 w-3" />
+              SLA {sla.used}/{sla.limit}
             </span>
           )}
           {age && (
