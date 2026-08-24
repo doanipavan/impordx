@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { BoardType, BOARD_LABELS, Card } from '../types'
 import { Board } from '../components/board/Board'
 import { OrdersGantt } from '../components/board/OrdersGantt'
+import { ExportOrders } from '../components/board/ExportOrders'
+import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 
 export function QuotesPage()  { return <BoardPage board="quotes" /> }
@@ -10,6 +12,7 @@ export function SamplesPage() { return <BoardPage board="samples" /> }
 export function OrdersPage()  { return <BoardPage board="orders" /> }
 
 function BoardPage({ board }: { board: BoardType }) {
+  const { user } = useAuth()
   const { ref } = useParams<{ ref?: string }>()
   const navigate = useNavigate()
   const [autoOpenCard, setAutoOpenCard] = useState<Card | null>(null)
@@ -36,7 +39,8 @@ function BoardPage({ board }: { board: BoardType }) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-6 py-4 border-b border-border bg-card shrink-0">
+      <div className="px-6 py-4 border-b border-border bg-card shrink-0 flex items-start gap-4">
+        <div className="flex-1 min-w-0">
         <h1 className="text-lg font-semibold">{BOARD_LABELS[board]}</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
           {board === 'quotes' && 'Request for Quotation — track pricing and negotiation with DEQI'}
@@ -47,6 +51,15 @@ function BoardPage({ board }: { board: BoardType }) {
           <p className="text-xs text-destructive mt-1">
             Reference "{ref}" not found. Redirecting...
           </p>
+        )}
+        </div>
+
+        {/* Purchase and sales order numbers are on this sheet, so it is not
+            something the supplier should be able to pull. */}
+        {board === 'orders' && user?.role !== 'viewer' && (
+          <div className="shrink-0 mr-44">
+            <ExportOrders />
+          </div>
         )}
       </div>
       <div className="flex-1 overflow-hidden py-4 flex flex-col">
