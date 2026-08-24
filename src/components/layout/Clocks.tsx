@@ -21,10 +21,10 @@ function readZone(tz: string, now: Date) {
 
   return {
     time: `${parts.hour}:${parts.minute}`,
-    // pt-BR gives "seg., 24 de ago." — trimmed to fit a narrow column.
-    date: new Intl.DateTimeFormat('pt-BR', {
+    // English like the rest of the interface — the supplier reads this too.
+    date: new Intl.DateTimeFormat('en-GB', {
       timeZone: tz, weekday: 'short', day: 'numeric', month: 'short',
-    }).format(now).replace(/\./g, '').replace(' de ', ' '),
+    }).format(now),
     // Roughly office hours on a weekday — enough to tell "they are around"
     // from "you are writing into the night".
     working: weekday !== 'Sat' && weekday !== 'Sun' && hour >= 8 && hour < 18,
@@ -46,7 +46,7 @@ export function Clocks({ className }: { className?: string }) {
         const t = readZone(z.tz, now)
         return (
           <div key={z.key} className="flex flex-col gap-0.5"
-            title={`${z.label} — ${t.date}, ${t.time}${t.working ? '' : ' · fora do horário'}`}>
+            title={`${z.label} — ${t.date}, ${t.time}${t.working ? '' : ' · outside working hours'}`}>
             <div className="flex items-center gap-1.5">
               <span className={cn('h-1.5 w-1.5 rounded-full shrink-0',
                 t.working ? 'bg-green-500' : 'bg-muted-foreground/40')} />

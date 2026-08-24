@@ -201,7 +201,7 @@ export function OrdersGantt() {
                 <div className="absolute top-0.5 -translate-x-1/2 text-[9px] font-bold tracking-wider uppercase
                                 text-primary-foreground bg-primary px-1.5 rounded-full pointer-events-none"
                   style={{ left: todayX }}>
-                  hoje
+                  today
                 </div>
               </>
             )}
