@@ -18,6 +18,7 @@ import { EditCardModal } from './EditCardModal'
 import { SeenBy } from './SeenBy'
 import { useRecordView } from '../../hooks/useCardViews'
 import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge } from '../../lib/utils'
+import { salespersonLabel } from '../../types'
 
 interface CardModalProps {
   card: Card
@@ -326,11 +327,11 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
 
                 {/* Approved artwork */}
 
-                {(card.salesperson || card.project_manager) && (
+                {(salespersonLabel(card) || card.project_manager) && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Owners</p>
                     <div className="space-y-2">
-                      <OwnerRow label="Sales" user={card.salesperson} />
+                      <OwnerRow label="Sales" user={card.salesperson} name={salespersonLabel(card)} />
                       <OwnerRow label="Project" user={card.project_manager} />
                     </div>
                   </div>
@@ -452,14 +453,22 @@ function InfoField({
 
 // The two people accountable for a card, side by side so it is obvious when
 // one of them is missing.
-function OwnerRow({ label, user }: { label: string; user?: { full_name: string; avatar_url?: string } }) {
+function OwnerRow({ label, user, name }: {
+  label: string
+  user?: { full_name: string; avatar_url?: string }
+  name?: string | null
+}) {
+  // A salesperson without an account still gets an avatar from their initials,
+  // so the row reads the same whether or not they use the hub.
+  const shown = user?.full_name ?? name ?? null
   return (
     <div className="flex items-center gap-2">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-12 shrink-0">{label}</span>
-      {user ? (
+      {shown ? (
         <>
-          <Avatar name={user.full_name} imageUrl={user.avatar_url} size="sm" />
-          <span className="text-sm truncate">{user.full_name}</span>
+          <Avatar name={shown} imageUrl={user?.avatar_url} size="sm" />
+          <span className="text-sm truncate">{shown}</span>
+          {!user && <span className="text-[10px] text-muted-foreground shrink-0">no account</span>}
         </>
       ) : (
         <span className="text-sm text-amber-600">— not set</span>

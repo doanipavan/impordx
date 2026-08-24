@@ -18,7 +18,8 @@ import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, form
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
-  salesperson_id: z.string().min(1, 'Pick who sold it'),
+  salesperson_id: z.string().optional(),
+  salesperson_name: z.string().optional(),
   project_manager_id: z.string().min(1, 'Pick who runs it'),
   status: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
@@ -42,6 +43,11 @@ const schema = z.object({
   supplier_ref: z.string().optional(),
 })
 
+// Either a linked account or a typed name — the field is required, the
+// shape it takes is not.
+.refine(v => (v.salesperson_id?.trim() || v.salesperson_name?.trim()),
+  { message: 'Name the salesperson', path: ['salesperson_id'] })
+
 type FormValues = z.infer<typeof schema>
 
 interface CreateCardModalProps {
@@ -62,10 +68,13 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const [queuedFiles, setQueuedFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { status: initialStatus, priority: 'medium' },
   })
+
+  // Picking a listed account hides the free-text box, so only one is ever sent.
+  const watchedSalesperson = watch('salesperson_id')
 
   function addFiles(files: File[]) {
     const supported = files.filter(f => ACCEPTED.includes(f.type))
@@ -96,7 +105,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         status: values.status as CardStatus,
         title: values.title,
         priority: values.priority as Priority,
-        salesperson_id: values.salesperson_id,
+        salesperson_id: values.salesperson_id || undefined,
+        salesperson_name: values.salesperson_id ? undefined : (values.salesperson_name?.trim() || undefined),
         project_manager_id: values.project_manager_id,
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
@@ -163,9 +173,15 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             <div>
               <Label htmlFor="salesperson_id">Salesperson *</Label>
               <Select id="salesperson_id" {...register('salesperson_id')}>
-                <option value="">— Select —</option>
+                <option value="">— Someone else —</option>
                 {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
               </Select>
+              {/* Reps and outside sales have no account, so the name can just
+                  be typed when they are not in the list. */}
+              {!watchedSalesperson && (
+                <Input className="mt-1.5" placeholder="Type the salesperson's name"
+                  {...register('salesperson_name')} />
+              )}
               {errors.salesperson_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_id.message}</p>}
             </div>
             <div>

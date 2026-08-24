@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock } from 'lucide-react'
-import { Card, PRIORITY_COLORS, STATUS_COLORS } from '../../types'
+import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge } from '../../lib/utils'
@@ -126,14 +126,14 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
         </div>
 
         {/* Project manager leads — they are the one accountable for it moving. */}
-        {(card.project_manager || card.salesperson) && (
+        {(card.project_manager || salespersonLabel(card)) && (
           <div className="flex items-center -space-x-1.5">
             {card.project_manager && (
               <Avatar name={card.project_manager.full_name} imageUrl={card.project_manager.avatar_url}
                 size="xs" className="ring-1 ring-card" />
             )}
-            {card.salesperson && card.salesperson.id !== card.project_manager?.id && (
-              <Avatar name={card.salesperson.full_name} imageUrl={card.salesperson.avatar_url}
+            {salespersonLabel(card) && card.salesperson?.id !== card.project_manager?.id && (
+              <Avatar name={salespersonLabel(card)!} imageUrl={card.salesperson?.avatar_url}
                 size="xs" className="ring-1 ring-card opacity-70" />
             )}
           </div>

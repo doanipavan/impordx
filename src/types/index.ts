@@ -30,6 +30,7 @@ export interface Card {
   // it moving. Both are required when a card is created.
   salesperson_id?: string
   salesperson?: User
+  salesperson_name?: string  // typed, when the salesperson has no account
   project_manager_id?: string
   project_manager?: User
   client_name?: string
@@ -129,6 +130,11 @@ export interface ActivityLog {
   old_value?: string
   new_value?: string
   created_at: string
+}
+
+// A salesperson is either a linked account or a typed name, never both.
+export function salespersonLabel(card: Pick<Card, 'salesperson' | 'salesperson_name'>): string | null {
+  return card.salesperson?.full_name ?? (card.salesperson_name?.trim() || null)
 }
 
 export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {

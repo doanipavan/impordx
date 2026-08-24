@@ -19,7 +19,8 @@ const schema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
   client_name: z.string().optional(),
   collection: z.string().optional(),
-  salesperson_id: z.string().min(1, 'Pick who sold it'),
+  salesperson_id: z.string().optional(),
+  salesperson_name: z.string().optional(),
   project_manager_id: z.string().min(1, 'Pick who runs it'),
   quantity: z.number().positive().optional().or(z.literal('')),
   deadline: z.string().optional(),
@@ -39,6 +40,11 @@ const schema = z.object({
   supplier_ref: z.string().optional(),
 })
 
+// Either a linked account or a typed name — the field is required, the
+// shape it takes is not.
+.refine(v => (v.salesperson_id?.trim() || v.salesperson_name?.trim()),
+  { message: 'Name the salesperson', path: ['salesperson_id'] })
+
 type FormValues = z.infer<typeof schema>
 
 interface EditCardModalProps {
@@ -53,7 +59,7 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
   const toast = useToast()
   const columns = BOARD_COLUMNS[board]
 
-  const { register, handleSubmit, formState: { errors, isDirty } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, formState: { errors, isDirty } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       title: card.title,
@@ -62,6 +68,7 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       client_name: card.client_name ?? '',
       collection: card.collection ?? '',
       salesperson_id: card.salesperson_id ?? '',
+      salesperson_name: card.salesperson_name ?? '',
       project_manager_id: card.project_manager_id ?? '',
       quantity: card.quantity ?? '',
       deadline: card.deadline ? card.deadline.substring(0, 10) : '',
@@ -80,6 +87,9 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
     },
   })
 
+  // Picking a listed account hides the free-text box, so only one is ever sent.
+  const watchedSalesperson = watch('salesperson_id')
+
   const onSubmit = async (values: FormValues) => {
     try {
       await updateCard.mutateAsync({
@@ -89,7 +99,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         priority: values.priority as Priority,
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
-        salesperson_id: values.salesperson_id,
+        salesperson_id: values.salesperson_id || undefined,
+        salesperson_name: values.salesperson_id ? undefined : (values.salesperson_name?.trim() || undefined),
         project_manager_id: values.project_manager_id,
         quantity: values.quantity ? Number(values.quantity) : undefined,
         deadline: values.deadline || undefined,
@@ -163,9 +174,15 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
             <div>
               <Label htmlFor="salesperson_id">Salesperson *</Label>
               <Select id="salesperson_id" {...register('salesperson_id')}>
-                <option value="">— Select —</option>
+                <option value="">— Someone else —</option>
                 {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
               </Select>
+              {/* Reps and outside sales have no account, so the name can just
+                  be typed when they are not in the list. */}
+              {!watchedSalesperson && (
+                <Input className="mt-1.5" placeholder="Type the salesperson's name"
+                  {...register('salesperson_name')} />
+              )}
               {errors.salesperson_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_id.message}</p>}
             </div>
             <div>

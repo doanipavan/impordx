@@ -39,6 +39,7 @@ export type Database = {
           value_usd: number | null
           deadline: string | null
           salesperson_id: string | null
+          salesperson_name: string | null
           project_manager_id: string | null
           client_name: string | null
           collection: string | null
