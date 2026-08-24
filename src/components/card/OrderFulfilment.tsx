@@ -31,6 +31,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
   const [delivery, setDelivery] = useState(card.delivery_date ?? '')
   const [salesOrder, setSalesOrder] = useState(card.sales_order ?? '')
   const [purchaseOrder, setPurchaseOrder] = useState(card.purchase_order ?? '')
+  const [valueBrl, setValueBrl] = useState(card.value_brl != null ? String(card.value_brl) : '')
 
   // DEQI supplies the PI and the date; the Redantex order numbers are ours.
   const isDeqi = user?.role === 'viewer'
@@ -42,6 +43,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
     setDelivery(card.delivery_date ?? '')
     setSalesOrder(card.sales_order ?? '')
     setPurchaseOrder(card.purchase_order ?? '')
+    setValueBrl(card.value_brl != null ? String(card.value_brl) : '')
     setEditing(true)
   }
 
@@ -56,6 +58,8 @@ export function OrderFulfilment({ card }: { card: Card }) {
           id: card.id,
           sales_order: salesOrder.trim(),
           purchase_order: purchaseOrder.trim(),
+          // Kept as typed and parsed once, same reason as the unit price.
+          value_brl: valueBrl.trim() ? Number(valueBrl.replace(',', '.')) : undefined,
         })
       }
       setEditing(false)
@@ -116,6 +120,13 @@ export function OrderFulfilment({ card }: { card: Card }) {
                 <Input className="h-8 text-sm font-mono" value={purchaseOrder}
                   onChange={e => setPurchaseOrder(e.target.value)} />
               </div>
+              <div className="col-span-2">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                  Sale value (BRL)
+                </label>
+                <Input className="h-8 text-sm" inputMode="decimal" placeholder="0,00"
+                  value={valueBrl} onChange={e => setValueBrl(e.target.value)} />
+              </div>
             </div>
           )}
 
@@ -135,6 +146,11 @@ export function OrderFulfilment({ card }: { card: Card }) {
             missing={card.delivery_date ? undefined : 'Awaiting DEQI'} emphasis />
           <Field label="Sales order" mono value={card.sales_order} />
           <Field label="Purchase order" mono value={card.purchase_order} />
+          {/* Margin. Withheld from the supplier — in the interface only, since
+              the cards table is readable in full. See migration 021. */}
+          {!isDeqi && card.value_brl != null && (
+            <Field label="Sale value" value={formatBrl(card.value_brl)} emphasis />
+          )}
         </div>
       )}
     </div>
@@ -246,4 +262,8 @@ function LegBox({ label, caption, leg, active }: {
       <p className="text-[10px] text-muted-foreground mt-0.5">by {formatDate(leg.target)}</p>
     </div>
   )
+}
+
+function formatBrl(value: number): string {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }

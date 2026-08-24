@@ -3,7 +3,9 @@ export type BoardType = 'quotes' | 'samples' | 'orders'
 export type QuoteStatus = 'Requested' | 'Quoted' | 'Confirmed' | 'Declined'
 export type SampleStatus = 'Requested' | 'In Preparation' | 'Under RDX Revision'
   | 'Under DEQI Revision' | 'Approved' | 'Lost'
-export type OrderStatus = 'Placed' | 'In Production' | 'Ready to Ship' | 'Shipped'
+export type OrderStatus = 'Purchasing' | 'Commercial' | 'PI Requested'
+  | 'PI In Preparation' | 'PI Approved' | 'Placed'
+  | 'In Production' | 'Ready to Ship' | 'Shipped'
 export type CardStatus = QuoteStatus | SampleStatus | OrderStatus
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
@@ -53,6 +55,8 @@ export interface Card {
   delivery_date?: string
   sales_order?: string
   purchase_order?: string
+  // Sale value in BRL. Hidden from DEQI in the UI only — see migration 021.
+  value_brl?: number
   order_confirmed_at?: string  // day the order clock starts, 'YYYY-MM-DD'
   shipped_at?: string          // stamped by trigger when status becomes Shipped
   status_since?: string        // stamped by trigger on every status change
@@ -141,7 +145,17 @@ export function salespersonLabel(card: Pick<Card, 'salesperson' | 'salesperson_n
 export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {
   quotes: ['Requested', 'Quoted', 'Confirmed', 'Declined'],
   samples: ['Requested', 'In Preparation', 'Under RDX Revision', 'Under DEQI Revision', 'Approved', 'Lost'],
-  orders: ['Placed', 'In Production', 'Ready to Ship', 'Shipped'],
+  orders: ['Purchasing', 'Commercial', 'PI Requested', 'PI In Preparation', 'PI Approved',
+           'Placed', 'In Production', 'Ready to Ship', 'Shipped'],
+}
+
+// Purchasing and Commercial are Redantex's own intake — the supplier has no
+// business seeing a card before it is a real order with a PI to raise.
+export const REDANTEX_ONLY_STATUSES = ['Purchasing', 'Commercial']
+
+export function visibleColumns(board: BoardType, isSupplier: boolean): CardStatus[] {
+  const all = BOARD_COLUMNS[board]
+  return isSupplier ? all.filter(s => !REDANTEX_ONLY_STATUSES.includes(s)) : all
 }
 
 export const BOARD_LABELS: Record<BoardType, string> = {
@@ -171,7 +185,13 @@ export const STATUS_COLORS: Record<CardStatus, string> = {
   Approved: DONE,
   // Closed and out of the pipeline, like a declined quote — not a warning.
   Lost: WAITING,
-  // Orders
+  // Orders — intake
+  Purchasing: ACTIVE,
+  Commercial: ACTIVE,
+  'PI Requested': WAITING,
+  'PI In Preparation': ACTIVE,
+  'PI Approved': ACTIVE,
+  // Orders — production
   Placed: WAITING,
   'In Production': ACTIVE,
   'Ready to Ship': ACTIVE,

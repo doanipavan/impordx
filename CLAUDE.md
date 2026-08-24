@@ -79,6 +79,18 @@ installed. Write every schema change as a numbered file in
 **verify independently after applying** rather than trusting the success
 message.
 
+## Deploying costs real money
+
+A production deploy costs roughly **15 Netlify credits**, against 1000 per
+month — about 66 deploys, and 59 were spent in the first two weeks of one
+period by pushing after every individual change.
+
+**Batch the work and push once**, at the end of a task or a session, not after
+each edit. `netlify.toml` already skips builds when only docs, migrations or
+CLAUDE.md changed, but that is the small half of the fix; the habit is the
+other half. Serving the site is free by comparison — bandwidth and compute
+together came to under 2 credits in a month.
+
 ## Known open issues
 
 - **Two RLS policies are wide open**: `cards` ("Members can update cards") and
@@ -89,4 +101,8 @@ message.
 - **Notifications are in-app only.** No email, no push. Closed tab, no signal.
 - **`012_suppliers.sql` is written but not applied.** Multi-supplier isolation;
   until it runs, a second supplier would read DEQI's prices and artwork.
+- **`value_brl` is hidden in the UI, not protected.** The cards table is
+  readable in full by any authenticated user, so the supplier can read the
+  sale margin through the API. The real fix is moving it to its own table
+  with its own policy; Doani chose speed for now.
 - Orphaned images sit in storage from item uploads that failed before `e93dc72`.

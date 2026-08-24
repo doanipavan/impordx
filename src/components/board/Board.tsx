@@ -10,7 +10,8 @@ import {
   useSensors,
   closestCorners,
 } from '@dnd-kit/core'
-import { BoardType, Card, CardStatus, BOARD_COLUMNS } from '../../types'
+import { BoardType, Card, CardStatus, BOARD_COLUMNS, visibleColumns } from '../../types'
+import { useAuth } from '../../hooks/useAuth'
 import { useCards, useMoveCard } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
 import { Column } from './Column'
@@ -27,6 +28,7 @@ interface BoardProps {
 }
 
 export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
+  const { user } = useAuth()
   const { data: cards = [], isLoading } = useCards(board)
   const moveCard = useMoveCard()
   const toast = useToast()
@@ -43,7 +45,9 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   )
 
-  const columns = BOARD_COLUMNS[board]
+  // The supplier never sees Redantex's own intake columns, so a card is
+  // simply absent from their board until it reaches a stage that is theirs.
+  const columns = visibleColumns(board, user?.role === 'viewer')
   const cardsByStatus = Object.fromEntries(
     columns.map((col) => [col, cards.filter((c) => c.status === col)])
   )

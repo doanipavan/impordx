@@ -105,10 +105,8 @@ export function useCreateCard() {
           ref_number: ref.ref_number,
           ref_root: ref.ref_root,
           source_card_id: source_card_id ?? null,
-          // Created straight onto the Orders board is an order being placed,
-          // so its clock starts here. Without this the card carries no
-          // confirmation date and never appears on the timeline at all.
-          ...(card.board === 'orders' ? { order_confirmed_at: todayInSaoPaulo() } : {}),
+          // The clock is stamped by the database when the PI is approved,
+          // not when the card is created (see migration 021).
         })
         .select()
         .single()
@@ -198,11 +196,10 @@ export function usePromoteToOrder() {
         .from('cards')
         .update({
           board: 'orders',
-          status: 'Placed',
+          // Intake first: an order starts with Redantex's own purchasing.
+          status: 'Purchasing',
           ref_number: ref.ref_number,
           ref_root: ref.ref_root,
-          // Promotion is the confirmation, so this is where the 60+60 starts.
-          order_confirmed_at: todayInSaoPaulo(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
