@@ -111,17 +111,21 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
         if (data) uploaded.set(i.id, data)
       }))
 
+    // An uploaded drawing carries instructions a catalogue icon does not, so
+    // when the sheet has one the whole column grows to keep it readable.
+    const hasArtwork = uploaded.size > 0
+    const box = hasArtwork ? 104 : 48
+
     const itemsRows = items.map(item => {
       const cat = CATALOG.find(c => c.code.toLowerCase() === (item.reference_code ?? '').toLowerCase())
       const imgSrc = uploaded.get(item.id) ?? (cat ? `${baseUrl}${cat.image}` : null)
-      const fit = uploaded.has(item.id) ? 'cover' : 'contain'
       const attachedPdf = item.file_name && !isImageName(item.file_name) ? item.file_name : null
       return `
         <tr>
           <td style="text-align:center;padding:6px">
             ${imgSrc
-              ? `<img src="${imgSrc}" style="width:48px;height:48px;object-fit:${fit};border:1px solid #eee;border-radius:4px;padding:2px" /><br><span style="font-size:10px;font-weight:600">${item.reference_code ?? ''}</span>`
-              : `<div style="width:48px;height:48px;border:1px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;margin:auto">?</div><br><span style="font-size:10px">${item.reference_code ?? 'Custom'}</span>`
+              ? `<img src="${imgSrc}" style="width:${box}px;height:${box}px;object-fit:contain;border:1px solid #eee;border-radius:4px;padding:2px;background:#fff" /><br><span style="font-size:10px;font-weight:600;word-break:break-word">${item.reference_code ?? ''}</span>`
+              : `<div style="width:${box}px;height:${box}px;border:1px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;margin:auto">?</div><br><span style="font-size:10px;word-break:break-word">${item.reference_code ?? 'Custom'}</span>`
             }
           </td>
           <td style="padding:6px">${f(item.description)}${attachedPdf ? `<div style="font-size:9px;color:#666;margin-top:2px">Attached: ${attachedPdf}</div>` : ''}</td>
@@ -208,7 +212,7 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
       <div class="section-title">Internals (Line Items)</div>
       <table>
         <thead><tr>
-          <th style="width:70px;text-align:center">Internal</th>
+          <th style="width:${box + 26}px;text-align:center">Internal</th>
           <th>Description</th>
           <th style="width:90px;text-align:center">Size</th>
           <th style="width:60px;text-align:center">Qty</th>

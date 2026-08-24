@@ -28,8 +28,10 @@ function ItemThumbnail({ code, fileName, signedUrl, onOpen }: {
 
   let visual
   if (hasUpload && isImageName(fileName) && signedUrl) {
+    // contain, never cover: these are technical drawings, and cropping one
+    // silently removes the annotation that made it worth attaching.
     visual = <img src={signedUrl} alt={fileName} title={fileName}
-      className="h-10 w-10 object-cover rounded border border-primary/40" />
+      className="h-10 w-10 object-contain bg-white rounded border border-primary/40 p-0.5" />
   } else if (hasUpload) {
     // A PDF has no preview here, but it must still be visibly attached.
     visual = (
