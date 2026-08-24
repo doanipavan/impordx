@@ -105,14 +105,20 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
               {card.attachments_count}
             </span>
           )}
-          {sla && sla.state !== 'ok' && (
-            <span className={cn('flex items-center gap-1 text-xs font-semibold tabular-nums',
-              sla.state === 'breached' ? 'text-red-600' : 'text-amber-600')}
+          {/* Always on, so the pace is readable before it becomes a problem —
+              quiet while there is room, loud only when there is not. */}
+          {sla && (
+            <span className={cn('flex items-center gap-1 text-xs tabular-nums',
+              sla.state === 'breached' ? 'text-red-600 font-semibold'
+                : sla.state === 'due' ? 'text-amber-600 font-semibold'
+                : 'text-muted-foreground')}
               title={sla.state === 'breached'
                 ? `${sla.used} business days in ${card.status} — SLA is ${sla.limit}`
-                : `Day ${sla.used} of ${sla.limit} in ${card.status}`}>
-              <AlertCircle className="h-3 w-3" />
-              SLA {sla.used}/{sla.limit}
+                : `Business day ${sla.used} of ${sla.limit} in ${card.status}`}>
+              {sla.state === 'ok'
+                ? <Clock className="h-3 w-3" />
+                : <AlertCircle className="h-3 w-3" />}
+              {sla.used}/{sla.limit}
             </span>
           )}
           {age && (
