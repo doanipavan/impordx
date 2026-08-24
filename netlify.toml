@@ -1,6 +1,10 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  # Skip the build when nothing that ships has changed. A deploy costs ~15
+  # credits, and docs, SQL migrations and CLAUDE.md change nothing the
+  # browser ever downloads. Exit 0 = skip.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src public index.html package.json package-lock.json vite.config.ts vite.config.js tailwind.config.js postcss.config.js netlify"
 
 [[redirects]]
   from = "/*"
