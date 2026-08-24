@@ -6,6 +6,7 @@ import { Paperclip, X, File, Image as ImageIcon } from 'lucide-react'
 import { BoardType, CardStatus, BOARD_COLUMNS, BOARD_LABELS, Priority } from '../../types'
 import { useCreateCard } from '../../hooks/useCards'
 import { useUploadAttachment } from '../../hooks/useAttachments'
+import { useRedantexUsers } from '../../hooks/useUsers'
 import { useToast } from '../ui/toast'
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
@@ -17,6 +18,8 @@ import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, form
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
+  salesperson_id: z.string().min(1, 'Pick who sold it'),
+  project_manager_id: z.string().min(1, 'Pick who runs it'),
   status: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
   client_name: z.string().optional(),
@@ -53,6 +56,7 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024
 export function CreateCardModal({ board, initialStatus, onClose }: CreateCardModalProps) {
   const createCard = useCreateCard()
   const uploadAttachment = useUploadAttachment()
+  const { data: staff = [] } = useRedantexUsers()
   const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [queuedFiles, setQueuedFiles] = useState<File[]>([])
@@ -92,6 +96,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         status: values.status as CardStatus,
         title: values.title,
         priority: values.priority as Priority,
+        salesperson_id: values.salesperson_id,
+        project_manager_id: values.project_manager_id,
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
@@ -150,6 +156,26 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             <Label htmlFor="title">Title *</Label>
             <Input id="title" placeholder="e.g. Parma 300pcs Navy Blue — Quote Request" {...register('title')} autoFocus />
             {errors.title && <p className="text-xs text-destructive mt-1">{errors.title.message}</p>}
+          </div>
+
+          {/* Owners — required, so a card can never arrive without one. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="salesperson_id">Salesperson *</Label>
+              <Select id="salesperson_id" {...register('salesperson_id')}>
+                <option value="">— Select —</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </Select>
+              {errors.salesperson_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_id.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="project_manager_id">Project manager *</Label>
+              <Select id="project_manager_id" {...register('project_manager_id')}>
+                <option value="">— Select —</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </Select>
+              {errors.project_manager_id && <p className="text-xs text-destructive mt-1">{errors.project_manager_id.message}</p>}
+            </div>
           </div>
 
           {/* Status + Priority */}

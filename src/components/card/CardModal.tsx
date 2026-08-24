@@ -326,12 +326,12 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
 
                 {/* Approved artwork */}
 
-                {card.responsible && (
+                {(card.salesperson || card.project_manager) && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Owner</p>
-                    <div className="flex items-center gap-2">
-                      <Avatar name={card.responsible.full_name} imageUrl={card.responsible.avatar_url} size="sm" />
-                      <span className="text-sm">{card.responsible.full_name}</span>
+                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide font-medium">Owners</p>
+                    <div className="space-y-2">
+                      <OwnerRow label="Sales" user={card.salesperson} />
+                      <OwnerRow label="Project" user={card.project_manager} />
                     </div>
                   </div>
                 )}
@@ -449,3 +449,21 @@ function InfoField({
   )
 }
 
+
+// The two people accountable for a card, side by side so it is obvious when
+// one of them is missing.
+function OwnerRow({ label, user }: { label: string; user?: { full_name: string; avatar_url?: string } }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-12 shrink-0">{label}</span>
+      {user ? (
+        <>
+          <Avatar name={user.full_name} imageUrl={user.avatar_url} size="sm" />
+          <span className="text-sm truncate">{user.full_name}</span>
+        </>
+      ) : (
+        <span className="text-sm text-amber-600">— not set</span>
+      )}
+    </div>
+  )
+}

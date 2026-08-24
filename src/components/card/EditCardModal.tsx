@@ -11,6 +11,7 @@ import { Textarea } from '../ui/textarea'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
 import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS } from '../../lib/utils'
+import { useRedantexUsers } from '../../hooks/useUsers'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -18,6 +19,8 @@ const schema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
   client_name: z.string().optional(),
   collection: z.string().optional(),
+  salesperson_id: z.string().min(1, 'Pick who sold it'),
+  project_manager_id: z.string().min(1, 'Pick who runs it'),
   quantity: z.number().positive().optional().or(z.literal('')),
   deadline: z.string().optional(),
   description: z.string().optional(),
@@ -45,6 +48,7 @@ interface EditCardModalProps {
 }
 
 export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
+  const { data: staff = [] } = useRedantexUsers()
   const updateCard = useUpdateCard()
   const toast = useToast()
   const columns = BOARD_COLUMNS[board]
@@ -57,6 +61,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       priority: card.priority as Priority,
       client_name: card.client_name ?? '',
       collection: card.collection ?? '',
+      salesperson_id: card.salesperson_id ?? '',
+      project_manager_id: card.project_manager_id ?? '',
       quantity: card.quantity ?? '',
       deadline: card.deadline ? card.deadline.substring(0, 10) : '',
       description: card.description ?? '',
@@ -83,6 +89,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         priority: values.priority as Priority,
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
+        salesperson_id: values.salesperson_id,
+        project_manager_id: values.project_manager_id,
         quantity: values.quantity ? Number(values.quantity) : undefined,
         deadline: values.deadline || undefined,
         description: values.description || undefined,
@@ -148,6 +156,25 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
                 <option value="">— Select —</option>
                 {COLLECTIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="salesperson_id">Salesperson *</Label>
+              <Select id="salesperson_id" {...register('salesperson_id')}>
+                <option value="">— Select —</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </Select>
+              {errors.salesperson_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_id.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="project_manager_id">Project manager *</Label>
+              <Select id="project_manager_id" {...register('project_manager_id')}>
+                <option value="">— Select —</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </Select>
+              {errors.project_manager_id && <p className="text-xs text-destructive mt-1">{errors.project_manager_id.message}</p>}
             </div>
           </div>
 

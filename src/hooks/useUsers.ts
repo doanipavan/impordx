@@ -16,3 +16,13 @@ export function useUsers() {
     staleTime: 5 * 60 * 1000,
   })
 }
+
+// Card owners are Redantex roles — a supplier account is never a salesperson
+// or a project manager on Redantex's own work.
+export function useRedantexUsers() {
+  const query = useUsers()
+  return {
+    ...query,
+    data: (query.data ?? []).filter(u => u.role === 'admin' || u.role === 'member'),
+  }
+}

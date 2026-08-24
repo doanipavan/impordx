@@ -26,8 +26,12 @@ export interface Card {
   priority: Priority
   value_usd?: number
   deadline?: string
-  responsible_id?: string
-  responsible?: User
+  // Two owners on the Redantex side: who sold it, and who is accountable for
+  // it moving. Both are required when a card is created.
+  salesperson_id?: string
+  salesperson?: User
+  project_manager_id?: string
+  project_manager?: User
   client_name?: string
   collection?: string
   size?: string

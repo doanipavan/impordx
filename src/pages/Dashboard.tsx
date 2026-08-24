@@ -21,7 +21,7 @@ function useDashboardData() {
       const active = all.filter((c) => !['Declined', 'Shipped', 'Approved'].includes(c.status))
       const overdue = active.filter((c) => isOverdue(c.deadline))
       const dueSoon = active.filter((c) => isDueSoon(c.deadline) && !isOverdue(c.deadline))
-      const mine = active.filter((c) => c.responsible_id === user?.id || c.created_by === user?.id)
+      const mine = active.filter((c) => c.project_manager_id === user?.id || c.salesperson_id === user?.id || c.created_by === user?.id)
 
       return { all, active, overdue, dueSoon, mine }
     },

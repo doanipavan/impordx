@@ -38,7 +38,8 @@ export type Database = {
           priority: string
           value_usd: number | null
           deadline: string | null
-          responsible_id: string | null
+          salesperson_id: string | null
+          project_manager_id: string | null
           client_name: string | null
           collection: string | null
           size: string | null

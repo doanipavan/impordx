@@ -125,12 +125,18 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
           )}
         </div>
 
-        {card.responsible && (
-          <Avatar
-            name={card.responsible.full_name}
-            imageUrl={card.responsible.avatar_url}
-            size="xs"
-          />
+        {/* Project manager leads — they are the one accountable for it moving. */}
+        {(card.project_manager || card.salesperson) && (
+          <div className="flex items-center -space-x-1.5">
+            {card.project_manager && (
+              <Avatar name={card.project_manager.full_name} imageUrl={card.project_manager.avatar_url}
+                size="xs" className="ring-1 ring-card" />
+            )}
+            {card.salesperson && card.salesperson.id !== card.project_manager?.id && (
+              <Avatar name={card.salesperson.full_name} imageUrl={card.salesperson.avatar_url}
+                size="xs" className="ring-1 ring-card opacity-70" />
+            )}
+          </div>
         )}
       </div>
     </div>
