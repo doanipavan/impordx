@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip } from 'lucide-react'
 import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
 import { usePromoteToOrder } from '../../hooks/useCards'
@@ -11,16 +11,45 @@ import { CatalogPicker } from './CatalogPicker'
 import { ExportRFQ } from './ExportRFQ'
 import { CatalogItem, CATALOG } from '../../lib/catalog'
 import { supabase } from '../../lib/supabase'
+import { getSignedUrl } from '../../hooks/useAttachments'
 
-function CatalogThumbnail({ code }: { code?: string }) {
-  const match = code ? CATALOG.find(c => c.code.toLowerCase() === code.toLowerCase()) : null
+const isImageName = (name?: string) => /\.(jpe?g|png|webp|gif)$/i.test(name ?? '')
+
+// The uploaded file wins over the catalogue picture: it is the reference for
+// this specific line, while the catalogue image is only the generic insert.
+function ItemThumbnail({ code, fileName, signedUrl, onOpen }: {
+  code?: string
+  fileName?: string
+  signedUrl?: string
+  onOpen?: () => void
+}) {
+  const catalogue = code ? CATALOG.find(c => c.code.toLowerCase() === code.toLowerCase()) : null
+  const hasUpload = !!fileName
+
+  let visual
+  if (hasUpload && isImageName(fileName) && signedUrl) {
+    visual = <img src={signedUrl} alt={fileName} title={fileName}
+      className="h-10 w-10 object-cover rounded border border-primary/40" />
+  } else if (hasUpload) {
+    // A PDF has no preview here, but it must still be visibly attached.
+    visual = (
+      <div title={fileName}
+        className="h-10 w-10 rounded border border-primary/40 bg-primary/5 flex items-center justify-center">
+        <span className="text-[8px] font-bold text-primary">PDF</span>
+      </div>
+    )
+  } else if (catalogue) {
+    visual = <img src={catalogue.image} alt={catalogue.code}
+      className="h-10 w-10 object-contain rounded border border-border bg-white p-0.5" />
+  } else {
+    visual = <div className="h-10 w-10 rounded border border-dashed border-border bg-muted/40 flex items-center justify-center text-[9px] text-muted-foreground">—</div>
+  }
+
   return (
     <div className="flex flex-col items-center gap-1">
-      {match ? (
-        <img src={match.image} alt={match.code} className="h-10 w-10 object-contain rounded border border-border bg-white p-0.5" />
-      ) : (
-        <div className="h-10 w-10 rounded border border-dashed border-border bg-muted/40 flex items-center justify-center text-[9px] text-muted-foreground">—</div>
-      )}
+      {hasUpload && onOpen
+        ? <button type="button" onClick={onOpen} title={`Open ${fileName}`}>{visual}</button>
+        : visual}
       <span className="font-mono text-[10px] font-semibold">{code || '—'}</span>
     </div>
   )
@@ -81,6 +110,28 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const [editPrice, setEditPrice] = useState('')
   const [generatingOrder, setGeneratingOrder] = useState(false)
   const [customSize, setCustomSize] = useState(false)
+
+  // Item files live in private storage, so each needs its own signed URL
+  // before it can be shown. The ref stops re-signing on every render.
+  const [itemUrls, setItemUrls] = useState<Record<string, string>>({})
+  const signed = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const pending = items.filter(i => i.file_url && !signed.current.has(i.id))
+    if (pending.length === 0) return
+    pending.forEach(i => signed.current.add(i.id))
+
+    let cancelled = false
+    Promise.all(pending.map(async i => {
+      try { return [i.id, await getSignedUrl(i.file_url!)] as const }
+      catch { return null }  // a missing file just falls back to the icon
+    })).then(entries => {
+      if (cancelled) return
+      const ok = entries.filter((e): e is readonly [string, string] => e !== null)
+      if (ok.length) setItemUrls(prev => ({ ...prev, ...Object.fromEntries(ok) }))
+    })
+    return () => { cancelled = true }
+  }, [items])
 
   // The card's collection decides whether Size is a fixed list or free text.
   const sizeOptions = card.collection ? COLLECTION_SIZES[card.collection] ?? null : null
@@ -252,7 +303,12 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                     <>
                       {/* INTERNAL — code + catalog thumbnail */}
                       <td className="px-2 py-1.5 w-24">
-                        <CatalogThumbnail code={item.reference_code} />
+                        <ItemThumbnail
+                          code={item.reference_code}
+                          fileName={item.file_name}
+                          signedUrl={itemUrls[item.id]}
+                          onOpen={item.file_url ? () => window.open(itemUrls[item.id], '_blank') : undefined}
+                        />
                       </td>
                       {/* ERP code in DEV */}
                       <td className="px-2 py-1.5">

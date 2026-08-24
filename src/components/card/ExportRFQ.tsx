@@ -3,8 +3,29 @@ import { Download, FileText, X } from 'lucide-react'
 import { Card } from '../../types'
 import { CardItem } from '../../hooks/useCardItems'
 import { Button } from '../ui/button'
+import { useToast } from '../ui/toast'
 import { formatDate } from '../../lib/utils'
 import { CATALOG } from '../../lib/catalog'
+import { getSignedUrl } from '../../hooks/useAttachments'
+
+const isImageName = (name?: string) => /\.(jpe?g|png|webp|gif)$/i.test(name ?? '')
+
+// The print window loads from a blank document, so a remote URL can easily lose
+// the race with print(). Inlining the bytes makes the sheet self-contained.
+async function inlineImage(path: string): Promise<string | null> {
+  try {
+    const url = await getSignedUrl(path)
+    const blob = await (await fetch(url)).blob()
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null   // fall through to the catalogue picture
+  }
+}
 
 interface ExportRFQProps {
   card: Card
@@ -16,6 +37,7 @@ function f(v?: string | null) { return v || '—' }
 
 export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
   const [exporting, setExporting] = useState(false)
+  const toast = useToast()
 
   async function exportExcel() {
     setExporting(true)
@@ -56,14 +78,14 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
 
       if (items.length > 0) {
         const itemRows = [
-          ['INTERNAL REF', 'DESCRIPTION', 'SIZE', 'QTY', 'UNIT PRICE (USD)'],
-          ...items.map(i => [f(i.reference_code), f(i.description), f(i.size), i.quantity, i.unit_price_usd != null ? i.unit_price_usd.toFixed(3) : '']),
+          ['INTERNAL REF', 'DESCRIPTION', 'SIZE', 'QTY', 'UNIT PRICE (USD)', 'REFERENCE FILE'],
+          ...items.map(i => [f(i.reference_code), f(i.description), f(i.size), i.quantity, i.unit_price_usd != null ? i.unit_price_usd.toFixed(3) : '', f(i.file_name)]),
         ]
         const totalQty = items.reduce((s, i) => s + i.quantity, 0)
         const totalVal = items.reduce((s, i) => s + (i.quantity * (i.unit_price_usd ?? 0)), 0)
-        itemRows.push(['', 'TOTAL', '', totalQty, totalVal > 0 ? totalVal : ''])
+        itemRows.push(['', 'TOTAL', '', totalQty, totalVal > 0 ? totalVal : '', ''])
         const wsItems = XLSX.utils.aoa_to_sheet(itemRows)
-        wsItems['!cols'] = [{ wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 18 }]
+        wsItems['!cols'] = [{ wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 18 }, { wch: 28 }]
         XLSX.utils.book_append_sheet(wb, wsItems, 'Line Items')
       }
 
@@ -71,22 +93,38 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
     } finally { setExporting(false); onClose() }
   }
 
-  function exportPDF() {
+  async function exportPDF() {
     setExporting(true)
     const baseUrl = window.location.origin
 
+    // Opened before the await so the browser still credits the click and does
+    // not treat the window as an unsolicited popup.
+    const win = window.open('', '_blank')
+
+    // An uploaded reference outranks the catalogue picture: it is the artwork
+    // for this specific line, not the generic insert.
+    const uploaded = new Map<string, string>()
+    await Promise.all(items
+      .filter(i => i.file_url && isImageName(i.file_name))
+      .map(async i => {
+        const data = await inlineImage(i.file_url!)
+        if (data) uploaded.set(i.id, data)
+      }))
+
     const itemsRows = items.map(item => {
       const cat = CATALOG.find(c => c.code.toLowerCase() === (item.reference_code ?? '').toLowerCase())
-      const imgSrc = cat ? `${baseUrl}${cat.image}` : null
+      const imgSrc = uploaded.get(item.id) ?? (cat ? `${baseUrl}${cat.image}` : null)
+      const fit = uploaded.has(item.id) ? 'cover' : 'contain'
+      const attachedPdf = item.file_name && !isImageName(item.file_name) ? item.file_name : null
       return `
         <tr>
           <td style="text-align:center;padding:6px">
             ${imgSrc
-              ? `<img src="${imgSrc}" style="width:48px;height:48px;object-fit:contain;border:1px solid #eee;border-radius:4px;padding:2px" /><br><span style="font-size:10px;font-weight:600">${item.reference_code ?? ''}</span>`
+              ? `<img src="${imgSrc}" style="width:48px;height:48px;object-fit:${fit};border:1px solid #eee;border-radius:4px;padding:2px" /><br><span style="font-size:10px;font-weight:600">${item.reference_code ?? ''}</span>`
               : `<div style="width:48px;height:48px;border:1px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;margin:auto">?</div><br><span style="font-size:10px">${item.reference_code ?? 'Custom'}</span>`
             }
           </td>
-          <td style="padding:6px">${f(item.description)}</td>
+          <td style="padding:6px">${f(item.description)}${attachedPdf ? `<div style="font-size:9px;color:#666;margin-top:2px">Attached: ${attachedPdf}</div>` : ''}</td>
           <td style="padding:6px;text-align:center">${f(item.size)}</td>
           <td style="padding:6px;text-align:center;font-weight:600">${item.quantity}</td>
           <td style="padding:6px;text-align:center">${item.unit_price_usd != null ? '$' + item.unit_price_usd.toFixed(3) : '—'}</td>
@@ -193,12 +231,15 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
     </div>
     </body></html>`
 
-    const win = window.open('', '_blank')
     if (win) {
       win.document.write(html)
       win.document.close()
       win.focus()
       setTimeout(() => { win.print(); setExporting(false); onClose() }, 800)
+    } else {
+      // Popup blocked — without this the button spins forever.
+      setExporting(false)
+      toast('Allow pop-ups for this site to export the PDF', 'error')
     }
   }
 
