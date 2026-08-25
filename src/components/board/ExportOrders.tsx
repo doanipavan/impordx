@@ -18,7 +18,7 @@ const HEADERS = [
   'Inside logo', 'Inside logo text', 'Inside logo colour',
   'Card notes',
   'ERP (DEV)', 'Reference', 'Description', 'Size',
-  'Qty', 'Unit USD', 'Line total USD',
+  'Qty', 'Unit USD', 'Line total USD', 'Sale BRL', 'Line total BRL',
 ]
 
 interface Row { [key: string]: string | number | null }
@@ -40,7 +40,7 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
           logo_technique_inside, logo_text_inside, logo_color_inside,
           salesperson:users!cards_salesperson_id_fkey(full_name),
           project_manager:users!cards_project_manager_id_fkey(full_name),
-          card_items(erp_code, reference_code, description, size, quantity, unit_price_usd, sort_order)
+          card_items(erp_code, reference_code, description, size, quantity, unit_price_usd, sale_price_brl, sort_order)
         `)
         .eq('board', 'orders')
         .eq('archived', false)
@@ -88,13 +88,15 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
         // vanishes from the export and nobody notices it was never filled in.
         if (items.length === 0) {
           rows.push({ ...base, 'ERP (DEV)': '', Reference: '', Description: '(no items)',
-            Size: '', Qty: '', 'Unit USD': '', 'Line total USD': '' })
+            Size: '', Qty: '', 'Unit USD': '', 'Line total USD': '',
+            'Sale BRL': '', 'Line total BRL': '' })
           continue
         }
 
         for (const item of items) {
           const qty = Number(item.quantity ?? 0)
           const unit = item.unit_price_usd != null ? Number(item.unit_price_usd) : null
+          const sale = item.sale_price_brl != null ? Number(item.sale_price_brl) : null
           rows.push({
             ...base,
             'ERP (DEV)': item.erp_code ?? '',
@@ -104,6 +106,8 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
             Qty: qty,
             'Unit USD': unit,
             'Line total USD': unit != null ? Number((qty * unit).toFixed(2)) : null,
+            'Sale BRL': sale,
+            'Line total BRL': sale != null ? Number((qty * sale).toFixed(2)) : null,
           })
         }
       }

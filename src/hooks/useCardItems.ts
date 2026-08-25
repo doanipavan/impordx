@@ -12,6 +12,9 @@ export interface CardItem {
   size?: string
   quantity: number
   unit_price_usd?: number
+  // What the Brazilian client pays per piece. Redantex only — this is the
+  // sell side of the margin and is never shown to the supplier.
+  sale_price_brl?: number
   erp_code?: string        // the item's code in DEV, Redantex's ERP
   file_url?: string
   file_name?: string
