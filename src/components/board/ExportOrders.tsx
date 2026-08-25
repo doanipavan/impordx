@@ -13,6 +13,10 @@ const HEADERS = [
   'Purchase order', 'Sales order', 'PI number',
   'Salesperson', 'Project manager',
   'Confirmed', 'Delivery date',
+  'Outside material', 'Inside material',
+  'Outside logo', 'Outside logo text', 'Outside logo colour',
+  'Inside logo', 'Inside logo text', 'Inside logo colour',
+  'Card notes',
   'ERP (DEV)', 'Reference', 'Description', 'Size',
   'Qty', 'Unit USD', 'Line total USD',
 ]
@@ -31,6 +35,9 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
         .select(`
           ref_number, status, client_name, collection, purchase_order, sales_order,
           pi_number, order_confirmed_at, delivery_date, salesperson_name,
+          description, outside_material, inside_material,
+          logo_technique_outside, logo_text_outside, logo_color_outside,
+          logo_technique_inside, logo_text_inside, logo_color_inside,
           salesperson:users!cards_salesperson_id_fkey(full_name),
           project_manager:users!cards_project_manager_id_fkey(full_name),
           card_items(erp_code, reference_code, description, size, quantity, unit_price_usd, sort_order)
@@ -61,6 +68,17 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
           'Project manager': c.project_manager?.full_name ?? '',
           Confirmed: c.order_confirmed_at ?? '',
           'Delivery date': c.delivery_date ?? '',
+          // The spec DEQI actually builds against, repeated on every line so
+          // the sheet stays filterable without looking anything up.
+          'Outside material': c.outside_material ?? '',
+          'Inside material': c.inside_material ?? '',
+          'Outside logo': c.logo_technique_outside ?? '',
+          'Outside logo text': c.logo_text_outside ?? '',
+          'Outside logo colour': c.logo_color_outside ?? '',
+          'Inside logo': c.logo_technique_inside ?? '',
+          'Inside logo text': c.logo_text_inside ?? '',
+          'Inside logo colour': c.logo_color_inside ?? '',
+          'Card notes': c.description ?? '',
         }
 
         const items = [...(c.card_items ?? [])].sort(
@@ -97,7 +115,8 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
 
       const XLSX = await import('xlsx')
       const ws = XLSX.utils.json_to_sheet(rows, { header: HEADERS })
-      ws['!cols'] = HEADERS.map(h => ({ wch: h === 'Description' ? 34 : Math.max(11, h.length + 2) }))
+      const WIDE: Record<string, number> = { Description: 34, 'Card notes': 40 }
+      ws['!cols'] = HEADERS.map(h => ({ wch: WIDE[h] ?? Math.max(11, h.length + 2) }))
       // Freeze the header so the order columns stay readable while scrolling.
       ws['!freeze'] = { xSplit: 0, ySplit: 1 }
 

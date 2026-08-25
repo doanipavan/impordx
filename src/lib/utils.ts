@@ -306,3 +306,40 @@ export const COLLECTION_SIZES: Record<string, string[]> = {
   Turim: TURIM_SIZES.map(formatSize),
   Trento: TRENTO_SIZES.map(formatSize),
 }
+
+// Material codes have no columns of their own — they live as labelled lines
+// inside the card description. Create wrote them; Edit had inputs for them and
+// silently dropped them on save. Both go through these two functions now, so
+// the round trip is lossless and the importer can speak the same format.
+const MATERIAL_CODE_LINE = /^\s*(outside|inside)\s+material\s+code\s*:\s*(.*)$/i
+
+export function splitMaterialCodes(description?: string | null): {
+  notes: string
+  outside_material_code: string
+  inside_material_code: string
+} {
+  let outside = ''
+  let inside = ''
+  const rest: string[] = []
+  for (const line of (description ?? '').split('\n')) {
+    const m = line.match(MATERIAL_CODE_LINE)
+    if (!m) { rest.push(line); continue }
+    if (m[1].toLowerCase() === 'outside') outside = m[2].trim()
+    else inside = m[2].trim()
+  }
+  return {
+    notes: rest.join('\n').trim(),
+    outside_material_code: outside,
+    inside_material_code: inside,
+  }
+}
+
+export function mergeMaterialCodes(
+  notes?: string | null, outside?: string | null, inside?: string | null,
+): string | undefined {
+  const codes = [
+    outside?.trim() ? `Outside material code: ${outside.trim()}` : '',
+    inside?.trim() ? `Inside material code: ${inside.trim()}` : '',
+  ].filter(Boolean).join('\n')
+  return [notes?.trim(), codes].filter(Boolean).join('\n\n') || undefined
+}

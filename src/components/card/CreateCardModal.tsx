@@ -14,7 +14,7 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
-import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize } from '../../lib/utils'
+import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize, mergeMaterialCodes } from '../../lib/utils'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -92,13 +92,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     try {
-      // Merge material codes into description notes if provided
-      const matNotes = [
-        values.outside_material_code   ? `Outside material code: ${values.outside_material_code}`    : '',
-        values.inside_material_code    ? `Inside material code: ${values.inside_material_code}`      : '',
-      ].filter(Boolean).join('\n')
-
-      const finalDescription = [values.description, matNotes].filter(Boolean).join('\n\n')
+      const finalDescription = mergeMaterialCodes(values.description,
+        values.outside_material_code, values.inside_material_code)
 
       const card = await createCard.mutateAsync({
         board,

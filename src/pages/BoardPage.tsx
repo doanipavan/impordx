@@ -4,6 +4,7 @@ import { BoardType, BOARD_LABELS, Card } from '../types'
 import { Board } from '../components/board/Board'
 import { OrdersGantt } from '../components/board/OrdersGantt'
 import { ExportOrders } from '../components/board/ExportOrders'
+import { ImportCard } from '../components/board/ImportCard'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 
@@ -54,13 +55,15 @@ function BoardPage({ board }: { board: BoardType }) {
         )}
         </div>
 
-        {/* Purchase and sales order numbers are on this sheet, so it is not
-            something the supplier should be able to pull. */}
-        {board === 'orders' && user?.role !== 'viewer' && (
-          <div className="shrink-0 mr-44">
-            <ExportOrders />
-          </div>
-        )}
+        <div className="shrink-0 mr-44 flex items-center gap-2">
+          {/* A spec can be typed into a spreadsheet before it is a card, but an
+              order is only ever promoted from a quote or a sample. */}
+          {board !== 'orders' && user?.role !== 'viewer' && <ImportCard board={board} />}
+
+          {/* Purchase and sales order numbers are on this sheet, so it is not
+              something the supplier should be able to pull. */}
+          {board === 'orders' && user?.role !== 'viewer' && <ExportOrders />}
+        </div>
       </div>
       <div className="flex-1 overflow-hidden py-4 flex flex-col">
         {/* Only orders run a 120-day clock, so only orders get a timeline. */}

@@ -29,6 +29,14 @@ happened twice — `4042d96` (notifications) and `3fe9a02` (the Orders timeline
 above the board). Guard: `supabase.getChannels().some(c => c.topic === 'realtime:' + name)`
 and return early. Applied in `useCards`, `useComments`, `useNotifications`.
 
+**Excel dates come back a millisecond early.** `xlsx` round-trips a cell typed
+as 09/09/2026 into `08/09/2026 23:59:59.999`, so reading the calendar fields
+straight off it loses a day on every import. `calendarDay` in
+`src/lib/cardSheet.ts` snaps to the nearest local midnight. The import parser
+has no test runner but does have tests — run
+`node_modules/.bin/jiti scripts/check-import-parser.ts`, and run it under
+`TZ=Asia/Shanghai` too, because that is where the supplier is.
+
 **`npm run build` is the authoritative typecheck.** `tsc --noEmit -p
 tsconfig.app.json` reports ~71 errors that the real build does not — do not
 quote that number as if it meant something.
@@ -105,4 +113,14 @@ together came to under 2 credits in a month.
   readable in full by any authenticated user, so the supplier can read the
   sale margin through the API. The real fix is moving it to its own table
   with its own policy; Doani chose speed for now.
+- **The `attachments` storage bucket is public.** The client dutifully mints
+  signed URLs, but anyone holding a file path reads it unauthenticated and the
+  link never expires. Paths are UUIDs, so this is obscurity, not access
+  control. Same family as `value_brl`.
+- **Material codes have no columns.** `outside_material_code` /
+  `inside_material_code` are in the zod schemas and the TypeScript, and do not
+  exist in `cards`. They are stored as labelled lines inside `description`;
+  `splitMaterialCodes` / `mergeMaterialCodes` in `src/lib/utils.ts` are the
+  only sanctioned way in and out. Edit Card had inputs for them that silently
+  dropped what you typed until `2026-08-24`.
 - Orphaned images sit in storage from item uploads that failed before `e93dc72`.

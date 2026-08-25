@@ -8,6 +8,7 @@ import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
+import { splitMaterialCodes, mergeMaterialCodes } from '../../lib/utils'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
 import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS } from '../../lib/utils'
@@ -59,6 +60,9 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
   const toast = useToast()
   const columns = BOARD_COLUMNS[board]
 
+  // The codes live inside the description, so unpack them for the form.
+  const parsedDescription = splitMaterialCodes(card.description)
+
   const { register, handleSubmit, watch, formState: { errors, isDirty } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -72,7 +76,9 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       project_manager_id: card.project_manager_id ?? '',
       quantity: card.quantity ?? '',
       deadline: card.deadline ? card.deadline.substring(0, 10) : '',
-      description: card.description ?? '',
+      description: parsedDescription.notes,
+      outside_material_code: parsedDescription.outside_material_code,
+      inside_material_code: parsedDescription.inside_material_code,
       outside_material: card.outside_material ?? '',
       inside_material: card.inside_material ?? '',
       logo_color: card.logo_color ?? '',
@@ -104,7 +110,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         project_manager_id: values.project_manager_id,
         quantity: values.quantity ? Number(values.quantity) : undefined,
         deadline: values.deadline || undefined,
-        description: values.description || undefined,
+        description: mergeMaterialCodes(values.description,
+          values.outside_material_code, values.inside_material_code),
         outside_material: values.outside_material || undefined,
         inside_material: values.inside_material || undefined,
         logo_color: values.logo_color || undefined,

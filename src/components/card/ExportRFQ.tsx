@@ -54,6 +54,7 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
         ['Client', f(card.client_name)],
         ['Collection', f(card.collection)],
         ['Deadline', card.deadline ? formatDate(card.deadline) : '—'],
+        ['Description', f(card.description)],
         [],
         ['OUTSIDE MATERIAL'],
         ['Material', f(card.outside_material)],
