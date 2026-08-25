@@ -66,6 +66,13 @@ pinning them would shift every deadline a day for the supplier.
 `2026-10014` once and it survives promotion: `QUO-2026-10014` → `SMP-` → `ORD-`,
 with `-R2` for a repeat run. Never generate refs client-side.
 
+**Hiding a column in the UI is not protecting it.** `cards` and `card_items`
+both have a SELECT policy whose condition is `true`, so every authenticated
+account — including both DEQI logins — reads every column of every row through
+the API. RLS filters rows, not columns. Anything a supplier must not see needs
+its own table with its own policy: `card_item_pricing` is the worked example
+(migration 025), and the gate trigger reads it as `security definer`.
+
 **`viewer` means DEQI.** The role is the supplier. Redantex is `admin`/`member`.
 DEQI sees only their 60-day production leg — the shipping leg to Brazil is
 withheld, on the board and inside the card.
@@ -111,8 +118,9 @@ together came to under 2 credits in a month.
   until it runs, a second supplier would read DEQI's prices and artwork.
 - **`value_brl` is hidden in the UI, not protected.** The cards table is
   readable in full by any authenticated user, so the supplier can read the
-  sale margin through the API. The real fix is moving it to its own table
-  with its own policy; Doani chose speed for now.
+  sale margin through the API. The real fix is the one applied to the per-item
+  sale price in 025 — its own table with its own policy. Doani chose speed for
+  the card-level field; it is still open.
 - **The `attachments` storage bucket is public.** The client dutifully mints
   signed URLs, but anyone holding a file path reads it unauthenticated and the
   link never expires. Paths are UUIDs, so this is obscurity, not access

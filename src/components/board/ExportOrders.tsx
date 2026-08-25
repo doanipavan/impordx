@@ -40,7 +40,8 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
           logo_technique_inside, logo_text_inside, logo_color_inside,
           salesperson:users!cards_salesperson_id_fkey(full_name),
           project_manager:users!cards_project_manager_id_fkey(full_name),
-          card_items(erp_code, reference_code, description, size, quantity, unit_price_usd, sale_price_brl, sort_order)
+          card_items(erp_code, reference_code, description, size, quantity, unit_price_usd, sort_order,
+            pricing:card_item_pricing(sale_price_brl))
         `)
         .eq('board', 'orders')
         .eq('archived', false)
@@ -96,7 +97,8 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
         for (const item of items) {
           const qty = Number(item.quantity ?? 0)
           const unit = item.unit_price_usd != null ? Number(item.unit_price_usd) : null
-          const sale = item.sale_price_brl != null ? Number(item.sale_price_brl) : null
+          const priced = Array.isArray(item.pricing) ? item.pricing[0] : item.pricing
+          const sale = priced?.sale_price_brl != null ? Number(priced.sale_price_brl) : null
           rows.push({
             ...base,
             'ERP (DEV)': item.erp_code ?? '',
