@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
-import { cn, ORDER_LEG_DAYS } from '../../lib/utils'
+import { cn, ORDER_LEG_DAYS, deliveryAnchor } from '../../lib/utils'
 import { Card } from '../../types'
 
 const DAY = 86_400_000
@@ -56,7 +56,11 @@ interface Row {
 }
 
 function buildRow(card: Card, today: Date): Row | null {
-  const confirmed = calendarDay(card.order_confirmed_at)
+  // Shared with the card panel on purpose. This used to read order_confirmed_at
+  // directly, which is only stamped at PI Approved — so an order still waiting
+  // on its proforma had no bar at all, however real it was.
+  const anchor = deliveryAnchor(card)
+  const confirmed = calendarDay(anchor?.date)
   if (!confirmed) return null
 
   const handover = addDays(confirmed, ORDER_LEG_DAYS)

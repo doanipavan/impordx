@@ -151,18 +151,41 @@ export interface OrderClock {
   rdx: LegClock
 }
 
+export interface DeliveryAnchor {
+  date: string                        // 'YYYY-MM-DD'
+  kind: 'sample' | 'confirmation'
+}
+
+/**
+ * The day an order's 120 starts counting from.
+ *
+ * The sample approval is the promise made to the client, so it wins. A quote
+ * promoted straight to Orders never had a sample, and falls back to the stamp
+ * left at PI Approved.
+ *
+ * Every view of the schedule must call this. The card panel and the Gantt each
+ * had their own copy of the rule once, and the Gantt was still demanding
+ * order_confirmed_at after the panel had moved on — so two live orders sitting
+ * in PI Requested simply vanished from the chart.
+ */
+export function deliveryAnchor(card: {
+  sample_approved_at?: string | null
+  order_confirmed_at?: string | null
+}): DeliveryAnchor | null {
+  if (card.sample_approved_at) return { date: card.sample_approved_at, kind: 'sample' }
+  if (card.order_confirmed_at) return { date: card.order_confirmed_at, kind: 'confirmation' }
+  return null
+}
+
 export function orderClock(card: {
   sample_approved_at?: string | null
   order_confirmed_at?: string | null
   status?: string
 }): OrderClock | null {
   const status = card.status ?? ''
-  // The sample approval is the promise made to the client, so it wins. A quote
-  // promoted straight to Orders never had one, and falls back to the PI stamp.
-  const anchor: 'sample' | 'confirmation' =
-    card.sample_approved_at ? 'sample' : 'confirmation'
-  const anchorDate = card.sample_approved_at ?? card.order_confirmed_at
-  if (!anchorDate) return null
+  const found = deliveryAnchor(card)
+  if (!found) return null
+  const { date: anchorDate, kind: anchor } = found
   const start = calendarDay(anchorDate)
   if (!start) return null
 

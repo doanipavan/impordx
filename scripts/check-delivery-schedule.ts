@@ -5,7 +5,7 @@
 // Run it under TZ=Asia/Shanghai too. These are plain calendar days and must not
 // shift with the reader's clock — the supplier reads the same number we do.
 
-import { orderClock, ORDER_LEG_DAYS } from '../src/lib/utils'
+import { orderClock, deliveryAnchor, ORDER_LEG_DAYS } from '../src/lib/utils'
 
 let bad = 0
 function check(label: string, got: unknown, want: unknown) {
@@ -51,6 +51,16 @@ check('sample beats confirmation', both.anchorDate, '2026-09-10')
 
 // Nothing to anchor on means no clock at all, not a clock starting today.
 check('no anchor at all', orderClock({ status: 'Placed' }), null)
+
+// An order sitting in PI Requested has no order_confirmed_at — that stamp only
+// lands at PI Approved. It still has a schedule, and every view of it must
+// agree. The Gantt kept its own copy of this rule and dropped two live orders.
+const awaitingPi = { sample_approved_at: '2026-08-25', status: 'PI Requested' }
+check('PI Requested still anchors', deliveryAnchor(awaitingPi)?.date, '2026-08-25')
+check('and the clock agrees', orderClock(awaitingPi)?.anchorDate, '2026-08-25')
+check('anchor kind matches clock',
+  deliveryAnchor(awaitingPi)?.kind, orderClock(awaitingPi)?.anchor)
+check('no sample, no PI stamp', deliveryAnchor({ status: 'Purchasing' }), null)
 
 console.log(bad === 0 ? '\nAll good.' : `\n${bad} failure(s).`)
 process.exit(bad === 0 ? 0 : 1)
