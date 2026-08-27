@@ -167,7 +167,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{approvedAtt.filename}</p>
+              <FileName name={approvedAtt.filename} />
               <p className="text-xs text-muted-foreground">{formatFileSize(approvedAtt.file_size)}</p>
             </div>
             <button onClick={() => handleDownload(approvedAtt)} disabled={loadingId === approvedAtt.id}
@@ -267,7 +267,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium truncate">{att.filename}</p>
+                          <FileName name={att.filename} />
                           {isApproved && (
                             <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
                           )}
@@ -438,6 +438,22 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 }
 
 // A sample's verdict, readable at a glance without opening anything.
+// Truncating from the right hides the only part that distinguishes these files.
+// DEQI's proformas are all "PI---YUQ508-1322275(RIZZY-2026-8-…" and differ in
+// the date at the very end, so the tail is pinned and the middle gives way.
+function FileName({ name }: { name: string }) {
+  const TAIL = 13
+  if (name.length <= TAIL + 6) {
+    return <p className="text-sm font-medium truncate" title={name}>{name}</p>
+  }
+  return (
+    <p className="text-sm font-medium flex min-w-0" title={name}>
+      <span className="truncate">{name.slice(0, -TAIL)}</span>
+      <span className="shrink-0">{name.slice(-TAIL)}</span>
+    </p>
+  )
+}
+
 function ReviewBadge({ kind, status }: {
   kind: 'sample' | 'pi'
   status?: 'pending' | 'approved' | 'rejected'

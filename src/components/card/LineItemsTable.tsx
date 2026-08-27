@@ -291,10 +291,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table. Eight columns in a 600px lane squeeze the text to nothing, so it
+          scrolls sideways instead and keeps the sizes and prices readable. */}
       {items.length > 0 && (
-        <div className="border border-border rounded-lg overflow-hidden text-xs">
-          <table className="w-full">
+        <div className="border border-border rounded-lg overflow-x-auto text-xs scrollbar-thin">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-muted/50">
               <tr>
                 {['Internal', 'ERP (DEV)', 'Description', 'Size', 'Qty', 'Unit $',
