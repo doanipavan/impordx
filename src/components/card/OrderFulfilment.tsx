@@ -36,7 +36,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
   // DEQI supplies the PI and the date; the Redantex order numbers are ours.
   const isDeqi = user?.role === 'viewer'
   const waiting = !card.pi_number || !card.delivery_date
-  const clock = orderClock(card.order_confirmed_at, card.status)
+  const clock = orderClock(card)
 
   function startEditing() {
     setPi(card.pi_number ?? '')
@@ -216,6 +216,15 @@ function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boo
           {deqiOnly ? ORDER_LEG_DAYS : ORDER_LEG_DAYS * 2}-day target · {formatDate(headline.target)}
         </span>
       </div>
+
+      {/* Where the count starts from. Without it the headline is a number with
+          no argument behind it, and two orders approved days apart landing on
+          the same date reads as a bug rather than as the batch working. */}
+      <p className="text-[10px] text-muted-foreground mt-1">
+        {clock.anchor === 'batch'
+          ? `Counted from the ${formatDate(clock.anchorDate)} batch cut-off`
+          : `Counted from PI approval on ${formatDate(clock.anchorDate)} — no sample approval on record`}
+      </p>
 
       {!deqiOnly && (
         <div className="grid grid-cols-2 gap-3 mt-3">

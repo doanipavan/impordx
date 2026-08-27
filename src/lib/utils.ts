@@ -45,9 +45,16 @@ export function formatRelative(date: string | null | undefined): string {
   }
 }
 
-// An order runs on two consecutive 60-day legs from the day it is confirmed:
-// DEQI has 60 days to have it ready, then Redantex has 60 to land it in Brazil.
+// An order runs on two consecutive 60-day legs: DEQI has 60 days to have it
+// ready, then Redantex has 60 to land it in Brazil.
 export const ORDER_LEG_DAYS = 60
+
+// Redantex promises the client in monthly batches. A sample approved on or
+// before the 10th catches that month's batch and delivers 120 days after the
+// 10th; the whole batch lands on the same day. Approving on the 11th does not
+// cost a day, it costs the batch — the piece waits for the next cut-off, some
+// thirty days later. Mirrored in Postgres as sample_batch_cutoff (migration 026).
+export const BATCH_CUTOFF_DAY = 10
 
 const MS_PER_DAY = 86_400_000
 
@@ -141,17 +148,46 @@ export interface LegClock {
 
 export interface OrderClock {
   activeLeg: 'deqi' | 'rdx'
+  // Which promise the clock is running on. 'batch' is the real one, measured
+  // from the monthly cut-off; 'confirmation' is the fallback for a card that
+  // reached Orders without ever being a sample.
+  anchor: 'batch' | 'confirmation'
+  anchorDate: string
   total: { daysLeft: number; target: string }
   deqi: LegClock
   rdx: LegClock
 }
 
-export function orderClock(
-  confirmedAt: string | null | undefined,
-  status: string,
-): OrderClock | null {
-  if (!confirmedAt) return null
-  const start = calendarDay(confirmedAt)
+/**
+ * The cut-off a sample approval falls into: the 10th of its own month, or the
+ * 10th of the next one once the 10th has passed. Approving on the 11th misses
+ * the batch entirely, which is why one day can cost thirty.
+ */
+export function batchCutoff(approvedYmd: string | null | undefined): string | null {
+  if (!approvedYmd) return null
+  const d = calendarDay(approvedYmd)
+  if (!d) return null
+  const missed = d.getUTCDate() > BATCH_CUTOFF_DAY
+  return new Date(Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth() + (missed ? 1 : 0),
+    BATCH_CUTOFF_DAY,
+  )).toISOString().slice(0, 10)
+}
+
+export function orderClock(card: {
+  sample_approved_at?: string | null
+  order_confirmed_at?: string | null
+  status?: string
+}): OrderClock | null {
+  const status = card.status ?? ''
+  // The sample approval is the promise made to the client, so it wins. A quote
+  // promoted straight to Orders never had one, and falls back to the PI stamp.
+  const cutoff = batchCutoff(card.sample_approved_at)
+  const anchor: 'batch' | 'confirmation' = cutoff ? 'batch' : 'confirmation'
+  const anchorDate = cutoff ?? card.order_confirmed_at
+  if (!anchorDate) return null
+  const start = calendarDay(anchorDate)
   if (!start) return null
 
   const today = todayInSaoPaulo().getTime()
@@ -168,6 +204,8 @@ export function orderClock(
 
   return {
     activeLeg: shipping ? 'rdx' : 'deqi',
+    anchor,
+    anchorDate,
     total: { daysLeft: daysUntil(ORDER_LEG_DAYS * 2), target: dateAt(ORDER_LEG_DAYS * 2) },
     deqi: {
       daysLeft: deqiDaysLeft,

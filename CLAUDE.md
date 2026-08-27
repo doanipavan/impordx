@@ -62,6 +62,20 @@ ten hours apart; the same event must not read as two different times.
 pinned** — deadlines are typed as plain dates and stored at UTC midnight, so
 pinning them would shift every deadline a day for the supplier.
 
+**Delivery is promised in monthly batches, anchored on the sample.** A sample
+approved on or before the **10th** delivers **120 days after that 10th**, and the
+whole batch lands on one date — five orders approved across three weeks all
+showing 8 January is the rule working, not a bug. Approving on the 11th does not
+cost a day, it costs the batch: the piece waits for the next cut-off, some thirty
+days later. `sample_approved_at` is stamped by `stamp_sample_approved` and
+survives promotion to Orders; `order_confirmed_at` (stamped at PI Approved) is
+only the fallback for a confirmed quote that never was a sample. The arithmetic
+is `batchCutoff` / `orderClock` in `src/lib/utils.ts`, mirrored — never stored —
+by `sample_batch_cutoff` in migration 026: the lead time already moved once, from
+130 to 120, and a stored value would keep answering with the dead rule. Tests:
+`node_modules/.bin/jiti scripts/check-delivery-schedule.ts`, under
+`TZ=Asia/Shanghai` too.
+
 **A piece keeps one reference number for life.** `allocate_card_ref` mints
 `2026-10014` once and it survives promotion: `QUO-2026-10014` → `SMP-` → `ORD-`,
 with `-R2` for a repeat run. Never generate refs client-side.
