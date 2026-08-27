@@ -33,12 +33,23 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   const moveCard = useMoveCard()
   const toast = useToast()
   const [activeCard, setActiveCard] = useState<Card | null>(null)
-  const [openCard, setOpenCard] = useState<Card | null>(autoOpenCard ?? null)
+  // Only the id is held. Storing the card object froze it at click time, so
+  // everything the modal read stayed as it was when the row was clicked —
+  // changing a card's collection and then not being offered that collection's
+  // sizes was this bug wearing a different hat.
+  const [openCardId, setOpenCardId] = useState<string | null>(autoOpenCard?.id ?? null)
   const [creating, setCreating] = useState<CardStatus | null>(null)
+
+  // The list is the source; the fetched card only stands in until it arrives,
+  // which is the gap a ref link opens through.
+  const openCard = openCardId
+    ? cards.find((c) => c.id === openCardId)
+      ?? (autoOpenCard?.id === openCardId ? autoOpenCard : null)
+    : null
 
   // Auto-open when ref link is followed
   useEffect(() => {
-    if (autoOpenCard) setOpenCard(autoOpenCard)
+    if (autoOpenCard) setOpenCardId(autoOpenCard.id)
   }, [autoOpenCard])
 
   const sensors = useSensors(
@@ -104,7 +115,7 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
               status={status}
               cards={cardsByStatus[status] ?? []}
               board={board}
-              onCardClick={setOpenCard}
+              onCardClick={(c) => setOpenCardId(c.id)}
               onAddCard={() => setCreating(status)}
             />
           ))}
@@ -138,7 +149,7 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
         <CardModal
           card={openCard}
           board={board}
-          onClose={() => setOpenCard(null)}
+          onClose={() => setOpenCardId(null)}
         />
       )}
 

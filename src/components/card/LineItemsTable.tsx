@@ -150,6 +150,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
   // The card's collection decides whether Size is a fixed list or free text.
   const sizeOptions = card.collection ? COLLECTION_SIZES[card.collection] ?? null : null
+  const sizeListId = `sizes-${card.id}`
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0)
   const totalValue = items.reduce((s, i) => s + (i.quantity * (i.unit_price_usd ?? 0)), 0)
@@ -158,6 +159,9 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   function handleCatalogSelect(item: CatalogItem | null) {
     setShowCatalog(false)
     setAdding(true)
+    // "Other…" belongs to the item you typed it for. Left standing, one custom
+    // measurement hid the collection's list from every item added after it.
+    setCustomSize(false)
     if (item) {
       setNewItem(v => ({
         ...v,
@@ -211,6 +215,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
       setAdding(false)
       setCustomFile(null)
       setSelectedCatalogImage(null)
+      setCustomSize(false)
       toast('Item added', 'success')
     } catch (err) {
       // Swallowing this is why a missing column looked like a generic failure.
@@ -259,6 +264,13 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
 
   return (
     <div className="space-y-3">
+      {/* Mounted once for the whole table: the chips are only offered on the
+          add form, and every other size field is a plain input. */}
+      {sizeOptions && (
+        <datalist id={sizeListId}>
+          {sizeOptions.map(size => <option key={size} value={size} />)}
+        </datalist>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Product Line Items {items.length > 0 && `(${items.length})`}
@@ -298,7 +310,11 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                     <>
                       {(['reference_code', 'erp_code', 'description', 'size'] as const).map(field => (
                         <td key={field} className="px-1 py-1">
+                          {/* Size is a list on a collection that has one, but a
+                              typed one still saves: correcting a measurement
+                              should not mean abandoning the list. */}
                           <Input className="h-6 text-xs px-1" value={String(editValues[field] ?? item[field] ?? '')}
+                            list={field === 'size' && sizeOptions ? sizeListId : undefined}
                             onChange={e => setEditValues(v => ({ ...v, [field]: e.target.value }))} />
                         </td>
                       ))}
@@ -464,7 +480,9 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
           ) : (
             <div className="grid grid-cols-4 gap-2">
               <div className="col-span-2"><label className="text-[10px] text-muted-foreground">Size</label>
-                <Input className="h-7 text-xs" placeholder="16 x 16 x 3,5 cm" value={newItem.size} onChange={e => setNewItem(v => ({ ...v, size: e.target.value }))} autoFocus={customSize} />
+                <Input className="h-7 text-xs" placeholder="16 x 16 x 3,5 cm" value={newItem.size}
+                  list={sizeOptions ? sizeListId : undefined}
+                  onChange={e => setNewItem(v => ({ ...v, size: e.target.value }))} autoFocus={customSize} />
               </div>
               {sizeOptions && (
                 <div className="flex items-end">
@@ -503,7 +521,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
             <Button size="sm" onClick={handleAdd} loading={addItem.isPending || uploadingFile}>
               {uploadingFile ? 'Uploading...' : 'Add item'}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }); setSelectedCatalogImage(null); setCustomFile(null) }}>Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewItem({ ...EMPTY_ITEM }); setSelectedCatalogImage(null); setCustomFile(null); setCustomSize(false) }}>Cancel</Button>
           </div>
 
           {/* File upload for custom items only */}
