@@ -26,12 +26,14 @@ interface CardModalProps {
   onClose: () => void
 }
 
-// Comments and files stopped being tabs: they are columns of their own now, so
-// the only thing left to switch between is the card and its history.
+// Two lanes, two switches. The left holds the card; the right holds everything
+// that came from a person — what was said and what was sent.
 type Tab = 'details' | 'history'
+type Side = 'comments' | 'files'
 
 export function CardModal({ card, board, onClose }: CardModalProps) {
   const [tab, setTab] = useState<Tab>('details')
+  const [side, setSide] = useState<Side>('comments')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const moveCard = useMoveCard()
@@ -122,6 +124,13 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
     { key: 'history', label: 'History' },
   ]
 
+  // The counts stay on the labels: they are the reason to look at the other
+  // side, and hiding them would make the swap a guess.
+  const sides: { key: Side; label: string }[] = [
+    { key: 'comments', label: `Comments${(card.comments_count ?? 0) > 0 ? ` (${card.comments_count})` : ''}` },
+    { key: 'files', label: `Files${(card.attachments_count ?? 0) > 0 ? ` (${card.attachments_count})` : ''}` },
+  ]
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -194,16 +203,16 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
         {/* Client, owners and dates, in one line instead of a column. */}
         <CardMetaStrip card={card} />
 
-        {/* Three columns from 1280px up: the card, the conversation and the
-            files, each scrolling on its own so reading one never moves the
-            others. Below that they stack and the modal scrolls as one page —
-            three columns of 300px would be worse than a long scroll. */}
+        {/* Two columns from 1280px up: the card on the left, and the
+            conversation and its files sharing the right, each side scrolling on
+            its own so reading one never moves the other. Below that they stack
+            and the modal scrolls as one page. */}
         {/* grid-rows is not decoration: an auto row grows to its tallest column,
             so the columns would size to their content and the inner overflow
             would never trigger. Pinning the row to the container is what makes
             three independent scrollbars exist at all. */}
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin
-                        xl:overflow-hidden xl:grid xl:grid-cols-[1.5fr_1fr_1fr]
+                        xl:overflow-hidden xl:grid xl:grid-cols-[1.5fr_1fr]
                         xl:grid-rows-[minmax(0,1fr)]">
 
           {/* ── The card itself ── */}
@@ -374,21 +383,31 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
             </div>
           </section>
 
-          {/* ── The conversation ── */}
+          {/* ── The conversation and the files, sharing one column ──
+              Three columns left each of them 399px, too narrow to read. Sharing
+              one lane costs a click to swap and buys back 160px for whichever
+              you are actually looking at. */}
           <section className="flex flex-col min-w-0 border-t xl:border-t-0 xl:border-l border-border
                               xl:min-h-0 xl:overflow-hidden">
-            <ColumnHeader label="Comments" count={card.comments_count} />
-            <div className="flex-1 xl:min-h-0 xl:overflow-y-auto scrollbar-thin p-4">
-              <CommentThread cardId={card.id} />
+            <div className="flex gap-1 px-4 border-b border-border shrink-0 bg-muted/20">
+              {sides.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setSide(s.key)}
+                  className={cn(
+                    'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                    side === s.key
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
-          </section>
 
-          {/* ── The files ── */}
-          <section className="flex flex-col min-w-0 border-t xl:border-t-0 xl:border-l border-border
-                              xl:min-h-0 xl:overflow-hidden">
-            <ColumnHeader label="Files" count={card.attachments_count} />
             <div className="flex-1 xl:min-h-0 xl:overflow-y-auto scrollbar-thin p-4">
-              <AttachmentPanel cardId={card.id} />
+              {side === 'comments' ? <CommentThread cardId={card.id} /> : <AttachmentPanel cardId={card.id} />}
             </div>
           </section>
         </div>
@@ -397,18 +416,6 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
       {editing && (
         <EditCardModal card={card} board={board} onClose={() => setEditing(false)} />
       )}
-    </div>
-  )
-}
-
-// The column headings sit where the old tabs did, so the eye still finds
-// Comments and Files in the same band of the window.
-function ColumnHeader({ label, count }: { label: string; count?: number }) {
-  return (
-    <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-border shrink-0
-                    bg-muted/20 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-      {label}
-      {(count ?? 0) > 0 && <span className="tabular-nums font-medium">({count})</span>}
     </div>
   )
 }
