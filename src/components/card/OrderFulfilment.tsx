@@ -218,11 +218,10 @@ function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boo
       </div>
 
       {/* Where the count starts from. Without it the headline is a number with
-          no argument behind it, and two orders approved days apart landing on
-          the same date reads as a bug rather than as the batch working. */}
+          no argument behind it, and the fallback is invisible. */}
       <p className="text-[10px] text-muted-foreground mt-1">
-        {clock.anchor === 'batch'
-          ? `Counted from the ${formatDate(clock.anchorDate)} batch cut-off`
+        {clock.anchor === 'sample'
+          ? `Counted from sample approval on ${formatDate(clock.anchorDate)}`
           : `Counted from PI approval on ${formatDate(clock.anchorDate)} — no sample approval on record`}
       </p>
 

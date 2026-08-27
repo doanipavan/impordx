@@ -62,19 +62,21 @@ ten hours apart; the same event must not read as two different times.
 pinned** — deadlines are typed as plain dates and stored at UTC midnight, so
 pinning them would shift every deadline a day for the supplier.
 
-**Delivery is promised in monthly batches, anchored on the sample.** A sample
-approved on or before the **10th** delivers **120 days after that 10th**, and the
-whole batch lands on one date — five orders approved across three weeks all
-showing 8 January is the rule working, not a bug. Approving on the 11th does not
-cost a day, it costs the batch: the piece waits for the next cut-off, some thirty
-days later. `sample_approved_at` is stamped by `stamp_sample_approved` and
-survives promotion to Orders; `order_confirmed_at` (stamped at PI Approved) is
-only the fallback for a confirmed quote that never was a sample. The arithmetic
-is `batchCutoff` / `orderClock` in `src/lib/utils.ts`, mirrored — never stored —
-by `sample_batch_cutoff` in migration 026: the lead time already moved once, from
-130 to 120, and a stored value would keep answering with the dead rule. Tests:
-`node_modules/.bin/jiti scripts/check-delivery-schedule.ts`, under
-`TZ=Asia/Shanghai` too.
+**Delivery is 120 days from the day the sample was approved.** Not from the PI,
+not from a monthly cut-off — `sample_approved_at`, stamped by
+`stamp_sample_approved` when a card on the samples board reaches `Approved`, and
+carried through promotion because promotion moves the same row.
+`order_confirmed_at` (stamped at PI Approved) is only the fallback for a
+confirmed quote that never was a sample, and `orderClock` reports which of the
+two it used so the fallback is never silent. The 120 splits into the two
+`ORDER_LEG_DAYS` legs: 60 for DEQI to have it ready, 60 to land it in Brazil.
+
+Nothing about this rule is stored — not the delivery date, not the lead time in
+SQL. It has already changed three times in one day (130 batched → 120 batched →
+120 flat), and a stored value would have kept answering with the dead rule on
+every existing card. Migration 026 adds the column and the trigger; 027 drops the
+batch function that briefly existed. Tests: `node_modules/.bin/jiti
+scripts/check-delivery-schedule.ts`, under `TZ=Asia/Shanghai` too.
 
 **A piece keeps one reference number for life.** `allocate_card_ref` mints
 `2026-10014` once and it survives promotion: `QUO-2026-10014` → `SMP-` → `ORD-`,
