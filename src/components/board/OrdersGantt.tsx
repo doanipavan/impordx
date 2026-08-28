@@ -38,6 +38,11 @@ function daysBetween(from: Date, to: Date) {
   return Math.round((to.getTime() - from.getTime()) / DAY)
 }
 
+// ORD-2026-10014 → 10014, keeping any -R2 that marks a repeat run.
+function shortRef(ref: string) {
+  return ref.replace(/^[A-Z]{3}-\d{4}-/, '')
+}
+
 function shortDate(date: Date) {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }
@@ -244,13 +249,18 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
   return (
     <div className="grid border-b border-border/60 last:border-b-0 hover:bg-muted/30 transition-colors"
       style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
-      <div className="px-2.5 py-1.5 border-r border-border min-w-0"
-        title={`${row.card.ref_number ?? ''} · confirmed ${shortDate(row.confirmed)}`}>
-        <p className="text-[12px] font-semibold truncate leading-tight">
+      {/* Client and number on one line. The prefix is ORD-2026- on every row,
+          so it distinguishes nothing and costs the height of a second line;
+          the full reference stays in the tooltip. */}
+      <div className="px-2.5 py-2 border-r border-border min-w-0"
+        title={`${row.card.ref_number ?? ''} · counted from ${shortDate(row.confirmed)}`}>
+        <p className="text-[11.5px] font-semibold truncate leading-none">
           {row.card.client_name || row.card.title}
-        </p>
-        <p className="text-[10px] font-mono text-muted-foreground/80 tabular-nums truncate leading-tight">
-          {row.card.ref_number}
+          {row.card.ref_number && (
+            <span className="ml-1 font-mono font-normal text-[9px] text-muted-foreground/70 tabular-nums">
+              {shortRef(row.card.ref_number)}
+            </span>
+          )}
         </p>
       </div>
 
@@ -262,7 +272,7 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
           ))}
         </div>
 
-        <div className="absolute top-1/2 -translate-y-1/2 h-4 rounded-sm border border-border flex overflow-hidden"
+        <div className="absolute top-1/2 -translate-y-1/2 h-3 rounded-sm border border-border flex overflow-hidden"
           style={{ left: `${left}%`, width: `${right - left}%` }}
           title={`${shortDate(row.confirmed)} → ${shortDate(deqiOnly ? row.handover : row.arrival)}`}>
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
@@ -291,7 +301,7 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
           return (
             <div
               key={cp.at}
-              className="absolute top-1/2 h-2.5 w-2.5 rounded-full bg-foreground border-2 border-card z-10"
+              className="absolute top-1/2 h-2 w-2 rounded-full bg-foreground border-2 border-card z-10"
               style={{ left: `${x}%`, transform: 'translate(-50%, -50%)' }}
               title={`${cp.status} · ${shortDate(day)} · ${cp.by}`}
             />
@@ -301,7 +311,7 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
         {/* the date DEQI committed to */}
         {row.delivery && (
           <div
-            className={cn('absolute top-1/2 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-card border-2',
+            className={cn('absolute top-1/2 h-2 w-2 rotate-45 rounded-[2px] bg-card border-2 z-10',
               row.missedPromise ? 'border-red-500' : 'border-foreground')}
             style={{ left: `${pct(row.delivery)}%`, transform: 'translate(-50%, -50%) rotate(45deg)' }}
             title={row.missedPromise
