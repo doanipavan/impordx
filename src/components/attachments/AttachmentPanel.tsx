@@ -56,16 +56,34 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const canApprove = user?.role === 'admin' || user?.role === 'member'
   const canUnapprove = user?.role === 'admin'
 
+  // Every refusal has to name itself. "Failed to upload" sent someone hunting
+  // through policies and buckets for an hour while the real answer was the file
+  // type all along.
   async function uploadFiles(files: File[]) {
     for (const file of files) {
-      if (!ACCEPTED.includes(file.type)) { toast(`"${file.name}" not supported`, 'error'); continue }
-      const maxSize = file.type.startsWith('image/') ? MAX_IMAGE_SIZE : MAX_PDF_SIZE
-      if (file.size > maxSize) { toast(`"${file.name}" exceeds size limit`, 'error'); continue }
+      if (!ACCEPTED.includes(file.type)) {
+        const kind = file.name.split('.').pop()?.toUpperCase() || 'this'
+        toast(`${kind} files are not accepted — send JPG, PNG, WEBP, GIF or PDF`, 'error')
+        continue
+      }
+      const isImage = file.type.startsWith('image/')
+      const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_PDF_SIZE
+      if (file.size > maxSize) {
+        toast(`"${file.name}" is ${formatFileSize(file.size)} — the limit is `
+          + `${formatFileSize(maxSize)} for ${isImage ? 'images' : 'PDFs'}`, 'error')
+        continue
+      }
       setUploading(p => [...p, file.name])
       try {
         await uploadAttachment.mutateAsync({ cardId, file })
         toast(`"${file.name}" uploaded`, 'success')
-      } catch { toast(`Failed to upload "${file.name}"`, 'error') }
+      } catch (err) {
+        console.error('Upload failed:', file.name, file.type, file.size, err)
+        const detail = err instanceof Error ? err.message
+          : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
+          : null
+        toast(detail ? `Could not upload "${file.name}": ${detail}` : `Failed to upload "${file.name}"`, 'error')
+      }
       finally { setUploading(p => p.filter(n => n !== file.name)) }
     }
   }
