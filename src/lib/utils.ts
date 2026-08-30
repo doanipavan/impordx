@@ -380,3 +380,21 @@ export function mergeMaterialCodes(
   ].filter(Boolean).join('\n')
   return [notes?.trim(), codes].filter(Boolean).join('\n\n') || undefined
 }
+
+/**
+ * The reason behind a failed request, ready to show.
+ *
+ * The stage gates say precisely what is missing — "Every item needs a purchase
+ * price in USD — 2 still without one" — and every catch block was throwing that
+ * away and printing "Failed to update status". People were left to guess at a
+ * rule the database was already spelling out.
+ */
+export function errorText(err: unknown): string | null {
+  if (!err) return null
+  if (err instanceof Error) return err.message || null
+  if (typeof err === 'object' && 'message' in err) {
+    const m = (err as { message: unknown }).message
+    return typeof m === 'string' && m ? m : null
+  }
+  return typeof err === 'string' && err ? err : null
+}

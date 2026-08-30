@@ -15,6 +15,9 @@ export interface User {
   email: string
   full_name: string
   role: 'admin' | 'member' | 'viewer'
+  // May send a card from Orders back to Samples. Not tied to role on purpose —
+  // the people who have it do not map onto admin/member (migration 029).
+  can_return_orders?: boolean
   avatar_url?: string
   created_at: string
 }

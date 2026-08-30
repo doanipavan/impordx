@@ -14,6 +14,7 @@ import { BoardType, Card, CardStatus, BOARD_COLUMNS, visibleColumns } from '../.
 import { useAuth } from '../../hooks/useAuth'
 import { useCards, useMoveCard } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
+import { errorText } from '../../lib/utils'
 import { Column } from './Column'
 import { KanbanCard } from './KanbanCard'
 import { CardModal } from '../card/CardModal'
@@ -86,8 +87,9 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
     try {
       await moveCard.mutateAsync({ id: card.id, status: newStatus, board })
       toast(`Moved to "${newStatus}"`, 'success')
-    } catch {
-      toast('Failed to move card', 'error')
+    } catch (err) {
+      // Dragging hits the same gates as the buttons, so it owes the same answer.
+      toast(errorText(err) ?? 'Failed to move card', 'error')
     }
   }
 

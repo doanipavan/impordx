@@ -225,6 +225,29 @@ export function usePromoteToOrder() {
   })
 }
 
+// The way back. Promotion moved the card and left no return, so a card sent to
+// Orders by mistake was stuck there. The permission lives in the database, not
+// here: the button being hidden is a courtesy, the function is the rule.
+export function useReturnToSamples() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .rpc('return_order_to_samples', { p_card: id })
+        .single<Card>()
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: CARDS_QUERY('orders') })
+      qc.invalidateQueries({ queryKey: CARDS_QUERY('samples') })
+      qc.invalidateQueries({ queryKey: ['card', id] })
+      qc.invalidateQueries({ queryKey: ['activity', id] })
+    },
+  })
+}
+
 // PI number and delivery date are DEQI's to supply, but DEQI is the `viewer`
 // role and RLS blocks them from updating cards. This function is the narrow
 // opening: those two columns, on an order, and nothing else.

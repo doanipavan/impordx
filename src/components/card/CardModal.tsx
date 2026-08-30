@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, Trash2, Copy, DollarSign, Package, Layers, Paintbrush, Tag } from 'lucide-react'
 import { Card, BoardType, BOARD_COLUMNS, CardStatus, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS } from '../../types'
-import { useUpdateCard, useMoveCard, useDeleteCard, useCreateCard } from '../../hooks/useCards'
+import { useUpdateCard, useMoveCard, useDeleteCard, useCreateCard, useReturnToSamples } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
@@ -18,7 +18,7 @@ import { PiPanel } from './PiPanel'
 import { EditCardModal } from './EditCardModal'
 import { CardMetaStrip } from './CardMetaStrip'
 import { useRecordView } from '../../hooks/useCardViews'
-import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge, sampleSla } from '../../lib/utils'
+import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge, sampleSla, errorText } from '../../lib/utils'
 
 interface CardModalProps {
   card: Card
@@ -35,6 +35,8 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   const [tab, setTab] = useState<Tab>('details')
   const [side, setSide] = useState<Side>('comments')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmReturn, setConfirmReturn] = useState(false)
+  const returnToSamples = useReturnToSamples()
   const [editing, setEditing] = useState(false)
   const moveCard = useMoveCard()
   const deleteCard = useDeleteCard()
@@ -108,8 +110,20 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
     try {
       await moveCard.mutateAsync({ id: card.id, status: newStatus as CardStatus, board })
       toast(`Moved to "${newStatus}"`, 'success')
-    } catch {
-      toast('Failed to update status', 'error')
+    } catch (err) {
+      // The stage gate already says exactly what is missing. Repeating it is
+      // the difference between a rule people can follow and one they guess at.
+      toast(errorText(err) ?? 'Failed to update status', 'error')
+    }
+  }
+
+  async function handleReturn() {
+    try {
+      const back = await returnToSamples.mutateAsync(card.id)
+      toast(`Back on Samples as ${back?.ref_number ?? 'a sample'}`, 'success')
+      onClose()
+    } catch (err) {
+      toast(errorText(err) ?? 'Failed to send back to Samples', 'error')
     }
   }
 
@@ -291,6 +305,32 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                       </button>
                     ))}
                   </div>
+
+                  {/* The way back off Orders. Hidden for everyone else, but the
+                      rule that matters lives in the database — this is only the
+                      door, not the lock. */}
+                  {board === 'orders' && user?.can_return_orders && (
+                    <div className="mt-3 pt-3 border-t border-border/60">
+                      {!confirmReturn ? (
+                        <button onClick={() => setConfirmReturn(true)}
+                          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                          Send back to Samples
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs">
+                            Back to Samples as{' '}
+                            <span className="font-mono font-semibold">
+                              {(card.ref_number ?? '').replace(/^ORD-/, 'SMP-')}
+                            </span>
+                            , status Approved. Order numbers and prices are kept.
+                          </span>
+                          <Button size="sm" onClick={handleReturn} loading={returnToSamples.isPending}>Yes</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setConfirmReturn(false)}>No</Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
