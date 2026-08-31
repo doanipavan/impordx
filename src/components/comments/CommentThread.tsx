@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment } from 'react'
+import { useState, useRef, useEffect, Fragment } from 'react'
 import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as ImageIcon, Reply, CheckCircle2 } from 'lucide-react'
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
 import { useAttachments, useUploadAttachment, useLinkAttachmentsToComment, getSignedUrl } from '../../hooks/useAttachments'
@@ -52,12 +52,18 @@ export function CommentThread({ cardId }: { cardId: string }) {
   )
 }
 
-function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'Write a comment...' }: {
+function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'Write a comment...', quoteName }: {
   cardId: string
   parentId?: string
   onDone?: () => void
   autoFocus?: boolean
   placeholder?: string
+  // Threads stay one level deep — every reply's parent is the root comment, not
+  // the reply it answers, so the conversation never has to be reassembled from
+  // a tree nobody can see past two levels. Replying to a reply instead opens
+  // starting with that person's name, the same @[Full Name] mentions already
+  // render as a pill, so who it was aimed at survives being flattened.
+  quoteName?: string
 }) {
   const { user } = useAuth()
   const { data: users = [] } = useUsers()
@@ -65,7 +71,7 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   const uploadAttachment = useUploadAttachment()
   const linkAttachments = useLinkAttachmentsToComment()
   const toast = useToast()
-  const [body, setBody] = useState('')
+  const [body, setBody] = useState(quoteName ? `@[${quoteName}] ` : '')
   const [files, setFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -76,6 +82,17 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState<number | null>(null)
   const [mentionIndex, setMentionIndex] = useState(0)
+
+  // Autofocus puts the cursor at position 0 by default, which would land it
+  // before the quoted @[Name] rather than where typing actually continues.
+  useEffect(() => {
+    if (autoFocus && quoteName) {
+      const pos = textareaRef.current?.value.length ?? 0
+      textareaRef.current?.setSelectionRange(pos, pos)
+    }
+    // Only on mount: this composer instance never changes its quoted target.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const mentionMatches = mentionQuery === null ? [] : users
     .filter(u => u.id !== user?.id && u.full_name.toLowerCase().includes(mentionQuery.toLowerCase()))
     .slice(0, 6)
@@ -254,7 +271,14 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
 
 function CommentItem({ comment, cardId, replies = [] }: { comment: Comment; cardId: string; replies?: Comment[] }) {
   const { user } = useAuth()
-  const [replying, setReplying] = useState(false)
+  // Which comment the open composer is answering — the root, or one of its
+  // replies. Either way the post goes in flat, parented to the root: see the
+  // note on CommentComposer's quoteName for why.
+  const [replyTarget, setReplyTarget] = useState<Comment | null>(null)
+
+  function reply(target: Comment) {
+    setReplyTarget(target)
+  }
 
   return (
     // A top-level comment plus its replies is one exchange, so each one closes
@@ -263,8 +287,8 @@ function CommentItem({ comment, cardId, replies = [] }: { comment: Comment; card
       <CommentBody comment={comment} cardId={cardId} isOwn={comment.user_id === user?.id} />
 
       <div className="ml-11 mt-1.5">
-        {!replying && (
-          <button onClick={() => setReplying(true)}
+        {replyTarget?.id !== comment.id && (
+          <button onClick={() => reply(comment)}
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 -ml-2 rounded hover:bg-accent">
             <Reply className="h-3 w-3" />Reply
           </button>
@@ -273,15 +297,30 @@ function CommentItem({ comment, cardId, replies = [] }: { comment: Comment; card
 
       {replies.length > 0 && (
         <div className="ml-11 mt-3 space-y-4 border-l-2 border-border pl-4">
-          {replies.map(reply => (
-            <CommentBody key={reply.id} comment={reply} cardId={cardId} isOwn={reply.user_id === user?.id} />
+          {replies.map(r => (
+            <div key={r.id}>
+              <CommentBody comment={r} cardId={cardId} isOwn={r.user_id === user?.id} />
+              {replyTarget?.id !== r.id && (
+                <button onClick={() => reply(r)}
+                  className="mt-1 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 -ml-2 rounded hover:bg-accent">
+                  <Reply className="h-3 w-3" />Reply
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
 
-      {replying && (
+      {replyTarget && (
         <div className="ml-11 mt-3">
-          <CommentComposer cardId={cardId} parentId={comment.id} autoFocus placeholder={`Reply to ${comment.user?.full_name ?? 'comment'}...`} onDone={() => setReplying(false)} />
+          <CommentComposer
+            cardId={cardId}
+            parentId={comment.id}
+            autoFocus
+            placeholder={`Reply to ${replyTarget.user?.full_name ?? 'comment'}...`}
+            quoteName={replyTarget.id === comment.id ? undefined : replyTarget.user?.full_name}
+            onDone={() => setReplyTarget(null)}
+          />
         </div>
       )}
     </div>
