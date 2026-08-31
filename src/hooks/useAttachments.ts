@@ -13,11 +13,28 @@ function getStoragePath(fileUrl: string): string {
   return match ? match[1] : fileUrl
 }
 
-export async function getSignedUrl(fileUrl: string, expiresIn = 3600): Promise<string> {
+/**
+ * A signed URL for a stored file.
+ *
+ * Pass `downloadAs` to make the browser save it under that name. The anchor's
+ * own `download` attribute cannot do this: it is ignored for cross-origin URLs,
+ * and storage lives on a different host, so every download landed as the
+ * generated key — "1787212201925-j7n6vx4wgr.pdf" instead of the real filename.
+ * Asking storage for the name puts it in Content-Disposition, where the origin
+ * no longer matters.
+ *
+ * Left off for previews and thumbnails on purpose: those are meant to open, not
+ * to be saved.
+ */
+export async function getSignedUrl(
+  fileUrl: string,
+  expiresIn = 3600,
+  downloadAs?: string,
+): Promise<string> {
   const path = getStoragePath(fileUrl)
   const { data, error } = await supabase.storage
     .from('attachments')
-    .createSignedUrl(path, expiresIn)
+    .createSignedUrl(path, expiresIn, downloadAs ? { download: downloadAs } : undefined)
   if (error || !data?.signedUrl) throw error ?? new Error('Failed to sign URL')
   return data.signedUrl
 }

@@ -4,7 +4,7 @@ import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAtt
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
-import { cn, formatFileSize, formatDateTime, formatRelative } from '../../lib/utils'
+import { cn, formatFileSize, formatDateTime, formatRelative, errorText } from '../../lib/utils'
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const MAX_PDF_SIZE = 20 * 1024 * 1024
@@ -79,9 +79,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         toast(`"${file.name}" uploaded`, 'success')
       } catch (err) {
         console.error('Upload failed:', file.name, file.type, file.size, err)
-        const detail = err instanceof Error ? err.message
-          : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
-          : null
+        const detail = errorText(err)
         toast(detail ? `Could not upload "${file.name}": ${detail}` : `Failed to upload "${file.name}"`, 'error')
       }
       finally { setUploading(p => p.filter(n => n !== file.name)) }
@@ -103,10 +101,12 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   async function handleDownload(att: Attachment) {
     setLoadingId(att.id)
     try {
-      const url = await getSignedUrl(att.file_url)
-      const a = document.createElement('a'); a.href = url; a.download = att.filename; a.target = '_blank'
+      // The name comes back in Content-Disposition, so no target and no
+      // download attribute: the browser saves it and stays where it is.
+      const url = await getSignedUrl(att.file_url, 3600, att.filename)
+      const a = document.createElement('a'); a.href = url
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    } catch { toast('Failed to download', 'error') }
+    } catch (err) { toast(errorText(err) ?? 'Failed to download', 'error') }
     finally { setLoadingId(null) }
   }
 
