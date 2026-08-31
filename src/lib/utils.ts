@@ -36,6 +36,27 @@ export function formatDateTime(date: string | null | undefined): string {
   }
 }
 
+// The history tab used to lead with "7 days ago", which answers "how long"
+// but not "which day" — and a card reopened after a week is exactly when
+// someone needs the actual date, not a countdown from now. Weekday first,
+// because "created Monday" reads before "created Aug 25" does.
+export function formatWeekdayDateTime(date: string | null | undefined): string {
+  if (!date) return '—'
+  try {
+    const at = parseISO(date)
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: SAO_PAULO, weekday: 'long' }).format(at)
+    const day = new Intl.DateTimeFormat('en-US', {
+      timeZone: SAO_PAULO, month: 'short', day: 'numeric', year: 'numeric',
+    }).format(at)
+    const time = new Intl.DateTimeFormat('en-US', {
+      timeZone: SAO_PAULO, hour: 'numeric', minute: '2-digit',
+    }).format(at)
+    return `${weekday}, ${day} • ${time} BRT`
+  } catch {
+    return '—'
+  }
+}
+
 export function formatRelative(date: string | null | undefined): string {
   if (!date) return '—'
   try {

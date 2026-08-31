@@ -1,7 +1,7 @@
 import { Clock, ArrowRight, Plus, Trash2, Upload, MessageSquare } from 'lucide-react'
 import { useActivityLog } from '../../hooks/useActivityLog'
 import { Avatar } from '../ui/avatar'
-import { formatRelative, formatDateTime } from '../../lib/utils'
+import { formatRelative, formatWeekdayDateTime } from '../../lib/utils'
 
 const ACTION_CONFIG: Record<string, { label: (e: { old_value?: string; new_value?: string }) => string; icon: typeof Clock; color: string }> = {
   created:          { label: () => 'created this card', icon: Plus, color: 'text-green-600' },
@@ -46,8 +46,12 @@ export function ActivityLog({ cardId }: { cardId: string }) {
                 <span className="font-semibold">{name}</span>{' '}
                 <span className="text-muted-foreground">{config.label(entry)}</span>
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5" title={formatDateTime(entry.created_at)}>
-                {formatRelative(entry.created_at)}
+              {/* The date leads now — "7 days ago" answers how long, not which
+                  day, and reopening a card after a week is exactly when the
+                  actual date is what's needed. The countdown moves to the
+                  hover instead of disappearing. */}
+              <p className="text-xs text-muted-foreground mt-0.5" title={formatRelative(entry.created_at)}>
+                {formatWeekdayDateTime(entry.created_at)}
               </p>
             </div>
           </div>
