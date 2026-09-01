@@ -198,6 +198,40 @@ export function deliveryAnchor(card: {
   return null
 }
 
+export interface DeliverySlip {
+  promised: string   // 'YYYY-MM-DD' — the first date DEQI gave
+  current: string    // 'YYYY-MM-DD' — where it stands now
+  days: number       // positive when it moved later, negative when it came in
+  reason?: string
+}
+
+/**
+ * How far a committed delivery date has moved, or null if it hasn't.
+ *
+ * Shared so the board card, the order panel and anything added later read the
+ * same rule from one place — the Gantt and the card panel each keeping their
+ * own copy of the delivery anchor is what silently dropped two live orders
+ * off the chart.
+ */
+export function deliverySlip(card: {
+  delivery_date?: string | null
+  delivery_date_promised?: string | null
+  delivery_date_change_reason?: string | null
+}): DeliverySlip | null {
+  const promised = card.delivery_date_promised
+  const current = card.delivery_date
+  if (!promised || !current || promised === current) return null
+  const a = calendarDay(promised)
+  const b = calendarDay(current)
+  if (!a || !b) return null
+  return {
+    promised,
+    current,
+    days: Math.round((b.getTime() - a.getTime()) / MS_PER_DAY),
+    reason: card.delivery_date_change_reason ?? undefined,
+  }
+}
+
 export function orderClock(card: {
   sample_approved_at?: string | null
   order_confirmed_at?: string | null

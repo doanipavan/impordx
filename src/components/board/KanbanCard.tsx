@@ -1,10 +1,10 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock } from 'lucide-react'
+import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock, CalendarClock } from 'lucide-react'
 import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla } from '../../lib/utils'
+import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla, deliverySlip } from '../../lib/utils'
 
 interface KanbanCardProps {
   card: Card
@@ -35,6 +35,9 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
   const dueDate = dueDateFor(card)
   const overdue = isOverdue(dueDate)
   const dueSoon = !overdue && isDueSoon(dueDate)
+  // A moved delivery date has to be visible from the board. Finding out only
+  // by opening the card is how a slip goes unnoticed for a week.
+  const slip = deliverySlip(card)
 
   return (
     <div
@@ -48,7 +51,8 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
         'hover:shadow-card-hover hover:border-border/80 transition-all duration-150',
         isDragging || isSortDragging ? 'opacity-40 shadow-modal rotate-1' : '',
         overdue && 'border-l-2 border-l-red-400',
-        sla?.state === 'breached' && 'border-l-2 border-l-red-500'
+        sla?.state === 'breached' && 'border-l-2 border-l-red-500',
+        slip && 'border-l-2 border-l-red-500'
       )}
     >
       {/* Priority + Status */}
@@ -62,6 +66,23 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
           </span>
         )}
       </div>
+
+      {/* The slip sits above the title, not in the footer with the counts: it
+          is the reason to open this card, so it should be read before the name. */}
+      {slip && (
+        <div className="flex items-center gap-1.5 mb-2 rounded-md bg-red-50 border border-red-200 px-2 py-1"
+          title={slip.reason
+            ? `Promised ${formatDate(slip.promised)} — ${slip.reason}`
+            : `Promised ${formatDate(slip.promised)}`}>
+          <CalendarClock className="h-3 w-3 text-red-600 shrink-0" />
+          <span className="text-[10px] font-bold text-red-800 tabular-nums">
+            {slip.days > 0 ? `+${slip.days}d` : `${slip.days}d`}
+          </span>
+          <span className="text-[10px] text-red-700 truncate">
+            was {formatDate(slip.promised)}
+          </span>
+        </div>
+      )}
 
       {/* Title */}
       <p className="text-sm font-medium text-foreground line-clamp-2 mb-2 leading-snug">{card.title}</p>

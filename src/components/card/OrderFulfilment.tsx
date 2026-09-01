@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Card } from '../../types'
-import { orderClock, formatDate, cn, ORDER_LEG_DAYS, OrderClock, LegClock } from '../../lib/utils'
+import { orderClock, formatDate, cn, ORDER_LEG_DAYS, OrderClock, LegClock, deliverySlip } from '../../lib/utils'
 
 // A delivery date is a calendar day, stored as a `date` and never parsed into an
 // instant — that is what keeps it from sliding a day between São Paulo and DEQI.
@@ -44,8 +44,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
   // is attempted, rather than letting the database refuse afterwards.
   const committed = !!card.delivery_date_promised
   const movingDate = committed && !!delivery && delivery !== card.delivery_date
-  const slipped = committed && !!card.delivery_date
-    && card.delivery_date !== card.delivery_date_promised
+  const slip = deliverySlip(card)
 
   function startEditing() {
     setPi(card.pi_number ?? '')
@@ -114,8 +113,11 @@ export function OrderFulfilment({ card }: { card: Card }) {
                 onChange={e => setPi(e.target.value)} />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                {committed ? 'New delivery date' : 'Delivery Date'}
+              {/* The label turns at the moment the act does — while the date
+                  still matches, this is the same field it always was. */}
+              <label className={cn('text-[10px] uppercase tracking-wide',
+                movingDate ? 'text-amber-700 font-semibold' : 'text-muted-foreground')}>
+                {movingDate ? 'New delivery date' : 'Delivery Date'}
               </label>
               <Input className="h-8 text-sm" type="date" value={delivery}
                 onChange={e => setDelivery(e.target.value)} />
@@ -180,20 +182,26 @@ export function OrderFulfilment({ card }: { card: Card }) {
           {/* A slipped date stays visible on the card. A notification gets read
               once and marked away; the promise that was broken should still be
               on screen the next time anyone opens this order. */}
-          {slipped && (
+          {slip && (
             <div className="col-span-2 rounded-md border border-red-300 bg-red-50 p-2.5">
               <p className="text-xs font-semibold text-red-900 flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Delivery moved from {formatDeliveryDate(card.delivery_date_promised)} to {formatDeliveryDate(card.delivery_date)}
+                Delivery moved {slip.days > 0 ? `${slip.days} days later` : `${Math.abs(slip.days)} days earlier`}
               </p>
-              {card.delivery_date_change_reason && (
-                <p className="text-xs text-red-800 mt-1">{card.delivery_date_change_reason}</p>
-              )}
+              {slip.reason && <p className="text-xs text-red-800 mt-1">{slip.reason}</p>}
             </div>
           )}
           <Field label="PI Number" mono value={card.pi_number} missing="Awaiting DEQI" />
-          <Field label="Delivery Date" value={formatDeliveryDate(card.delivery_date)}
-            missing={card.delivery_date ? undefined : 'Awaiting DEQI'} emphasis />
+          {/* The promise is a field of its own, always on screen once it
+              exists — a banner gets read as an alert and scrolled past, while
+              a labelled date is a fact the order carries for good. */}
+          {committed && (
+            <Field label="Promised delivery" value={formatDeliveryDate(card.delivery_date_promised)} />
+          )}
+          <Field label={committed ? 'Current delivery' : 'Delivery Date'}
+            value={formatDeliveryDate(card.delivery_date)}
+            missing={card.delivery_date ? undefined : 'Awaiting DEQI'} emphasis
+            alarm={!!slip} />
           <Field label="Sales order" mono value={card.sales_order} />
           <Field label="Purchase order" mono value={card.purchase_order} />
           {/* Margin. Withheld from the supplier — in the interface only, since
@@ -213,12 +221,13 @@ function cnBox(waiting: boolean) {
     : 'rounded-lg border border-border bg-card p-4'
 }
 
-function Field({ label, value, missing, mono, emphasis }: {
+function Field({ label, value, missing, mono, emphasis, alarm }: {
   label: string
   value?: string
   missing?: string
   mono?: boolean
   emphasis?: boolean
+  alarm?: boolean
 }) {
   const empty = !value || value === '—'
   return (
@@ -235,6 +244,7 @@ function Field({ label, value, missing, mono, emphasis }: {
         <p className={[
           emphasis ? 'text-base font-semibold' : 'text-sm font-medium',
           mono ? 'font-mono' : '',
+          alarm ? 'text-red-700' : '',
         ].join(' ')}>{value}</p>
       )}
     </div>
