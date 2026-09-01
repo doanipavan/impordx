@@ -113,6 +113,14 @@ create trigger cards_guard_delivery_date
 
 -- The RPC is how DEQI writes these two fields — `viewer` cannot update cards
 -- directly. It gains the reason so the trigger above has something to read.
+--
+-- The old three-argument version has to be dropped by hand first. `create or
+-- replace` matches on the argument list, so adding a parameter creates a second
+-- function beside the first rather than replacing it — and PostgREST then
+-- refuses every call with "Could not choose the best candidate function",
+-- which took saving a card down in production until this line existed.
+drop function if exists set_order_delivery_info(uuid, text, date);
+
 create or replace function set_order_delivery_info(
   p_card_id       uuid,
   p_pi_number     text,
