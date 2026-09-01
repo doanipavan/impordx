@@ -56,6 +56,11 @@ export interface Card {
   // Redantex order numbers are ours. delivery_date is a plain 'YYYY-MM-DD'.
   pi_number?: string
   delivery_date?: string
+  // The first date DEQI ever gave, frozen on arrival. The gap between this and
+  // delivery_date is the slip, and it is why both are kept (migration 030).
+  delivery_date_promised?: string
+  delivery_date_changed_at?: string
+  delivery_date_change_reason?: string
   sales_order?: string
   purchase_order?: string
   // Sale value in BRL. Hidden from DEQI in the UI only — see migration 021.

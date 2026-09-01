@@ -255,11 +255,16 @@ export function useSetDeliveryInfo() {
   const qc = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ cardId, piNumber, deliveryDate }: { cardId: string; piNumber: string; deliveryDate: string }) => {
+    mutationFn: async ({ cardId, piNumber, deliveryDate, changeReason }: {
+      cardId: string; piNumber: string; deliveryDate: string; changeReason?: string
+    }) => {
       const { error } = await supabase.rpc('set_order_delivery_info', {
         p_card_id: cardId,
         p_pi_number: piNumber || null,
         p_delivery_date: deliveryDate || null,
+        // Only read by the trigger when the date actually moves off a committed
+        // one; sending it on a first save is harmless and gets cleared there.
+        p_change_reason: changeReason?.trim() || null,
       })
       if (error) throw error
     },

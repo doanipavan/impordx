@@ -32,11 +32,20 @@ export function OrderFulfilment({ card }: { card: Card }) {
   const [salesOrder, setSalesOrder] = useState(card.sales_order ?? '')
   const [purchaseOrder, setPurchaseOrder] = useState(card.purchase_order ?? '')
   const [valueBrl, setValueBrl] = useState(card.value_brl != null ? String(card.value_brl) : '')
+  const [changeReason, setChangeReason] = useState('')
 
   // DEQI supplies the PI and the date; the Redantex order numbers are ours.
   const isDeqi = user?.role === 'viewer'
   const waiting = !card.pi_number || !card.delivery_date
   const clock = orderClock(card)
+
+  // Once a date is committed, changing it is a different act from setting it:
+  // it needs a reason and it wakes people up. The form says so before the save
+  // is attempted, rather than letting the database refuse afterwards.
+  const committed = !!card.delivery_date_promised
+  const movingDate = committed && !!delivery && delivery !== card.delivery_date
+  const slipped = committed && !!card.delivery_date
+    && card.delivery_date !== card.delivery_date_promised
 
   function startEditing() {
     setPi(card.pi_number ?? '')
@@ -44,13 +53,16 @@ export function OrderFulfilment({ card }: { card: Card }) {
     setSalesOrder(card.sales_order ?? '')
     setPurchaseOrder(card.purchase_order ?? '')
     setValueBrl(card.value_brl != null ? String(card.value_brl) : '')
+    setChangeReason('')
     setEditing(true)
   }
 
   async function handleSave() {
     setSaving(true)
     try {
-      await setDeliveryInfo.mutateAsync({ cardId: card.id, piNumber: pi, deliveryDate: delivery })
+      await setDeliveryInfo.mutateAsync({
+        cardId: card.id, piNumber: pi, deliveryDate: delivery, changeReason,
+      })
       if (!isDeqi) {
         // Empty string rather than undefined: supabase-js drops undefined keys,
         // so clearing a number would silently leave the old one in place.
@@ -102,11 +114,34 @@ export function OrderFulfilment({ card }: { card: Card }) {
                 onChange={e => setPi(e.target.value)} />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Delivery Date</label>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                {committed ? 'New delivery date' : 'Delivery Date'}
+              </label>
               <Input className="h-8 text-sm" type="date" value={delivery}
                 onChange={e => setDelivery(e.target.value)} />
+              {/* The promised date sits under the input rather than in a second
+                  box: it is context for what is being typed, not a field. */}
+              {committed && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Promised <strong>{formatDeliveryDate(card.delivery_date_promised)}</strong> — this never changes
+                </p>
+              )}
             </div>
           </div>
+
+          {movingDate && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 space-y-1.5">
+              <label className="block text-[11px] font-semibold text-amber-900">
+                Why is the date moving from {formatDeliveryDate(card.delivery_date)} to {formatDeliveryDate(delivery)}?
+              </label>
+              <Input className="h-8 text-sm bg-white" value={changeReason} autoFocus
+                placeholder="Say what happened — Redantex has to tell the client"
+                onChange={e => setChangeReason(e.target.value)} />
+              <p className="text-[10px] text-amber-800">
+                Saving this notifies Doani, Marcus and Maira.
+              </p>
+            </div>
+          )}
 
           {!isDeqi && (
             <div className="grid grid-cols-2 gap-3">
@@ -131,7 +166,8 @@ export function OrderFulfilment({ card }: { card: Card }) {
           )}
 
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave} loading={saving}>
+            <Button size="sm" onClick={handleSave} loading={saving}
+              disabled={movingDate && !changeReason.trim()}>
               <Check className="h-3.5 w-3.5" /> Save
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
@@ -141,6 +177,20 @@ export function OrderFulfilment({ card }: { card: Card }) {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          {/* A slipped date stays visible on the card. A notification gets read
+              once and marked away; the promise that was broken should still be
+              on screen the next time anyone opens this order. */}
+          {slipped && (
+            <div className="col-span-2 rounded-md border border-red-300 bg-red-50 p-2.5">
+              <p className="text-xs font-semibold text-red-900 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Delivery moved from {formatDeliveryDate(card.delivery_date_promised)} to {formatDeliveryDate(card.delivery_date)}
+              </p>
+              {card.delivery_date_change_reason && (
+                <p className="text-xs text-red-800 mt-1">{card.delivery_date_change_reason}</p>
+              )}
+            </div>
+          )}
           <Field label="PI Number" mono value={card.pi_number} missing="Awaiting DEQI" />
           <Field label="Delivery Date" value={formatDeliveryDate(card.delivery_date)}
             missing={card.delivery_date ? undefined : 'Awaiting DEQI'} emphasis />
