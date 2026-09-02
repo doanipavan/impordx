@@ -1,6 +1,6 @@
 {
-  "name": "RDX Supplier Hub",
-  "short_name": "impordx",
+  "name": "Impo RDX",
+  "short_name": "Impo RDX",
   "description": "Redantex Supplier Hub — manage quotes, samples and orders with DEQI",
   "start_url": "/",
   "display": "standalone",

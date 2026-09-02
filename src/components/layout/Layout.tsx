@@ -157,7 +157,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <button onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
-          <p className="font-semibold text-sm flex-1">DEQI Hub</p>
+          <p className="font-semibold text-sm flex-1">Impo RDX</p>
           <button onClick={() => setShowSearch(true)} className="text-muted-foreground hover:text-foreground">
             <Search className="h-5 w-5" />
           </button>
