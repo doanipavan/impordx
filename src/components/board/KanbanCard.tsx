@@ -4,7 +4,8 @@ import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock, CalendarClock }
 import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla, deliverySlip } from '../../lib/utils'
+import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla, deliverySlip, supplierAccent, supplierNameOf } from '../../lib/utils'
+import { useSupplierFilter } from '../../hooks/useSupplierFilter'
 
 interface KanbanCardProps {
   card: Card
@@ -38,6 +39,9 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
   // A moved delivery date has to be visible from the board. Finding out only
   // by opening the card is how a slip goes unnoticed for a week.
   const slip = deliverySlip(card)
+  // The badge earns its space only when more than one supplier is on screen.
+  const [supplierFilter] = useSupplierFilter()
+  const supplierBadge = supplierFilter === 'all' ? supplierNameOf(card) : undefined
 
   return (
     <div
@@ -93,8 +97,15 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
       )}
 
       {/* Client / Collection */}
-      {(card.client_name || card.collection) && (
+      {(card.client_name || card.collection || supplierBadge) && (
         <div className="flex items-center gap-1.5 mb-2">
+          {/* Only while both suppliers are on screen. Stamping every card with
+              "DEQI" when DEQI is all you are looking at is noise. */}
+          {supplierBadge && (
+            <span className={cn('text-[10px] font-semibold px-1.5 py-0 rounded border', supplierAccent(supplierBadge).chip)}>
+              {supplierBadge}
+            </span>
+          )}
           {card.collection && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{card.collection}</Badge>
           )}

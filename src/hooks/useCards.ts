@@ -16,6 +16,7 @@ export function useCards(board: BoardType) {
         .from('cards')
         .select(`
           *,
+          supplier:suppliers(id, name, short_name),
           salesperson:users!cards_salesperson_id_fkey(id, full_name, email, avatar_url, role, created_at),
           project_manager:users!cards_project_manager_id_fkey(id, full_name, email, avatar_url, role, created_at),
           comments:comments(count),
@@ -62,6 +63,7 @@ export function useCard(id: string) {
         .from('cards')
         .select(`
           *,
+          supplier:suppliers(id, name, short_name),
           salesperson:users!cards_salesperson_id_fkey(id, full_name, email, avatar_url, role, created_at),
           project_manager:users!cards_project_manager_id_fkey(id, full_name, email, avatar_url, role, created_at)
         `)

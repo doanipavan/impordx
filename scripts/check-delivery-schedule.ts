@@ -5,7 +5,10 @@
 // Run it under TZ=Asia/Shanghai too. These are plain calendar days and must not
 // shift with the reader's clock — the supplier reads the same number we do.
 
-import { orderClock, deliveryAnchor, ORDER_LEG_DAYS } from '../src/lib/utils'
+import {
+  orderClock, deliveryAnchor, ORDER_LEG_DAYS,
+  supplierClock, DEFAULT_CLOCK, collectionsFor,
+} from '../src/lib/utils'
 
 let bad = 0
 function check(label: string, got: unknown, want: unknown) {
@@ -61,6 +64,59 @@ check('and the clock agrees', orderClock(awaitingPi)?.anchorDate, '2026-08-25')
 check('anchor kind matches clock',
   deliveryAnchor(awaitingPi)?.kind, orderClock(awaitingPi)?.anchor)
 check('no sample, no PI stamp', deliveryAnchor({ status: 'Purchasing' }), null)
+
+// ---------------------------------------------------------------------------
+// Two suppliers, two anchors.
+//
+// DEQI counts from the sample approval; Sconcept counts from the proforma,
+// because Sconcept quotes far more than it samples and a sample approval there
+// commits to nothing. Both run 60 + 60, so a card that carries the wrong
+// supplier gives a plausible date on the wrong day — which is exactly the kind
+// of error that survives a glance.
+
+const deqi = { supplier: { short_name: 'DEQI' } }
+const scon = { supplier: { short_name: 'Sconcept' } }
+
+check('DEQI clock anchors on the sample',
+  supplierClock('DEQI').anchor, 'sample')
+check('Sconcept clock anchors on the proforma',
+  supplierClock('Sconcept').anchor, 'proforma')
+check('an unknown supplier falls back to DEQI',
+  supplierClock('Nobody').anchor, DEFAULT_CLOCK.anchor)
+check('a missing supplier falls back to DEQI',
+  supplierClock(undefined).anchor, DEFAULT_CLOCK.anchor)
+
+// The case the two rules disagree on: both stamps present.
+const twoStamps = {
+  sample_approved_at: '2026-09-10',
+  order_confirmed_at: '2026-10-01',
+  status: 'Placed',
+}
+check('DEQI reads the sample stamp',
+  orderClock({ ...twoStamps, ...deqi })!.anchorDate, '2026-09-10')
+check('Sconcept reads the proforma stamp',
+  orderClock({ ...twoStamps, ...scon })!.anchorDate, '2026-10-01')
+check('and they land 21 days apart',
+  orderClock({ ...twoStamps, ...scon })!.total.target, '2027-01-29')
+check('DEQI lands earlier',
+  orderClock({ ...twoStamps, ...deqi })!.total.target, '2027-01-08')
+
+// Sconcept with no proforma yet still shows a schedule rather than vanishing
+// from the Gantt — and says which stamp it fell back to.
+const sconNoPi = { sample_approved_at: '2026-09-10', status: 'PI Requested', ...scon }
+check('Sconcept falls back to the sample', orderClock(sconNoPi)?.anchorDate, '2026-09-10')
+check('and reports the fallback', orderClock(sconNoPi)?.anchor, 'sample')
+
+// Both legs are still 60, so the totals stay 120 for either supplier.
+check('Sconcept is still 120 end to end',
+  supplierClock('Sconcept').productionDays + supplierClock('Sconcept').shippingDays, 120)
+
+// Collections belong to the supplier, not to the hub.
+check('DEQI keeps its catalogue', collectionsFor('DEQI').includes('Parma'), true)
+check('Sconcept has no Parma', collectionsFor('Sconcept').includes('Parma'), false)
+// `check` compares with ===, so an array has to be flattened to be compared.
+check('Sconcept quotes custom', collectionsFor('Sconcept').join(','), 'Custom')
+check('no supplier means the full list', collectionsFor(undefined).includes('Parma'), true)
 
 console.log(bad === 0 ? '\nAll good.' : `\n${bad} failure(s).`)
 process.exit(bad === 0 ? 0 : 1)

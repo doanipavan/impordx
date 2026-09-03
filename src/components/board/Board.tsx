@@ -13,6 +13,7 @@ import {
 import { BoardType, Card, CardStatus, BOARD_COLUMNS, visibleColumns } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
 import { useCards, useMoveCard } from '../../hooks/useCards'
+import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
 import { useToast } from '../ui/toast'
 import { errorText } from '../../lib/utils'
 import { Column } from './Column'
@@ -32,6 +33,7 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   const { user } = useAuth()
   const { data: cards = [], isLoading } = useCards(board)
   const moveCard = useMoveCard()
+  const [supplierFilter] = useSupplierFilter()
   const toast = useToast()
   const [activeCard, setActiveCard] = useState<Card | null>(null)
   // Only the id is held. Storing the card object froze it at click time, so
@@ -60,8 +62,11 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   // The supplier never sees Redantex's own intake columns, so a card is
   // simply absent from their board until it reaches a stage that is theirs.
   const columns = visibleColumns(board, user?.role === 'viewer')
+  // The switch above the board and the board itself have to agree, so the
+  // filter is applied once, here, and the counts fall out of it.
+  const inScope = cards.filter((c) => matchesSupplier(c, supplierFilter))
   const cardsByStatus = Object.fromEntries(
-    columns.map((col) => [col, cards.filter((c) => c.status === col)])
+    columns.map((col) => [col, inScope.filter((c) => c.status === col)])
   )
 
   function handleDragStart({ active }: DragStartEvent) {

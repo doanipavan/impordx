@@ -71,6 +71,92 @@ export function formatRelative(date: string | null | undefined): string {
 // in Brazil. 120 days, counted from that approval and from nothing else.
 export const ORDER_LEG_DAYS = 60
 
+/**
+ * A supplier's delivery rule.
+ *
+ * Both suppliers happen to run 60 + 60, but they start counting from different
+ * events: DEQI from the day the sample was approved, Sconcept from the day the
+ * proforma was approved — Sconcept quotes far more than it samples, so a sample
+ * approval is not the moment anything is committed to.
+ *
+ * This stays in code rather than in the suppliers table, for the reason
+ * migration 026 gave and 031 repeats: the rule has already changed three times
+ * in one day, and a stored copy keeps answering with the dead version. It is
+ * also the only version check-delivery-schedule.ts can reach.
+ */
+export interface SupplierClock {
+  /** Which stamp starts the count. */
+  anchor: 'sample' | 'proforma'
+  /** Days for the supplier to have the goods ready. */
+  productionDays: number
+  /** Days from their hands to Brazil. */
+  shippingDays: number
+}
+
+export const SUPPLIER_CLOCKS: Record<string, SupplierClock> = {
+  DEQI: { anchor: 'sample', productionDays: ORDER_LEG_DAYS, shippingDays: ORDER_LEG_DAYS },
+  Sconcept: { anchor: 'proforma', productionDays: ORDER_LEG_DAYS, shippingDays: ORDER_LEG_DAYS },
+}
+
+export const DEFAULT_CLOCK: SupplierClock = SUPPLIER_CLOCKS.DEQI
+
+/**
+ * A supplier's colour.
+ *
+ * Deliberately outside the status palette. Status colour is semantic here —
+ * neutral, amber, green, and red for trouble — so a supplier painted green
+ * would read as "done" on a board where green already means exactly that.
+ * Blue and violet are unspoken for.
+ */
+export interface SupplierAccent {
+  dot: string
+  chip: string
+  bar: string
+  stroke: string
+}
+
+const SUPPLIER_ACCENTS: Record<string, SupplierAccent> = {
+  DEQI: {
+    dot: 'bg-sky-600',
+    chip: 'bg-sky-50 text-sky-700 border-sky-200',
+    bar: 'bg-sky-500',
+    stroke: '#0284c7',
+  },
+  Sconcept: {
+    dot: 'bg-violet-600',
+    chip: 'bg-violet-50 text-violet-700 border-violet-200',
+    bar: 'bg-violet-500',
+    stroke: '#7c3aed',
+  },
+}
+
+const UNKNOWN_ACCENT: SupplierAccent = {
+  dot: 'bg-slate-400',
+  chip: 'bg-slate-50 text-slate-600 border-slate-200',
+  bar: 'bg-slate-400',
+  stroke: '#94a3b8',
+}
+
+export function supplierAccent(shortName?: string | null): SupplierAccent {
+  if (!shortName) return UNKNOWN_ACCENT
+  return SUPPLIER_ACCENTS[shortName] ?? UNKNOWN_ACCENT
+}
+
+/** An unknown supplier reads as DEQI, which is what every card meant before 031. */
+export function supplierClock(shortName?: string | null): SupplierClock {
+  if (!shortName) return DEFAULT_CLOCK
+  return SUPPLIER_CLOCKS[shortName] ?? DEFAULT_CLOCK
+}
+
+/** The short name to read a card's rule from, wherever the card came from. */
+export function supplierNameOf(card: { supplier?: { short_name?: string } | null }): string | undefined {
+  return card.supplier?.short_name
+}
+
+export function clockFor(card: { supplier?: { short_name?: string } | null }): SupplierClock {
+  return supplierClock(supplierNameOf(card))
+}
+
 const MS_PER_DAY = 86_400_000
 
 // 'YYYY-MM-DD' -> a UTC midnight instant. Day counts are done on plain calendar
@@ -180,21 +266,37 @@ export interface DeliveryAnchor {
 /**
  * The day an order's 120 starts counting from.
  *
- * The sample approval is the promise made to the client, so it wins. A quote
- * promoted straight to Orders never had a sample, and falls back to the stamp
- * left at PI Approved.
+ * Which stamp leads depends on the supplier. For DEQI the sample approval is
+ * the promise made to the client, so it wins, and a quote promoted straight to
+ * Orders falls back to the stamp left at PI Approved. Sconcept counts from the
+ * proforma instead, and only falls back to a sample if one happens to exist.
+ *
+ * Either way the fallback is never silent: `kind` reports which stamp was
+ * actually used, and the panel prints it.
  *
  * Every view of the schedule must call this. The card panel and the Gantt each
  * had their own copy of the rule once, and the Gantt was still demanding
  * order_confirmed_at after the panel had moved on — so two live orders sitting
  * in PI Requested simply vanished from the chart.
  */
-export function deliveryAnchor(card: {
-  sample_approved_at?: string | null
-  order_confirmed_at?: string | null
-}): DeliveryAnchor | null {
-  if (card.sample_approved_at) return { date: card.sample_approved_at, kind: 'sample' }
-  if (card.order_confirmed_at) return { date: card.order_confirmed_at, kind: 'confirmation' }
+export function deliveryAnchor(
+  card: {
+    sample_approved_at?: string | null
+    order_confirmed_at?: string | null
+  },
+  clock: SupplierClock = DEFAULT_CLOCK
+): DeliveryAnchor | null {
+  const sample = card.sample_approved_at
+  const proforma = card.order_confirmed_at
+
+  if (clock.anchor === 'proforma') {
+    if (proforma) return { date: proforma, kind: 'confirmation' }
+    if (sample) return { date: sample, kind: 'sample' }
+    return null
+  }
+
+  if (sample) return { date: sample, kind: 'sample' }
+  if (proforma) return { date: proforma, kind: 'confirmation' }
   return null
 }
 
@@ -232,13 +334,17 @@ export function deliverySlip(card: {
   }
 }
 
-export function orderClock(card: {
-  sample_approved_at?: string | null
-  order_confirmed_at?: string | null
-  status?: string
-}): OrderClock | null {
+export function orderClock(
+  card: {
+    sample_approved_at?: string | null
+    order_confirmed_at?: string | null
+    status?: string
+    supplier?: { short_name?: string } | null
+  },
+  clock: SupplierClock = clockFor(card)
+): OrderClock | null {
   const status = card.status ?? ''
-  const found = deliveryAnchor(card)
+  const found = deliveryAnchor(card, clock)
   if (!found) return null
   const { date: anchorDate, kind: anchor } = found
   const start = calendarDay(anchorDate)
@@ -253,26 +359,28 @@ export function orderClock(card: {
   // Status is the truth about which leg is running: goods that are ready have
   // left the factory's hands even if the calendar disagrees.
   const shipping = status === 'Ready to Ship' || status === 'Shipped'
-  const deqiDaysLeft = daysUntil(ORDER_LEG_DAYS)
+  const handover = clock.productionDays
+  const arrival = clock.productionDays + clock.shippingDays
+  const deqiDaysLeft = daysUntil(handover)
   const deqiDone = shipping
 
   return {
     activeLeg: shipping ? 'rdx' : 'deqi',
     anchor,
     anchorDate,
-    total: { daysLeft: daysUntil(ORDER_LEG_DAYS * 2), target: dateAt(ORDER_LEG_DAYS * 2) },
+    total: { daysLeft: daysUntil(arrival), target: dateAt(arrival) },
     deqi: {
       daysLeft: deqiDaysLeft,
-      target: dateAt(ORDER_LEG_DAYS),
+      target: dateAt(handover),
       started: true,
       done: deqiDone,
     },
     rdx: {
       // Before the factory hands over, shipping has its full window untouched.
-      daysLeft: shipping ? daysUntil(ORDER_LEG_DAYS * 2) : ORDER_LEG_DAYS,
-      target: dateAt(ORDER_LEG_DAYS * 2),
+      daysLeft: shipping ? daysUntil(arrival) : clock.shippingDays,
+      target: dateAt(arrival),
       started: shipping,
-      done: status === 'Shipped' && daysUntil(ORDER_LEG_DAYS * 2) >= 0,
+      done: status === 'Shipped' && daysUntil(arrival) >= 0,
     },
   }
 }
@@ -367,6 +475,24 @@ export const OUTSIDE_MATERIALS = [
 export const INSIDE_MATERIALS = OUTSIDE_MATERIALS
 
 export const COLLECTIONS = ['Parma', 'Capri', 'Barcelona', 'Genova', 'Trento', 'Turim', 'Monza', 'Custom']
+
+/**
+ * Collections belong to a supplier, not to Redantex.
+ *
+ * Parma, Capri and the rest are DEQI's catalogue, with DEQI's tooling behind
+ * them. Sconcept is a quoting relationship — far more quotes than samples, and
+ * nothing off a shelf — so it starts with Custom alone and free-text sizes.
+ * Add a named collection here once one actually exists.
+ */
+const SUPPLIER_COLLECTIONS: Record<string, string[]> = {
+  DEQI: COLLECTIONS,
+  Sconcept: ['Custom'],
+}
+
+export function collectionsFor(supplierShortName?: string | null): string[] {
+  if (!supplierShortName) return COLLECTIONS
+  return SUPPLIER_COLLECTIONS[supplierShortName] ?? ['Custom']
+}
 
 // Comprimento x Largura x Altura, in cm. Rendered in the format line items
 // already use, so the RFQ the supplier receives does not change shape.

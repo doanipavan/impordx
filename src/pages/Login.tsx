@@ -40,7 +40,7 @@ export function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img src="/logo.webp" alt="Redantex" className="h-12 mx-auto mb-5 object-contain" />
-          <h1 className="text-xl font-bold tracking-wide text-foreground">RDX — SUPPLIER HUB</h1>
+          <h1 className="text-xl font-bold tracking-wide text-foreground">IMPO RDX</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to your workspace</p>
         </div>
 

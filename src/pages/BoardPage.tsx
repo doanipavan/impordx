@@ -5,6 +5,7 @@ import { Board } from '../components/board/Board'
 import { OrdersGantt } from '../components/board/OrdersGantt'
 import { ExportOrders } from '../components/board/ExportOrders'
 import { ImportCard } from '../components/board/ImportCard'
+import { SupplierSwitch } from '../components/board/SupplierSwitch'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 
@@ -56,6 +57,11 @@ function BoardPage({ board }: { board: BoardType }) {
         </div>
 
         <div className="shrink-0 mr-44 flex items-center gap-2">
+          {/* Scope before contents: which supplier this page is showing is read
+              before anything on the board itself. Renders nothing when there is
+              only one supplier to choose from, which is every supplier login. */}
+          <SupplierSwitch className="mr-1" />
+
           {/* A spec can be typed into a spreadsheet before it is a card, but an
               order is only ever promoted from a quote or a sample. */}
           {board !== 'orders' && user?.role !== 'viewer' && <ImportCard board={board} />}

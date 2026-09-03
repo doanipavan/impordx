@@ -70,7 +70,7 @@ export function Layout({ children }: { children: ReactNode }) {
           )}
           {!collapsed && (
             <div className="flex-1 min-w-0 ml-1">
-              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase">Supplier Hub</p>
+              <p className="text-[10px] font-semibold text-muted-foreground tracking-widest uppercase">Impo RDX</p>
             </div>
           )}
           {!collapsed && (

@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
-import { cn, ORDER_LEG_DAYS, deliveryAnchor } from '../../lib/utils'
+import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
+import { cn, ORDER_LEG_DAYS, deliveryAnchor, clockFor, supplierAccent, supplierNameOf } from '../../lib/utils'
 import { Card } from '../../types'
 
 const DAY = 86_400_000
@@ -64,12 +65,17 @@ function buildRow(card: Card, today: Date): Row | null {
   // Shared with the card panel on purpose. This used to read order_confirmed_at
   // directly, which is only stamped at PI Approved — so an order still waiting
   // on its proforma had no bar at all, however real it was.
-  const anchor = deliveryAnchor(card)
+  //
+  // The rule is also the supplier's, not the hub's: DEQI counts from the sample
+  // approval, Sconcept from the proforma. Reading the clock here rather than
+  // assuming one is the same mistake this comment already describes, one level up.
+  const clock = clockFor(card)
+  const anchor = deliveryAnchor(card, clock)
   const confirmed = calendarDay(anchor?.date)
   if (!confirmed) return null
 
-  const handover = addDays(confirmed, ORDER_LEG_DAYS)
-  const arrival = addDays(confirmed, ORDER_LEG_DAYS * 2)
+  const handover = addDays(confirmed, clock.productionDays)
+  const arrival = addDays(confirmed, clock.productionDays + clock.shippingDays)
   const delivery = calendarDay(card.delivery_date)
   const shipping = card.status === 'Ready to Ship' || card.status === 'Shipped'
 
@@ -89,6 +95,7 @@ export function OrdersGantt() {
   // Shipping to Brazil is Redantex's leg. The supplier sees its own 60 days
   // and nothing past the handover.
   const deqiOnly = user?.role === 'viewer'
+  const [supplierFilter] = useSupplierFilter()
   // Where the order actually was, from the history already being recorded.
   const { data: checkpoints = [] } = useCheckpoints(cards.map(c => c.id))
   const [open, setOpen] = useState(readOpen)
@@ -99,6 +106,7 @@ export function OrdersGantt() {
 
   const rows = useMemo(() => {
     return cards
+      .filter(c => matchesSupplier(c, supplierFilter))
       .map(c => buildRow(c, today))
       .filter((r): r is Row => r !== null)
       // Most urgent first; anything already shipped sinks to the bottom.
@@ -108,7 +116,7 @@ export function OrdersGantt() {
         if (aDone !== bDone) return aDone ? 1 : -1
         return deqiOnly ? a.deqiLeft - b.deqiLeft : a.totalLeft - b.totalLeft
       })
-  }, [cards, today, deqiOnly])
+  }, [cards, today, deqiOnly, supplierFilter])
 
   // The window spans every bar on screen, padded to whole months.
   const { start, end, months } = useMemo(() => {
@@ -253,8 +261,12 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
           so it distinguishes nothing and costs the height of a second line;
           the full reference stays in the tooltip. */}
       <div className="px-2.5 py-2 border-r border-border min-w-0"
-        title={`${row.card.ref_number ?? ''} · counted from ${shortDate(row.confirmed)}`}>
-        <p className="text-[11.5px] font-semibold truncate leading-none">
+        title={`${row.card.ref_number ?? ''} · ${supplierNameOf(row.card) ?? 'supplier unset'} · counted from ${shortDate(row.confirmed)}`}>
+        <p className="text-[11.5px] font-semibold truncate leading-none flex items-center gap-1.5">
+          {/* Which supplier owns this bar, in the one place a bar is named.
+              Two suppliers sharing one time axis is the reason this chart exists. */}
+          <span className={cn('h-2 w-1 rounded-sm shrink-0', supplierAccent(supplierNameOf(row.card)).bar)}
+            aria-hidden="true" />
           {row.card.client_name || row.card.title}
           {row.card.ref_number && (
             <span className="ml-1 font-mono font-normal text-[9px] text-muted-foreground/70 tabular-nums">

@@ -22,11 +22,24 @@ export interface User {
   created_at: string
 }
 
+export interface Supplier {
+  id: string
+  name: string
+  short_name: string
+  active?: boolean
+}
+
 export interface Card {
   id: string
   board: BoardType
   status: CardStatus
   title: string
+  // Who is making this piece. Set by the database (migration 032 defaults it to
+  // DEQI) until the create form offers a picker. It is what the delivery clock
+  // and the collection list are read from — and, in the database, what decides
+  // whether a supplier can see this row at all.
+  supplier_id?: string
+  supplier?: Supplier
   description?: string
   priority: Priority
   value_usd?: number

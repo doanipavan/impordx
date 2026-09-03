@@ -11,7 +11,7 @@ import { Textarea } from '../ui/textarea'
 import { splitMaterialCodes, mergeMaterialCodes } from '../../lib/utils'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
-import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS } from '../../lib/utils'
+import { collectionsFor, supplierNameOf, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS } from '../../lib/utils'
 import { useRedantexUsers } from '../../hooks/useUsers'
 
 const schema = z.object({
@@ -172,7 +172,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
               <Label htmlFor="collection">Collection</Label>
               <Select id="collection" {...register('collection')}>
                 <option value="">— Select —</option>
-                {COLLECTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                {/* DEQI's catalogue is DEQI's. Sconcept quotes custom work. */}
+                {collectionsFor(supplierNameOf(card)).map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>

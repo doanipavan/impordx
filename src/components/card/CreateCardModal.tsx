@@ -14,7 +14,8 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
-import { COLLECTIONS, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize, mergeMaterialCodes } from '../../lib/utils'
+import { collectionsFor, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize, mergeMaterialCodes } from '../../lib/utils'
+import { useSupplierFilter, useSuppliers } from '../../hooks/useSupplierFilter'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -67,6 +68,14 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [queuedFiles, setQueuedFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Which supplier's catalogue this form offers. Reading the scope above the
+  // board keeps the form honest without adding a picker the create flow does
+  // not have yet; 'all' means no supplier was singled out, so the database
+  // default (DEQI) is the one to show.
+  const [supplierFilter] = useSupplierFilter()
+  const { data: suppliers = [] } = useSuppliers()
+  const scopedSupplier = suppliers.find(s => s.id === supplierFilter)?.short_name
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -218,7 +227,10 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
               <Label htmlFor="collection">Collection</Label>
               <Select id="collection" {...register('collection')}>
                 <option value="">— Select —</option>
-                {COLLECTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                {/* Follows the supplier in scope above the board. A card created while
+                    looking at everything falls back to DEQI, which is what the
+                    database defaults the row to (migration 032). */}
+                {collectionsFor(scopedSupplier).map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>
