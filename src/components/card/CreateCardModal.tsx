@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,6 +25,7 @@ const schema = z.object({
   status: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
   client_name: z.string().optional(),
+  supplier_id: z.string().optional(),
   collection: z.string().optional(),
   quantity: z.union([z.number().positive(), z.nan(), z.literal('')]).optional(),
   deadline: z.string().optional(),
@@ -69,21 +70,45 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const [queuedFiles, setQueuedFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Which supplier's catalogue this form offers. Reading the scope above the
-  // board keeps the form honest without adding a picker the create flow does
-  // not have yet; 'all' means no supplier was singled out, so the database
-  // default (DEQI) is the one to show.
+  // Who is making this piece. It decides which catalogue the collection list
+  // offers, which clock the delivery date will run on, and — in the database —
+  // which supplier account can see the card at all. So it is picked here rather
+  // than inherited silently.
   const [supplierFilter] = useSupplierFilter()
   const { data: suppliers = [] } = useSuppliers()
-  const scopedSupplier = suppliers.find(s => s.id === supplierFilter)?.short_name
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { status: initialStatus, priority: 'medium' },
   })
 
   // Picking a listed account hides the free-text box, so only one is ever sent.
   const watchedSalesperson = watch('salesperson_id')
+
+  const chosenSupplierId = watch('supplier_id')
+  const chosenSupplier = suppliers.find(s => s.id === chosenSupplierId)?.short_name
+  const collections = collectionsFor(chosenSupplier)
+
+  // The list arrives after the first render, so the default is set once it does:
+  // whichever supplier the board is scoped to, and DEQI when it is scoped to
+  // all — which is what the database defaults the row to anyway (migration 032).
+  useEffect(() => {
+    if (chosenSupplierId || suppliers.length === 0) return
+    const preferred =
+      suppliers.find(s => s.id === supplierFilter) ??
+      suppliers.find(s => s.short_name === 'DEQI') ??
+      suppliers[0]
+    if (preferred) setValue('supplier_id', preferred.id)
+  }, [suppliers, supplierFilter, chosenSupplierId, setValue])
+
+  // Changing supplier changes the catalogue, so a collection that belonged to
+  // the old one has to go rather than be submitted against the new supplier.
+  const chosenCollection = watch('collection')
+  useEffect(() => {
+    if (chosenCollection && !collections.includes(chosenCollection)) {
+      setValue('collection', '')
+    }
+  }, [collections, chosenCollection, setValue])
 
   function addFiles(files: File[]) {
     const supported = files.filter(f => ACCEPTED.includes(f.type))
@@ -113,6 +138,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         salesperson_name: values.salesperson_id ? undefined : (values.salesperson_name?.trim() || undefined),
         project_manager_id: values.project_manager_id,
         client_name: values.client_name || undefined,
+        supplier_id: values.supplier_id || undefined,
         collection: values.collection || undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
         deadline: values.deadline || undefined,
@@ -217,8 +243,21 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             </div>
           </div>
 
-          {/* Client + Collection */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Supplier + Client + Collection. Supplier sits immediately left of
+              the catalogue it governs, so the dependency is visible. */}
+          <div className={suppliers.length > 1 ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-3'}>
+            {/* Redantex only. A supplier account has one supplier and nothing
+                to choose between, and must not learn that another exists. */}
+            {suppliers.length > 1 && (
+              <div>
+                <Label htmlFor="supplier_id">Supplier</Label>
+                <Select id="supplier_id" {...register('supplier_id')}>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.short_name}</option>
+                  ))}
+                </Select>
+              </div>
+            )}
             <div>
               <Label htmlFor="client_name">Client Name</Label>
               <Input id="client_name" placeholder="e.g. Lize Joias" {...register('client_name')} />
@@ -227,10 +266,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
               <Label htmlFor="collection">Collection</Label>
               <Select id="collection" {...register('collection')}>
                 <option value="">— Select —</option>
-                {/* Follows the supplier in scope above the board. A card created while
-                    looking at everything falls back to DEQI, which is what the
-                    database defaults the row to (migration 032). */}
-                {collectionsFor(scopedSupplier).map(c => <option key={c} value={c}>{c}</option>)}
+                {collections.map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>
