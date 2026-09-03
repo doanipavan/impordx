@@ -32,6 +32,24 @@ const resumo = []
 
 await db.connect()
 
+// Todas as tabelas têm de vir do MESMO instante.
+//
+// Sem isto cada tabela é lida num momento diferente, e quem estiver usando o
+// hub durante a cópia deixa o backup incoerente. Aconteceu de verdade: em
+// 03/09 um card foi promovido a pedido entre a leitura de `cards` e a de
+// `activity_logs`, e o backup saiu com cinco linhas de histórico a menos.
+//
+// Naquele caso o estrago foi nenhum — histórico é só acréscimo. O sentido
+// perigoso é o outro: um card gravado entre a leitura de `card_items` e a de
+// `cards` produz itens órfãos, ou um card sem os itens. Um backup incoerente é
+// pior do que não ter backup, porque parece que tem.
+//
+// REPEATABLE READ congela uma visão do banco no primeiro select e serve todos
+// os seguintes a partir dela. Não tranca nada nem atrasa quem está usando o
+// hub — o Postgres guarda as versões antigas das linhas para esta transação.
+await db.query('begin isolation level repeatable read')
+await db.query('set transaction read only')
+
 // ---------- 1. as tabelas ----------------------------------------------------
 const { rows: tabelas } = await db.query(`
   select tablename from pg_tables where schemaname = 'public' order by tablename
@@ -94,6 +112,12 @@ const { rows: objetos } = await db.query(`
   select name, (metadata->>'size')::bigint as bytes
     from storage.objects where bucket_id = 'attachments' order by name
 `)
+
+// A visão congelada já cumpriu o papel: tudo o que veio do banco veio do mesmo
+// instante. Os downloads levam minutos e não precisam dela — um arquivo no
+// storage não muda depois de enviado — e uma transação de leitura aberta por
+// muito tempo segura a limpeza interna do Postgres à toa.
+await db.query('commit')
 
 let baixados = 0, bytes = 0
 if (!base) {
