@@ -182,6 +182,23 @@ export function visibleColumns(board: BoardType, isSupplier: boolean): CardStatu
   return isSupplier ? all.filter(s => !REDANTEX_ONLY_STATUSES.includes(s)) : all
 }
 
+/**
+ * What a status is called on screen.
+ *
+ * 'Under DEQI Revision' was named when DEQI was the only supplier there was.
+ * Sconcept sees that column too, and it would be reading the other supplier's
+ * name off its own board — the one fact the isolation exists to withhold. So
+ * the stored value stays (it is in a CHECK constraint and on 32 rows) and only
+ * the label moves: each supplier sees its own name, Redantex sees whichever
+ * supplier the card belongs to.
+ */
+export function statusLabel(status: CardStatus, supplierShortName?: string | null): string {
+  if (status === 'Under DEQI Revision') {
+    return `Under ${supplierShortName || 'Supplier'} Revision`
+  }
+  return status
+}
+
 export const BOARD_LABELS: Record<BoardType, string> = {
   quotes: 'Quotes',
   samples: 'Samples',

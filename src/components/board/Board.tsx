@@ -13,7 +13,7 @@ import {
 import { BoardType, Card, CardStatus, BOARD_COLUMNS, visibleColumns } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
 import { useCards, useMoveCard } from '../../hooks/useCards'
-import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
+import { useSupplierFilter, matchesSupplier, useSuppliers } from '../../hooks/useSupplierFilter'
 import { useToast } from '../ui/toast'
 import { errorText } from '../../lib/utils'
 import { Column } from './Column'
@@ -34,6 +34,7 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   const { data: cards = [], isLoading } = useCards(board)
   const moveCard = useMoveCard()
   const [supplierFilter] = useSupplierFilter()
+  const { data: suppliers = [] } = useSuppliers()
   const toast = useToast()
   const [activeCard, setActiveCard] = useState<Card | null>(null)
   // Only the id is held. Storing the card object froze it at click time, so
@@ -65,6 +66,13 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   // The switch above the board and the board itself have to agree, so the
   // filter is applied once, here, and the counts fall out of it.
   const inScope = cards.filter((c) => matchesSupplier(c, supplierFilter))
+
+  // 'Under DEQI Revision' is a column Sconcept sees too. Nobody should read the
+  // other supplier's name off their own board, so the column carries whichever
+  // supplier is in scope — and stays generic when that is more than one.
+  const scopedSupplierName = suppliers.find((s) => s.id === supplierFilter)?.short_name
+  const ownSupplierName = suppliers.length === 1 ? suppliers[0].short_name : undefined
+  const columnSupplierName = ownSupplierName ?? scopedSupplierName
   const cardsByStatus = Object.fromEntries(
     columns.map((col) => [col, inScope.filter((c) => c.status === col)])
   )
@@ -122,6 +130,7 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
               status={status}
               cards={cardsByStatus[status] ?? []}
               board={board}
+              supplierName={columnSupplierName}
               onCardClick={(c) => setOpenCardId(c.id)}
               onAddCard={() => setCreating(status)}
             />

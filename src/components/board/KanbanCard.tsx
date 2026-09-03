@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock, CalendarClock } from 'lucide-react'
-import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel } from '../../types'
+import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel, statusLabel } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla, deliverySlip, supplierAccent, supplierNameOf } from '../../lib/utils'
@@ -62,7 +62,7 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
       {/* Priority + Status */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[card.status])}>
-          {card.status}
+          {statusLabel(card.status, supplierNameOf(card))}
         </span>
         {card.priority !== 'low' && (
           <span className={cn('text-xs font-medium', PRIORITY_COLORS[card.priority])}>

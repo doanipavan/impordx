@@ -9,6 +9,7 @@ import {
   orderClock, deliveryAnchor, ORDER_LEG_DAYS,
   supplierClock, DEFAULT_CLOCK, collectionsFor,
 } from '../src/lib/utils'
+import { statusLabel } from '../src/types'
 
 let bad = 0
 function check(label: string, got: unknown, want: unknown) {
@@ -117,6 +118,20 @@ check('Sconcept has no Parma', collectionsFor('Sconcept').includes('Parma'), fal
 // `check` compares with ===, so an array has to be flattened to be compared.
 check('Sconcept quotes custom', collectionsFor('Sconcept').join(','), 'Custom')
 check('no supplier means the full list', collectionsFor(undefined).includes('Parma'), true)
+
+// 'Under DEQI Revision' is a samples column every supplier sees. Sconcept must
+// not read DEQI's name off its own board — that is the one fact the isolation
+// exists to withhold, and it would be leaking through a column header.
+check('Sconcept sees its own name',
+  statusLabel('Under DEQI Revision', 'Sconcept'), 'Under Sconcept Revision')
+check('DEQI still sees its own',
+  statusLabel('Under DEQI Revision', 'DEQI'), 'Under DEQI Revision')
+check('no supplier reads generic',
+  statusLabel('Under DEQI Revision', undefined), 'Under Supplier Revision')
+check('every other status is untouched',
+  statusLabel('Approved', 'Sconcept'), 'Approved')
+check('including on orders',
+  statusLabel('In Production', 'Sconcept'), 'In Production')
 
 console.log(bad === 0 ? '\nAll good.' : `\n${bad} failure(s).`)
 process.exit(bad === 0 ? 0 : 1)

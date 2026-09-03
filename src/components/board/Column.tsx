@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react'
-import { Card, CardStatus, BoardType } from '../../types'
+import { Card, CardStatus, BoardType, statusLabel } from '../../types'
 import { KanbanCard } from './KanbanCard'
 import { cn } from '../../lib/utils'
 
@@ -25,11 +25,14 @@ interface ColumnProps {
   status: CardStatus
   cards: Card[]
   board: BoardType
+  /** Whose name a supplier-specific column carries. See statusLabel. */
+  supplierName?: string | null
   onCardClick: (card: Card) => void
   onAddCard: () => void
 }
 
-export function Column({ status, cards, onCardClick, onAddCard }: ColumnProps) {
+export function Column({ status, cards, supplierName, onCardClick, onAddCard }: ColumnProps) {
+  const label = statusLabel(status, supplierName)
   const { setNodeRef, isOver } = useDroppable({ id: status })
 
   return (
@@ -37,7 +40,7 @@ export function Column({ status, cards, onCardClick, onAddCard }: ColumnProps) {
       {/* Column header */}
       <div className={cn('flex items-center justify-between mb-3 px-1')}>
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">{status}</h3>
+          <h3 className="text-sm font-semibold text-foreground">{label}</h3>
           <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 font-medium">
             {cards.length}
           </span>
@@ -45,7 +48,7 @@ export function Column({ status, cards, onCardClick, onAddCard }: ColumnProps) {
         <button
           onClick={onAddCard}
           className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title={`Add card to ${status}`}
+          title={`Add card to ${label}`}
         >
           <Plus className="h-3.5 w-3.5" />
         </button>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X, Trash2, Copy, DollarSign, Package, Layers, Paintbrush, Tag } from 'lucide-react'
-import { Card, BoardType, BOARD_COLUMNS, CardStatus, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS } from '../../types'
+import { Card, BoardType, BOARD_COLUMNS, CardStatus, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS , statusLabel } from '../../types'
 import { useUpdateCard, useMoveCard, useDeleteCard, useCreateCard, useReturnToSamples } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
@@ -18,7 +18,7 @@ import { PiPanel } from './PiPanel'
 import { EditCardModal } from './EditCardModal'
 import { CardMetaStrip } from './CardMetaStrip'
 import { useRecordView } from '../../hooks/useCardViews'
-import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge, sampleSla, errorText } from '../../lib/utils'
+import { cn, formatDate, formatCurrency, isOverdue, dueDateFor, cardAge, sampleSla, errorText, supplierNameOf } from '../../lib/utils'
 
 interface CardModalProps {
   card: Card
@@ -158,7 +158,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[card.status])}>
-                {card.status}
+                {statusLabel(card.status, supplierNameOf(card))}
               </span>
               <span className={cn('text-xs font-medium', PRIORITY_COLORS[card.priority])}>
                 {PRIORITY_LABELS[card.priority]}
