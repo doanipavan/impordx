@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock, CalendarClock } from 'lucide-react'
-import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel, statusLabel } from '../../types'
+import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel, statusLabel, isPlacedOnward } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { cn, formatDate, isOverdue, isDueSoon, dueDateFor, cardAge, sampleSla, deliverySlip, supplierAccent, supplierNameOf } from '../../lib/utils'
@@ -42,6 +42,12 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
   // The badge earns its space only when more than one supplier is on screen.
   const [supplierFilter] = useSupplierFilter()
   const supplierBadge = supplierFilter === 'all' ? supplierNameOf(card) : undefined
+  const isOrder = card.board === 'orders'
+  // Só existe a partir de Placed — antes disso a proforma ainda não foi
+  // emitida, e nenhum dos oito pedidos anteriores a essa etapa tem uma.
+  const proforma = isOrder && isPlacedOnward(card.status)
+    ? card.pi_number?.trim() || undefined
+    : undefined
 
   return (
     <div
@@ -59,15 +65,28 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
         slip && 'border-l-2 border-l-red-500'
       )}
     >
-      {/* Priority + Status */}
+      {/* Status, e à direita o que importa neste board.
+          Prioridade responde "qual eu faço primeiro" — pergunta de fila, e um
+          pedido já colocado saiu da fila: o preço está fechado e o relógio
+          corre sozinho. No lugar dela entra a proforma, que é por onde o
+          pedido é procurado no ERP e cobrado do fornecedor. */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', STATUS_COLORS[card.status])}>
           {statusLabel(card.status, supplierNameOf(card))}
         </span>
-        {card.priority !== 'low' && (
-          <span className={cn('text-xs font-medium', PRIORITY_COLORS[card.priority])}>
-            {PRIORITY_FLAGS[card.priority]} {card.priority}
-          </span>
+        {isOrder ? (
+          proforma && (
+            <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[45%] shrink-0"
+              title={`Proforma ${proforma}`}>
+              {proforma}
+            </span>
+          )
+        ) : (
+          card.priority !== 'low' && (
+            <span className={cn('text-xs font-medium', PRIORITY_COLORS[card.priority])}>
+              {PRIORITY_FLAGS[card.priority]} {card.priority}
+            </span>
+          )
         )}
       </div>
 
