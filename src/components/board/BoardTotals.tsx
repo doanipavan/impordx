@@ -81,10 +81,14 @@ export function BoardTotals({ board }: { board: BoardType }) {
 /**
  * A figure whose coverage is partial says so.
  *
- * On Samples the supplier has usually not quoted yet — 31 of 33 items carry no
- * purchase price. Printing the bare sum would read as the cost of the board
- * instead of the cost of two lines, and it would look precise while being
- * wrong. The count under it is the only thing that makes the number readable.
+ * On Samples the supplier has usually not quoted yet — 18 of 24 line items
+ * carry no purchase price. Printing the bare sum would read as the cost of the
+ * board instead of the cost of six lines, and it would look precise while being
+ * wrong by a factor of four.
+ *
+ * The word "partial" comes first on purpose: "6 of 24" alone was read as a
+ * count of something rather than as a warning about the number above it. The
+ * reader has to know the figure is incomplete before they read the figure.
  */
 function Figure({ value, covered, of, emphasis }: {
   value: string
@@ -101,7 +105,7 @@ function Figure({ value, covered, of, emphasis }: {
           'block text-[9px] font-normal leading-tight',
           covered === 0 ? 'text-muted-foreground/80' : 'text-amber-600'
         )}>
-          {covered} of {of} priced
+          partial · {covered} of {of}
         </span>
       )}
       {!partial && emphasis && <span className="block text-[9px] leading-tight">&nbsp;</span>}
