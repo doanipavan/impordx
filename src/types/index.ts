@@ -177,6 +177,16 @@ export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {
 // business seeing a card before it is a real order with a PI to raise.
 export const REDANTEX_ONLY_STATUSES = ['Purchasing', 'Commercial']
 
+// From Placed onward the supplier's price is settled: the proforma is approved
+// and the number stops moving. Before it, everything is still a proposal. The
+// two halves are counted separately because they answer different questions —
+// one is money committed, the other is money at stake.
+export const PLACED_ONWARD: CardStatus[] = ['Placed', 'In Production', 'Ready to Ship', 'Shipped']
+
+export function isPlacedOnward(status: CardStatus): boolean {
+  return PLACED_ONWARD.includes(status)
+}
+
 export function visibleColumns(board: BoardType, isSupplier: boolean): CardStatus[] {
   const all = BOARD_COLUMNS[board]
   return isSupplier ? all.filter(s => !REDANTEX_ONLY_STATUSES.includes(s)) : all

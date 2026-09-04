@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { salePrice } from '../lib/utils'
 
 export interface CardItem {
   id: string
@@ -23,15 +24,6 @@ export interface CardItem {
   notes?: string
   sort_order: number
   created_at: string
-}
-
-// PostgREST returns a one-to-one embed as an object, but the same query can
-// come back as a single-element array depending on how it reads the keys, and
-// guessing wrong would drop every price without a word.
-function salePrice(pricing: unknown): number | undefined {
-  const row = Array.isArray(pricing) ? pricing[0] : pricing
-  const value = (row as { sale_price_brl?: number } | null | undefined)?.sale_price_brl
-  return value == null ? undefined : Number(value)
 }
 
 export function useCardItems(cardId: string) {

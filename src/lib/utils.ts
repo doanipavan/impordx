@@ -579,3 +579,12 @@ export function errorText(err: unknown): string | null {
   }
   return typeof err === 'string' && err ? err : null
 }
+
+// PostgREST devolve um embed um-para-um às vezes como objeto e às vezes como
+// array de um elemento, dependendo de como lê as chaves. Errar o palpite
+// derrubaria todo preço de venda sem dizer nada.
+export function salePrice(pricing: unknown): number | undefined {
+  const row = Array.isArray(pricing) ? pricing[0] : pricing
+  const value = (row as { sale_price_brl?: number } | null | undefined)?.sale_price_brl
+  return value == null ? undefined : Number(value)
+}
