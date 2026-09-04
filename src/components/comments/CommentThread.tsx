@@ -3,6 +3,7 @@ import { Edit2, Trash2, Check, X, MessageSquare, Paperclip, FileText, Image as I
 import { useComments, useAddComment, useEditComment, useDeleteComment } from '../../hooks/useComments'
 import { useAttachments, useUploadAttachment, useLinkAttachmentsToComment, getSignedUrl } from '../../hooks/useAttachments'
 import { useUsers } from '../../hooks/useUsers'
+import { useSuppliers } from '../../hooks/useSupplierFilter'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Avatar } from '../ui/avatar'
@@ -382,6 +383,9 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
     catch { toast('Failed to delete comment', 'error') }
   }
 
+  // A lista é curta e vem em cache; serve só para trocar o id do fornecedor
+  // pelo nome dele no crachá.
+  const { data: suppliers = [] } = useSuppliers()
   const author = comment.user
   if (!author) return null
 
@@ -399,7 +403,12 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
           <span className="text-sm font-semibold">{author.full_name}</span>
           <span className={cn('text-xs px-1.5 py-0.5 rounded font-medium',
             author.role === 'admin' || author.role === 'member' ? 'bg-primary/10 text-primary' : 'bg-amber-50 text-amber-700')}>
-            {author.role === 'viewer' ? 'DEQI' : 'Redantex'}
+            {/* Era "DEQI" fixo, de quando havia um fornecedor só — o que fazia
+                um comentário do Carlos aparecer assinado com o nome do outro
+                fornecedor. Agora sai o nome de quem realmente escreveu. */}
+            {author.role === 'viewer'
+              ? (suppliers.find(s => s.id === author.supplier_id)?.short_name ?? 'Supplier')
+              : 'Redantex'}
           </span>
           <span className="text-xs text-muted-foreground" title={formatRelative(comment.created_at)}>
             {formatDateTime(comment.created_at)}

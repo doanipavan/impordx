@@ -228,7 +228,8 @@ export function OrdersGantt() {
               backgroundImage: 'repeating-linear-gradient(45deg, transparent 0 2px, rgba(124,58,237,.30) 2px 4px)',
             }}
             label="Sample" />
-          <Key className="bg-amber-100 border-amber-500" label={deqiOnly ? 'In production' : 'DEQI · production'} />
+          <Key className="bg-amber-100 border-amber-500"
+            label={deqiOnly ? 'In production' : 'Supplier · production'} />
           {!deqiOnly && <Key className="bg-slate-200 border-slate-400" label="RDX · to Brazil" />}
           <Key className="bg-green-100 border-green-600" label={deqiOnly ? 'Ready' : 'Done'} />
           <Key className="bg-red-100 border-red-500" label="Overdue" />
@@ -494,7 +495,11 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
           )}
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
             style={{ width: `${deqiWidth}%` }}>
-            <span className="text-[9px] font-bold tracking-wide px-1 truncate">DEQI</span>
+            {/* O nome de quem produz esta peça, não o de quem produzia tudo
+                quando havia um fornecedor só. */}
+            <span className="text-[9px] font-bold tracking-wide px-1 truncate">
+              {supplierNameOf(row.card) ?? 'Supplier'}
+            </span>
           </div>
           {!deqiOnly && (
             <>

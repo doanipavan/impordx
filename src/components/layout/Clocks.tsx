@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { cn } from '../../lib/utils'
 
-// Redantex and DEQI run eleven hours apart, so "why hasn't she replied" is
-// usually "it is 2am there" — and the calendar date is often not even the same
-// day, which is how a meeting gets booked for the wrong one.
+// Redantex and the factories run eleven hours apart, so "why hasn't she
+// replied" is usually "it is 2am there" — and the calendar date is often not
+// even the same day, which is how a meeting gets booked for the wrong one.
+//
+// The clock is named for the place, not for the supplier. It was "DEQI" when
+// DEQI was the only one; with two suppliers a company name on a clock says
+// something false about who else shares that hour.
 const ZONES = [
   { key: 'br', label: 'São Paulo', tz: 'America/Sao_Paulo' },
-  { key: 'cn', label: 'DEQI', tz: 'Asia/Shanghai' },
+  { key: 'cn', label: 'China', tz: 'Asia/Shanghai' },
 ] as const
 
 function readZone(tz: string, now: Date) {

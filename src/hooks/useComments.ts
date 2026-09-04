@@ -12,7 +12,7 @@ export function useComments(cardId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('comments')
-        .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
+        .select('*, user:users(id, full_name, email, avatar_url, role, created_at, supplier_id)')
         .eq('card_id', cardId)
         .order('created_at', { ascending: true })
       if (error) throw error
@@ -48,7 +48,7 @@ export function useAddComment() {
       const { data, error } = await supabase
         .from('comments')
         .insert({ card_id: cardId, user_id: user!.id, body, parent_id: parentId ?? null })
-        .select('*, user:users(id, full_name, email, avatar_url, role, created_at)')
+        .select('*, user:users(id, full_name, email, avatar_url, role, created_at, supplier_id)')
         .single()
       if (error) throw error
       return { comment: data as Comment, mentionedUserIds }

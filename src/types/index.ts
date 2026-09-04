@@ -18,6 +18,9 @@ export interface User {
   // May send a card from Orders back to Samples. Not tied to role on purpose —
   // the people who have it do not map onto admin/member (migration 029).
   can_return_orders?: boolean
+  // Qual fornecedor esta pessoa representa. Preenchido só para `viewer`
+  // (migração 031); é o que diz o nome no crachá de um comentário.
+  supplier_id?: string
   avatar_url?: string
   created_at: string
 }
