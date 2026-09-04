@@ -8,6 +8,7 @@
 import {
   orderClock, deliveryAnchor, ORDER_LEG_DAYS,
   supplierClock, DEFAULT_CLOCK, collectionsFor,
+  errorText,
 } from '../src/lib/utils'
 import { statusLabel } from '../src/types'
 
@@ -132,6 +133,26 @@ check('every other status is untouched',
   statusLabel('Approved', 'Sconcept'), 'Approved')
 check('including on orders',
   statusLabel('In Production', 'Sconcept'), 'In Production')
+
+
+// As duas falhas que um usuário não deve ler no original. A segunda é a que o
+// Carlos recebeu ao tentar criar um card em 04/09.
+check('recusa de política vira frase',
+  errorText({ code: '42501', message: 'new row violates row-level security policy for table "cards"' }),
+  'You do not have permission for this — ask Redantex to do it')
+check('recusa sem código, pelo texto',
+  errorText(new Error('new row violates row-level security policy')),
+  'You do not have permission for this — ask Redantex to do it')
+check('rede caída vira frase',
+  errorText(new TypeError('Load failed')),
+  'The connection dropped before this could be saved — check your internet and try again')
+check('e o equivalente no Chrome',
+  errorText(new TypeError('Failed to fetch')),
+  'The connection dropped before this could be saved — check your internet and try again')
+check('erro normal passa intacto',
+  errorText(new Error('Purchase order number is required before leaving Purchasing')),
+  'Purchase order number is required before leaving Purchasing')
+check('nada continua nada', errorText(null), null)
 
 console.log(bad === 0 ? '\nAll good.' : `\n${bad} failure(s).`)
 process.exit(bad === 0 ? 0 : 1)

@@ -28,7 +28,8 @@ interface ColumnProps {
   /** Whose name a supplier-specific column carries. See statusLabel. */
   supplierName?: string | null
   onCardClick: (card: Card) => void
-  onAddCard: () => void
+  /** Ausente quando quem olha não pode criar card. */
+  onAddCard?: () => void
 }
 
 export function Column({ status, cards, supplierName, onCardClick, onAddCard }: ColumnProps) {
@@ -45,13 +46,15 @@ export function Column({ status, cards, supplierName, onCardClick, onAddCard }: 
             {cards.length}
           </span>
         </div>
-        <button
-          onClick={onAddCard}
-          className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title={`Add card to ${label}`}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        {onAddCard && (
+          <button
+            onClick={onAddCard}
+            className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title={`Add card to ${label}`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Cards area */}

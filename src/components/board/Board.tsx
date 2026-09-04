@@ -63,6 +63,11 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   // The supplier never sees Redantex's own intake columns, so a card is
   // simply absent from their board until it reaches a stage that is theirs.
   const columns = visibleColumns(board, user?.role === 'viewer')
+  // Criar card é da Redantex. A regra sempre foi essa no banco (031), mas o
+  // botão era mostrado a todos — e um fornecedor que clica nele recebe uma
+  // recusa que não explica nada. Um botão que nunca pode funcionar é pior do
+  // que botão nenhum.
+  const canCreate = user?.role === 'admin' || user?.role === 'member'
   // The switch above the board and the board itself have to agree, so the
   // filter is applied once, here, and the counts fall out of it.
   const inScope = cards.filter((c) => matchesSupplier(c, supplierFilter))
@@ -132,22 +137,24 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
               board={board}
               supplierName={columnSupplierName}
               onCardClick={(c) => setOpenCardId(c.id)}
-              onAddCard={() => setCreating(status)}
+              onAddCard={canCreate ? () => setCreating(status) : undefined}
             />
           ))}
 
           {/* Add column shortcut */}
-          <div className="flex items-start pt-0.5 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCreating(columns[0])}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-4 w-4" />
-              New card
-            </Button>
-          </div>
+          {canCreate && (
+            <div className="flex items-start pt-0.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCreating(columns[0])}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="h-4 w-4" />
+                New card
+              </Button>
+            </div>
+          )}
         </div>
 
         <DragOverlay>

@@ -570,14 +570,40 @@ export function mergeMaterialCodes(
  * away and printing "Failed to update status". People were left to guess at a
  * rule the database was already spelling out.
  */
+/**
+ * Duas falhas que o usuário não deve ler no original.
+ *
+ * `42501` é a recusa da política de segurança do Postgres. Chega como "new row
+ * violates row-level security policy for table cards", que descreve a mecânica
+ * e não o que a pessoa fez de errado.
+ *
+ * "Load failed" é o que o Safari diz quando a requisição não chegou ao
+ * servidor — rede caída, aba suspensa no celular, bloqueador. Não é erro do
+ * hub, e mandar alguém procurar defeito no formulário é mandá-lo para o lugar
+ * errado. Carlos recebeu exatamente essa, tentando criar um card que a regra
+ * nunca teria deixado passar de qualquer forma.
+ */
+function friendlyError(code: string | undefined, message: string): string {
+  if (code === '42501' || /row-level security/i.test(message)) {
+    return 'You do not have permission for this — ask Redantex to do it'
+  }
+  if (/^(TypeError: )?Load failed$/i.test(message.trim()) || /Failed to fetch/i.test(message)) {
+    return 'The connection dropped before this could be saved — check your internet and try again'
+  }
+  return message
+}
+
 export function errorText(err: unknown): string | null {
   if (!err) return null
-  if (err instanceof Error) return err.message || null
+  const code = typeof err === 'object' && err && 'code' in err
+    ? String((err as { code: unknown }).code)
+    : undefined
+  if (err instanceof Error) return err.message ? friendlyError(code, err.message) : null
   if (typeof err === 'object' && 'message' in err) {
     const m = (err as { message: unknown }).message
-    return typeof m === 'string' && m ? m : null
+    return typeof m === 'string' && m ? friendlyError(code, m) : null
   }
-  return typeof err === 'string' && err ? err : null
+  return typeof err === 'string' && err ? friendlyError(code, err) : null
 }
 
 // PostgREST devolve um embed um-para-um às vezes como objeto e às vezes como
