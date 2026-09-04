@@ -98,6 +98,11 @@ function formatBrl(value: number | null | undefined): string {
   return value == null ? '—' : `R$ ${value.toFixed(2).replace('.', ',')}`
 }
 
+// A imagem de um item é para ser vista na tabela, então só os formatos que o
+// navegador desenha. Vídeo não entra aqui — instrução vai em Attachments.
+const ITEM_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+const ITEM_FILE_MAX = 20 * 1024 * 1024
+
 export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const { user } = useAuth()
   // The sale price is the sell side of the margin. DEQI must never see it —
@@ -185,6 +190,19 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
       let file_name: string | undefined
 
       if (customFile) {
+        // O seletor pede "image/*", que inclui o HEIC das fotos de iPhone. O
+        // bucket agora recusa o que não sabe mostrar (migração 034), e sem esta
+        // checagem a recusa chegaria como erro cru depois do upload inteiro.
+        if (!ITEM_FILE_TYPES.includes(customFile.type)) {
+          const kind = customFile.name.split('.').pop()?.toUpperCase() || 'this'
+          toast(`${kind} files are not accepted — send JPG, PNG, WEBP or PDF`, 'error')
+          return
+        }
+        if (customFile.size > ITEM_FILE_MAX) {
+          toast(`"${customFile.name}" is ${formatFileSize(customFile.size)} — the limit is `
+            + `${formatFileSize(ITEM_FILE_MAX)}`, 'error')
+          return
+        }
         setUploadingFile(true)
         // Keep the original name in file_name only — the storage key is derived
         // so spaces and accents in the filename can't break the upload.

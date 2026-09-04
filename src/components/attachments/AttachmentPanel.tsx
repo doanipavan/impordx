@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, DragEvent } from 'react'
-import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle } from 'lucide-react'
+import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle, Video } from 'lucide-react'
 import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAttachment, useReviewAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
@@ -8,7 +8,20 @@ import { cn, formatFileSize, formatDateTime, formatRelative, errorText } from '.
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const MAX_PDF_SIZE = 20 * 1024 * 1024
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+// Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês.
+// 50 MB é o teto do plano da Supabase — pedir mais só produziria uma falha
+// confusa no upload. É cerca de um a três minutos de vídeo de celular.
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024
+const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
+const ACCEPTED = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf',
+  ...VIDEO_TYPES,
+]
+
+function isVideoType(type: string) {
+  return type.startsWith('video/')
+}
 
 export function AttachmentPanel({ cardId }: { cardId: string }) {
   const { data: attachments = [], isLoading } = useAttachments(cardId)
@@ -23,7 +36,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
-  const [preview, setPreview] = useState<string | null>(null)
+  // Guarda o tipo junto com a URL: o mesmo botão de olho agora abre uma
+  // imagem ou um vídeo, e o modal precisa saber qual desenhar.
+  const [preview, setPreview] = useState<{ url: string; video: boolean } | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [approvalNote, setApprovalNote] = useState('')
@@ -63,14 +78,17 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
     for (const file of files) {
       if (!ACCEPTED.includes(file.type)) {
         const kind = file.name.split('.').pop()?.toUpperCase() || 'this'
-        toast(`${kind} files are not accepted — send JPG, PNG, WEBP, GIF or PDF`, 'error')
+        toast(`${kind} files are not accepted — send JPG, PNG, WEBP, GIF, PDF, MP4 or MOV`, 'error')
         continue
       }
       const isImage = file.type.startsWith('image/')
-      const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_PDF_SIZE
+      const isVideo = isVideoType(file.type)
+      const maxSize = isVideo ? MAX_VIDEO_SIZE : isImage ? MAX_IMAGE_SIZE : MAX_PDF_SIZE
+      const what = isVideo ? 'videos' : isImage ? 'images' : 'PDFs'
       if (file.size > maxSize) {
         toast(`"${file.name}" is ${formatFileSize(file.size)} — the limit is `
-          + `${formatFileSize(maxSize)} for ${isImage ? 'images' : 'PDFs'}`, 'error')
+          + `${formatFileSize(maxSize)} for ${what}`
+          + (isVideo ? '. Trim it or export at a lower resolution.' : ''), 'error')
         continue
       }
       setUploading(p => [...p, file.name])
@@ -93,7 +111,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
   async function handlePreview(att: Attachment) {
     setLoadingId(att.id)
-    try { setPreview(await getSignedUrl(att.file_url)) }
+    try { setPreview({ url: await getSignedUrl(att.file_url), video: isVideoType(att.file_type) }) }
     catch { toast('Failed to load preview', 'error') }
     finally { setLoadingId(null) }
   }
@@ -181,7 +199,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
               </button>
             ) : (
               <div className="h-10 w-10 bg-green-50 rounded flex items-center justify-center shrink-0">
-                {approvedAtt.file_type.startsWith('image/') ? <ImageIcon className="h-5 w-5 text-green-600" /> : <FileText className="h-5 w-5 text-green-600" />}
+                {approvedAtt.file_type.startsWith('image/') ? <ImageIcon className="h-5 w-5 text-green-600" />
+                  : isVideoType(approvedAtt.file_type) ? <Video className="h-5 w-5 text-green-600" />
+                  : <FileText className="h-5 w-5 text-green-600" />}
               </div>
             )}
             <div className="flex-1 min-w-0">
@@ -226,7 +246,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
       >
         <Upload className="h-6 w-6 mx-auto mb-1.5 text-muted-foreground" />
         <p className="text-sm font-medium">Drop files here or click to upload</p>
-        <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WEBP, PDF — max 10 MB per image, 20 MB per PDF</p>
+        <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WEBP, PDF, MP4, MOV — max 10 MB per image, 20 MB per PDF, 50 MB per video</p>
         <input ref={inputRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
           onChange={e => uploadFiles(Array.from(e.target.files ?? []))} />
       </div>
@@ -262,13 +282,18 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                 <div key={att.id} className="flex gap-3 group relative">
                   <div className={cn(
                     'h-9 w-9 rounded-full border-2 border-background flex items-center justify-center shrink-0 z-10 mt-0.5',
-                    isApproved ? 'bg-green-100' : isImage ? 'bg-blue-100' : 'bg-amber-100'
+                    isApproved ? 'bg-green-100'
+                      : isImage ? 'bg-blue-100'
+                      : isVideoType(att.file_type) ? 'bg-violet-100'
+                      : 'bg-amber-100'
                   )}>
                     {isApproved
                       ? <CheckCircle2 className="h-4 w-4 text-green-600" />
                       : isImage
                         ? <ImageIcon className="h-4 w-4 text-blue-600" />
-                        : <FileText className="h-4 w-4 text-amber-600" />
+                        : isVideoType(att.file_type)
+                          ? <Video className="h-4 w-4 text-violet-600" />
+                          : <FileText className="h-4 w-4 text-amber-600" />
                     }
                   </div>
 
@@ -324,7 +349,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                             </button>
                           </>
                         )}
-                        {isImage && (
+                        {(isImage || isVideoType(att.file_type)) && (
                           <button onClick={() => handlePreview(att)} disabled={isLoading}
                             className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
                             <Eye className="h-3.5 w-3.5" />
@@ -448,7 +473,18 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
       {preview && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setPreview(null)}>
           <button className="absolute top-4 right-4 text-white"><X className="h-6 w-6" /></button>
-          <img src={preview} alt="Preview" className="max-h-[90vh] max-w-[90vw] object-contain rounded" onClick={e => e.stopPropagation()} />
+          {preview.video ? (
+            // `controls` sem `autoplay`: o vídeo é instrução, e quem abriu
+            // decide quando começa. Um .mov que o navegador não saiba tocar cai
+            // na mensagem abaixo em vez de mostrar um retângulo preto mudo.
+            <video src={preview.url} controls playsInline
+              className="max-h-[90vh] max-w-[90vw] rounded bg-black"
+              onClick={e => e.stopPropagation()}>
+              Este navegador não consegue tocar este vídeo — baixe o arquivo.
+            </video>
+          ) : (
+            <img src={preview.url} alt="Preview" className="max-h-[90vh] max-w-[90vw] object-contain rounded" onClick={e => e.stopPropagation()} />
+          )}
         </div>
       )}
     </div>

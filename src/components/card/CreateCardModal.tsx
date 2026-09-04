@@ -58,8 +58,14 @@ interface CreateCardModalProps {
   onClose: () => void
 }
 
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
-const MAX_FILE_SIZE = 20 * 1024 * 1024
+const ACCEPTED = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf',
+  'video/mp4', 'video/webm', 'video/quicktime',
+]
+// 50 MB é o teto do bucket, e vale para qualquer tipo — um número menor aqui
+// só recusaria vídeo que o servidor aceitaria.
+const MAX_FILE_SIZE = 50 * 1024 * 1024
 
 export function CreateCardModal({ board, initialStatus, onClose }: CreateCardModalProps) {
   const createCard = useCreateCard()
@@ -114,11 +120,11 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
     const supported = files.filter(f => ACCEPTED.includes(f.type))
     const unsupported = files.filter(f => !ACCEPTED.includes(f.type))
     if (unsupported.length) {
-      toast(`Not supported: ${unsupported.map(f => f.name).join(', ')} — JPG, PNG, WEBP or PDF only`, 'error')
+      toast(`Not supported: ${unsupported.map(f => f.name).join(', ')} — JPG, PNG, WEBP, PDF, MP4 or MOV only`, 'error')
     }
     const tooBig = supported.filter(f => f.size > MAX_FILE_SIZE)
     if (tooBig.length) {
-      toast(`Too large: ${tooBig.map(f => f.name).join(', ')} — 20 MB max`, 'error')
+      toast(`Too large: ${tooBig.map(f => f.name).join(', ')} — 50 MB max`, 'error')
     }
     setQueuedFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_FILE_SIZE)])
   }

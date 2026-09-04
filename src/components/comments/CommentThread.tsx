@@ -11,7 +11,14 @@ import { Textarea } from '../ui/textarea'
 import { formatRelative, formatDateTime, cn, formatFileSize } from '../../lib/utils'
 import { Comment, User } from '../../types'
 
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+const ACCEPTED = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf',
+  'video/mp4', 'video/webm', 'video/quicktime',
+]
+// O bucket recusa acima de 50 MB. Sem este limite aqui a recusa chegaria como
+// erro cru do servidor, depois de o arquivo inteiro ter subido.
+const MAX_SIZE = 50 * 1024 * 1024
 // Mentions are stored inline as @[Full Name] so we can render them as pills
 // and resolve them back to user ids without a separate rich-text model.
 const MENTION_PATTERN = /@\[([^\]]+)\]/g
@@ -98,10 +105,14 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
     .slice(0, 6)
 
   function addFiles(incoming: File[]) {
-    const valid = incoming.filter(f => ACCEPTED.includes(f.type))
     const invalid = incoming.filter(f => !ACCEPTED.includes(f.type))
     if (invalid.length) toast(`${invalid.length} unsupported file(s) skipped`, 'error')
-    setFiles(prev => [...prev, ...valid])
+    const supported = incoming.filter(f => ACCEPTED.includes(f.type))
+    const tooBig = supported.filter(f => f.size > MAX_SIZE)
+    for (const f of tooBig) {
+      toast(`"${f.name}" is ${formatFileSize(f.size)} — the limit is ${formatFileSize(MAX_SIZE)}`, 'error')
+    }
+    setFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_SIZE)])
   }
 
   function handleBodyChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
