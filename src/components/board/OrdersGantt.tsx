@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, X, ExternalLink } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
 import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
-import { cn, ORDER_LEG_DAYS, deliveryAnchor, clockFor, supplierAccent, supplierNameOf } from '../../lib/utils'
+import { cn, ORDER_LEG_DAYS, deliveryAnchor, clockFor, supplierAccent, supplierNameOf, deliverySlip } from '../../lib/utils'
 import { Card } from '../../types'
 
 const DAY = 86_400_000
@@ -99,6 +100,9 @@ export function OrdersGantt() {
   // Where the order actually was, from the history already being recorded.
   const { data: checkpoints = [] } = useCheckpoints(cards.map(c => c.id))
   const [open, setOpen] = useState(readOpen)
+  // Qual negócio está em foco. Null = o quadro inteiro.
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const navigate = useNavigate()
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
 
@@ -118,13 +122,19 @@ export function OrdersGantt() {
       })
   }, [cards, today, deqiOnly, supplierFilter])
 
+  // Focar é filtrar: a janela de tempo abaixo é derivada das linhas visíveis,
+  // então reduzir a uma linha faz o gráfico se abrir sobre ela sozinho. Um
+  // zoom escrito à parte seria uma segunda régua para as duas discordarem.
+  const focused = focusId ? rows.find(r => r.card.id === focusId) ?? null : null
+  const drawn = focused ? [focused] : rows
+
   // The window spans every bar on screen, padded to whole months.
   const { start, end, months } = useMemo(() => {
-    const starts = rows.map(r => r.confirmed.getTime())
+    const starts = drawn.map(r => r.confirmed.getTime())
     // Delivery dates count toward the range: a date DEQI commits to beyond day
     // 120 is the one most worth seeing, and it would fall off the right edge.
     const finish = (r: Row) => (deqiOnly ? r.handover : r.arrival).getTime()
-    const ends = rows.flatMap(r => r.delivery ? [finish(r), r.delivery.getTime()] : [finish(r)])
+    const ends = drawn.flatMap(r => r.delivery ? [finish(r), r.delivery.getTime()] : [finish(r)])
     const min = new Date(Math.min(today.getTime(), ...(starts.length ? starts : [today.getTime()])))
     const max = new Date(Math.max(today.getTime(), ...(ends.length ? ends : [addDays(today, 120).getTime()])))
 
@@ -138,7 +148,7 @@ export function OrdersGantt() {
       cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1))
     }
     return { start: from, end: to, months: list }
-  }, [rows, today, deqiOnly])
+  }, [drawn, today, deqiOnly])
 
   const pct = (date: Date) => ((date.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100
 
@@ -155,7 +165,7 @@ export function OrdersGantt() {
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [open, rows, start, end, today]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, drawn, start, end, today]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggle() {
     setOpen(o => {
@@ -177,6 +187,17 @@ export function OrdersGantt() {
         <span className="text-[11px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
           {rows.length} {rows.length === 1 ? 'order' : 'orders'}
         </span>
+
+        {/* Sair do foco tem de estar sempre visível: um gráfico que mostra uma
+            linha só, sem dizer por quê, parece um gráfico quebrado. */}
+        {focused && (
+          <button onClick={() => setFocusId(null)}
+            className="flex items-center gap-1 text-[11px] font-semibold text-primary
+                       bg-primary/10 hover:bg-primary/20 rounded-full pl-2 pr-1.5 py-0.5 transition-colors">
+            {focused.card.client_name || focused.card.title}
+            <X className="h-3 w-3" />
+          </button>
+        )}
 
         <div className="ml-auto hidden md:flex items-center gap-3.5">
           <Key className="bg-amber-100 border-amber-500" label={deqiOnly ? 'In production' : 'DEQI · production'} />
@@ -205,10 +226,18 @@ export function OrdersGantt() {
               </div>
             </div>
 
-            {rows.map(row => (
+            {drawn.map(row => (
               <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} deqiOnly={deqiOnly}
-                checkpoints={checkpoints.filter(c => c.card_id === row.card.id)} />
+                checkpoints={checkpoints.filter(c => c.card_id === row.card.id)}
+                focused={!!focused}
+                onFocus={() => setFocusId(focused ? null : row.card.id)}
+                onOpenCard={row.card.ref_number
+                  ? () => navigate(`/orders/${row.card.ref_number}`)
+                  : undefined} />
             ))}
+
+            {/* O detalhe do negócio em foco, embaixo da própria barra. */}
+            {focused && <FocusDetail row={focused} deqiOnly={deqiOnly} />}
 
             {/* today */}
             {todayX !== null && (
@@ -229,8 +258,98 @@ export function OrdersGantt() {
   )
 }
 
-function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
+
+/**
+ * O negócio em foco, escrito por extenso.
+ *
+ * A barra diz quando; isto diz o quê. Sem ele, dar zoom mostraria a mesma
+ * barra maior — e maior não é mais informação.
+ *
+ * Só datas e prazos: preço não entra aqui, porque o gráfico é uma das poucas
+ * telas que a Ashley e o Carlos também abrem, e a régua de tempo não deve
+ * carregar o que a régua de dinheiro protege.
+ */
+function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) {
+  const slip = deliverySlip(row.card)
+  const clock = clockFor(row.card)
+  const anchor = deliveryAnchor(row.card, clock)
+
+  const facts: Array<{ k: string; v: string; tone?: 'late' | 'ok' }> = [
+    { k: 'Reference', v: row.card.ref_number ?? '—' },
+    { k: 'Supplier', v: supplierNameOf(row.card) ?? '—' },
+    { k: 'Status', v: row.card.status },
+    {
+      k: anchor?.kind === 'sample' ? 'Sample approved' : 'Proforma approved',
+      v: shortDate(row.confirmed),
+    },
+    { k: `Ready (day ${clock.productionDays})`, v: shortDate(row.handover) },
+  ]
+
+  if (!deqiOnly) {
+    facts.push({
+      k: `Lands in Brazil (day ${clock.productionDays + clock.shippingDays})`,
+      v: shortDate(row.arrival),
+    })
+  }
+
+  if (row.delivery) {
+    facts.push({
+      k: 'Supplier says',
+      v: shortDate(row.delivery),
+      tone: row.missedPromise ? 'late' : 'ok',
+    })
+  }
+
+  const left = deqiOnly ? row.deqiLeft : row.totalLeft
+  facts.push({
+    k: 'Days left',
+    v: left < 0 ? `${Math.abs(left)} overdue` : String(left),
+    tone: left < 0 ? 'late' : undefined,
+  })
+
+  return (
+    <div className="grid border-b border-border/60 bg-muted/30"
+      style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
+      <div className="px-2.5 py-2 border-r border-border" />
+      <div className="px-3 py-2.5">
+        <dl className="flex flex-wrap gap-x-6 gap-y-2">
+          {facts.map(f => (
+            <div key={f.k} className="min-w-0">
+              <dt className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground leading-tight">
+                {f.k}
+              </dt>
+              <dd className={cn('text-[11.5px] font-semibold tabular-nums leading-tight',
+                f.tone === 'late' ? 'text-red-600' : f.tone === 'ok' ? 'text-green-600' : 'text-foreground')}>
+                {f.v}
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        {/* A data que escorregou é o motivo de alguém estar olhando este card. */}
+        {slip && (() => {
+          // deliverySlip só devolve datas que já parseou, mas um `!` aqui
+          // trocaria um campo estranho por uma exceção — e uma exceção neste
+          // ponto leva o board inteiro, não só esta linha.
+          const promised = calendarDay(slip.promised)
+          return (
+            <p className="mt-2 text-[10.5px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 inline-block">
+              Moved {slip.days > 0 ? `+${slip.days}` : slip.days} days
+              {promised ? ` from ${shortDate(promised)}` : ''}
+              {slip.reason ? ` — ${slip.reason}` : ''}
+            </p>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, onOpenCard }: {
   row: Row; months: number; pct: (d: Date) => number; deqiOnly: boolean; checkpoints: Checkpoint[]
+  focused: boolean
+  onFocus: () => void
+  onOpenCard?: () => void
 }) {
   const left = pct(row.confirmed)
   const right = pct(deqiOnly ? row.handover : row.arrival)
@@ -260,23 +379,48 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints }: {
       {/* Client and number on one line. The prefix is ORD-2026- on every row,
           so it distinguishes nothing and costs the height of a second line;
           the full reference stays in the tooltip. */}
-      <div className="px-2.5 py-2 border-r border-border min-w-0"
-        title={`${row.card.ref_number ?? ''} · ${supplierNameOf(row.card) ?? 'supplier unset'} · counted from ${shortDate(row.confirmed)}`}>
-        <p className="text-[11.5px] font-semibold truncate leading-none flex items-center gap-1.5">
+      {/* O nome abre o card; a faixa do tempo dá zoom. Dois alvos separados,
+          porque são duas intenções diferentes — e um clique que faz as duas
+          coisas sempre faz a errada. */}
+      <div className="px-2.5 py-2 border-r border-border min-w-0">
+        <button
+          type="button"
+          onClick={onOpenCard}
+          disabled={!onOpenCard}
+          title={onOpenCard
+            ? `Open ${row.card.ref_number} · ${supplierNameOf(row.card) ?? 'supplier unset'} · counted from ${shortDate(row.confirmed)}`
+            : 'This order has no reference number yet'}
+          className={cn(
+            'group/name w-full text-left text-[11.5px] font-semibold truncate leading-none',
+            'flex items-center gap-1.5 rounded-sm',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary',
+            onOpenCard && 'hover:text-primary cursor-pointer'
+          )}>
           {/* Which supplier owns this bar, in the one place a bar is named.
               Two suppliers sharing one time axis is the reason this chart exists. */}
           <span className={cn('h-2 w-1 rounded-sm shrink-0', supplierAccent(supplierNameOf(row.card)).bar)}
             aria-hidden="true" />
-          {row.card.client_name || row.card.title}
+          <span className="truncate">{row.card.client_name || row.card.title}</span>
           {row.card.ref_number && (
-            <span className="ml-1 font-mono font-normal text-[9px] text-muted-foreground/70 tabular-nums">
+            <span className="font-mono font-normal text-[9px] text-muted-foreground/70 tabular-nums">
               {shortRef(row.card.ref_number)}
             </span>
           )}
-        </p>
+          {onOpenCard && (
+            <ExternalLink className="h-2.5 w-2.5 shrink-0 ml-auto opacity-0 group-hover/name:opacity-70 transition-opacity" />
+          )}
+        </button>
       </div>
 
-      <div className="relative py-2">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onFocus}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFocus() } }}
+        title={focused ? 'Back to every order' : 'Zoom in on this order'}
+        className="relative py-2 cursor-zoom-in focus-visible:outline focus-visible:outline-2
+                   focus-visible:outline-primary focus-visible:-outline-offset-2"
+        style={focused ? { cursor: 'zoom-out' } : undefined}>
         {/* month gridlines */}
         <div className="absolute inset-0 flex pointer-events-none">
           {Array.from({ length: months }).map((_, i) => (
