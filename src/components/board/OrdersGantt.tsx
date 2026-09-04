@@ -28,6 +28,16 @@ function calendarDay(ymd?: string): Date | null {
   return new Date(Date.UTC(y, m - 1, d))
 }
 
+// Um instante vira o dia em que ele caiu em São Paulo. `slice(0,10)` daria o
+// dia em UTC, e um card criado às 22h de Brasília nasceria "amanhã".
+function saoPauloDay(iso?: string | null): Date | null {
+  if (!iso) return null
+  try {
+    return calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' })
+      .format(new Date(iso)))
+  } catch { return null }
+}
+
 function todayInSaoPaulo(): Date {
   return calendarDay(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()))!
 }
@@ -51,6 +61,9 @@ function shortDate(date: Date) {
 
 interface Row {
   card: Card
+  /** Quando a peça entrou em amostra. Null quando nunca foi uma. */
+  sampleStart: Date | null
+  sampleDays: number | null
   confirmed: Date
   handover: Date   // day 60 — DEQI hands over
   arrival: Date    // day 120 — lands in Brazil
@@ -72,16 +85,25 @@ function buildRow(card: Card, today: Date): Row | null {
   // assuming one is the same mistake this comment already describes, one level up.
   const clock = clockFor(card)
   const anchor = deliveryAnchor(card, clock)
-  const confirmed = calendarDay(anchor?.date)
-  if (!confirmed) return null
+  const confirmed = anchor ? calendarDay(anchor.date) : null
+  if (!anchor || !confirmed) return null
 
   const handover = addDays(confirmed, clock.productionDays)
   const arrival = addDays(confirmed, clock.productionDays + clock.shippingDays)
   const delivery = calendarDay(card.delivery_date)
   const shipping = card.status === 'Ready to Ship' || card.status === 'Shipped'
 
+  // A fase de amostra só existe se o relógio estiver ancorado numa aprovação de
+  // amostra. Ancorado na proforma, não houve amostra a desenhar — e inventar
+  // uma faixa a partir da criação do card seria desenhar outra coisa.
+  const bornOn = anchor.kind === 'sample' ? saoPauloDay(card.created_at) : null
+  const sampleStart = bornOn && bornOn < confirmed ? bornOn : null
+
   return {
-    card, confirmed, handover, arrival, delivery, shipping,
+    card,
+    sampleStart,
+    sampleDays: sampleStart ? daysBetween(sampleStart, confirmed) : null,
+    confirmed, handover, arrival, delivery, shipping,
     shipped: card.status === 'Shipped',
     totalLeft: daysBetween(today, arrival),
     deqiLeft: daysBetween(today, handover),
@@ -130,7 +152,7 @@ export function OrdersGantt() {
 
   // The window spans every bar on screen, padded to whole months.
   const { start, end, months } = useMemo(() => {
-    const starts = drawn.map(r => r.confirmed.getTime())
+    const starts = drawn.map(r => (r.sampleStart ?? r.confirmed).getTime())
     // Delivery dates count toward the range: a date DEQI commits to beyond day
     // 120 is the one most worth seeing, and it would fall off the right edge.
     const finish = (r: Row) => (deqiOnly ? r.handover : r.arrival).getTime()
@@ -200,6 +222,12 @@ export function OrdersGantt() {
         )}
 
         <div className="ml-auto hidden md:flex items-center gap-3.5">
+          <Key className="border-violet-400"
+            style={{
+              backgroundColor: 'rgb(237 233 246)',
+              backgroundImage: 'repeating-linear-gradient(45deg, transparent 0 2px, rgba(124,58,237,.30) 2px 4px)',
+            }}
+            label="Sample" />
           <Key className="bg-amber-100 border-amber-500" label={deqiOnly ? 'In production' : 'DEQI · production'} />
           {!deqiOnly && <Key className="bg-slate-200 border-slate-400" label="RDX · to Brazil" />}
           <Key className="bg-green-100 border-green-600" label={deqiOnly ? 'Ready' : 'Done'} />
@@ -292,6 +320,15 @@ function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) {
     })
   }
 
+  // A faixa listrada no gráfico é honesta e minúscula. O número dela mora aqui,
+  // que é onde ele pode ser lido.
+  if (row.sampleStart && row.sampleDays != null) {
+    facts.splice(3, 0, {
+      k: 'In sample',
+      v: `${row.sampleDays} ${row.sampleDays === 1 ? 'day' : 'days'}`,
+    })
+  }
+
   if (row.delivery) {
     facts.push({
       k: 'Supplier says',
@@ -351,10 +388,19 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
   onFocus: () => void
   onOpenCard?: () => void
 }) {
-  const left = pct(row.confirmed)
+  // A barra começa na amostra quando houve uma. Tudo em proporção verdadeira:
+  // seis dias de amostra ao lado de cento e vinte de pedido são um fio, e é
+  // isso mesmo que eles são. O número legível fica no painel de detalhe, em
+  // texto — uma largura mínima deixaria dois dias e dezesseis parecerem iguais,
+  // num gráfico cujo eixo inteiro é o tempo.
+  const anchorX = pct(row.confirmed)
+  const left = row.sampleStart ? pct(row.sampleStart) : anchorX
   const right = pct(deqiOnly ? row.handover : row.arrival)
   const mid = pct(row.handover)
-  const deqiWidth = deqiOnly ? 100 : ((mid - left) / (right - left)) * 100
+  const span = right - left
+  const sampleWidth = span > 0 ? ((anchorX - left) / span) * 100 : 0
+  const rest = 100 - sampleWidth
+  const deqiWidth = deqiOnly ? rest : (span > 0 ? ((mid - anchorX) / span) * 100 : rest)
 
   const deqiState = row.shipping ? 'done' : row.deqiLeft < 0 ? 'late' : 'deqi'
   const rdxState = row.shipped ? 'done' : row.totalLeft < 0 ? 'late' : 'rdx'
@@ -431,6 +477,21 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
         <div className="absolute top-1/2 -translate-y-1/2 h-3 rounded-sm border border-border flex overflow-hidden"
           style={{ left: `${left}%`, width: `${right - left}%` }}
           title={`${shortDate(row.confirmed)} → ${shortDate(deqiOnly ? row.handover : row.arrival)}`}>
+          {/* Listras, não uma quinta cor: a paleta já diz espera / andamento /
+              pronto / atrasado, e a amostra não é nenhuma das quatro — é a fase
+              anterior a todas elas. Textura separa sem competir. */}
+          {row.sampleStart && sampleWidth > 0 && (
+            <div
+              className="h-full min-w-0 border-r border-card"
+              style={{
+                width: `${sampleWidth}%`,
+                backgroundColor: 'rgb(237 233 246)',
+                backgroundImage:
+                  'repeating-linear-gradient(45deg, transparent 0 2px, rgba(124,58,237,.30) 2px 4px)',
+              }}
+              title={`${row.sampleDays} days in sample · ${shortDate(row.sampleStart)} → ${shortDate(row.confirmed)}`}
+            />
+          )}
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
             style={{ width: `${deqiWidth}%` }}>
             <span className="text-[9px] font-bold tracking-wide px-1 truncate">DEQI</span>
@@ -439,7 +500,7 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
             <>
               <div className="w-px bg-card" />
               <div className={cn('h-full flex items-center justify-center min-w-0', segment[rdxState])}
-                style={{ width: `${100 - deqiWidth}%` }}>
+                style={{ width: `${rest - deqiWidth}%` }}>
                 <span className="text-[9px] font-bold tracking-wide px-1 truncate">RDX</span>
               </div>
             </>
@@ -467,8 +528,10 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
         {/* the date DEQI committed to */}
         {row.delivery && (
           <div
-            className={cn('absolute top-1/2 h-2 w-2 rotate-45 rounded-[2px] bg-card border-2 z-10',
-              row.missedPromise ? 'border-red-500' : 'border-foreground')}
+            className={cn('absolute top-1/2 h-2.5 w-2.5 rounded-[2px] border-2 z-10 shadow-sm',
+              row.missedPromise
+                ? 'border-red-600 bg-red-100'
+                : 'border-foreground bg-card')}
             style={{ left: `${pct(row.delivery)}%`, transform: 'translate(-50%, -50%) rotate(45deg)' }}
             title={row.missedPromise
               ? `DEQI gave ${shortDate(row.delivery)} — past the ${ORDER_LEG_DAYS}-day window`
@@ -487,10 +550,10 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
   )
 }
 
-function Key({ className, label }: { className: string; label: string }) {
+function Key({ className, label, style }: { className: string; label: string; style?: React.CSSProperties }) {
   return (
     <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      <i className={cn('block h-1.5 w-4 rounded-sm border', className)} />
+      <i className={cn('block h-1.5 w-4 rounded-sm border', className)} style={style} />
       {label}
     </span>
   )
