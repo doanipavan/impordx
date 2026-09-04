@@ -6,7 +6,7 @@ import { OrdersGantt } from '../components/board/OrdersGantt'
 import { ExportOrders } from '../components/board/ExportOrders'
 import { ImportCard } from '../components/board/ImportCard'
 import { SupplierSwitch } from '../components/board/SupplierSwitch'
-import { OrderTotals } from '../components/board/OrderTotals'
+import { BoardTotals } from '../components/board/BoardTotals'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 
@@ -73,9 +73,10 @@ function BoardPage({ board }: { board: BoardType }) {
         </div>
       </div>
       <div className="flex-1 overflow-hidden py-4 flex flex-col">
-        {/* Só os pedidos têm preço fechado dos dois lados, e só a Redantex vê
-            os dois. O componente decide sozinho se aparece. */}
-        {board === 'orders' && <OrderTotals />}
+        {/* Só a Redantex vê os dois lados do preço. O componente decide
+            sozinho se aparece, e Quotes fica de fora: lá quase nada tem preço
+            ainda, e uma tabela de zeros não informa nada. */}
+        {board !== 'quotes' && <BoardTotals board={board} />}
 
         {/* Only orders run a 120-day clock, so only orders get a timeline. */}
         {board === 'orders' && <OrdersGantt />}
