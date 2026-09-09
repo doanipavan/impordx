@@ -278,6 +278,10 @@ function PaymentForm({ payment, label, onDone }: {
   const [fxRate, setFxRate] = useState(payment.fx_rate?.toString() ?? '')
   const [channel, setChannel] = useState<Channel | ''>(payment.channel ?? '')
   const [note, setNote] = useState(payment.note ?? '')
+  // A previsão é 40%, por decisão. Mas a DEQI cobra entre 40% e 50% conforme
+  // o pedido, então o que saiu de verdade tem de caber aqui — um registro que
+  // não pode guardar o valor real não é registro.
+  const [amountUsd, setAmountUsd] = useState(payment.amount_usd?.toString() ?? '')
 
   const num = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'))
 
@@ -288,7 +292,8 @@ function PaymentForm({ payment, label, onDone }: {
     if (!Number.isFinite(rate) || rate <= 0) return toast('Enter the exchange rate', 'error')
     try {
       await record.mutateAsync({ id: payment.id, paid_at: paidAt, amount_brl: value, fx_rate: rate,
-        channel: (channel || null) as Channel | null, note: note.trim() || null })
+        channel: (channel || null) as Channel | null, note: note.trim() || null,
+        amount_usd: Number.isFinite(num(amountUsd)) && num(amountUsd) > 0 ? num(amountUsd) : null })
       toast('Payment recorded', 'success')
       onDone()
     } catch (err) { toast(errorText(err) ?? 'Could not save', 'error') }
@@ -307,6 +312,10 @@ function PaymentForm({ payment, label, onDone }: {
       <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-16 pb-1.5">{label}</span>
       <Field label="Paid on">
         <Input type="date" className="h-7 text-xs w-36" value={paidAt} onChange={e => setPaidAt(e.target.value)} />
+      </Field>
+      <Field label="Amount US$">
+        <Input className="h-7 text-xs w-24" inputMode="decimal" placeholder="0,00"
+          value={amountUsd} onChange={e => setAmountUsd(e.target.value)} />
       </Field>
       <Field label="Amount R$">
         <Input className="h-7 text-xs w-28" inputMode="decimal" placeholder="0,00"

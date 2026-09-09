@@ -96,6 +96,7 @@ export interface RecordPaymentInput {
   fx_rate: number | null
   channel: Channel | null
   note: string | null
+  amount_usd?: number | null
 }
 
 export function useRecordPayment() {
