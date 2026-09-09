@@ -1,32 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 
-export interface Proforma {
-  id: string
-  pi_number: string
-  supplier_id?: string
-  closed_at?: string | null
-  closed_by?: string | null
-}
-
 export type Tranche = 'deposit' | 'balance'
 export type Channel = 'bank' | 'other'
 
 export interface Payment {
   id: string
-  proforma_id: string
+  card_id: string
   tranche: Tranche
   share: number
   due_date?: string | null
-  paid_at?: string | null
   amount_usd?: number | null
+  paid_at?: string | null
   amount_brl?: number | null
   fx_rate?: number | null
   channel?: Channel | null
   note?: string | null
 }
 
-/** One order card, with what it is worth and which proforma it hangs on. */
+/** One order, what it is worth, and which proforma groups it. */
 export interface FinanceCard {
   id: string
   ref_number?: string
@@ -44,44 +36,37 @@ export function useFinance() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => {
-      const [pf, pay, cards, items] = await Promise.all([
-        supabase.from('proformas').select('*').order('pi_number'),
-        supabase.from('proforma_payments').select('*'),
+      const [cards, items, pays] = await Promise.all([
         supabase.from('cards')
           .select('id, ref_number, title, client_name, status, pi_number, delivery_date')
           .eq('board', 'orders').eq('archived', false),
         supabase.from('card_items').select('card_id, quantity, unit_price_usd'),
+        supabase.from('card_payments').select('*'),
       ])
-      for (const r of [pf, pay, cards, items]) if (r.error) throw r.error
+      for (const r of [cards, items, pays]) if (r.error) throw r.error
 
-      // O valor de compra do card é a soma dos itens dele. A proforma é a soma
-      // dos cards — não há rateio a inventar, ele cai do próprio dado.
+      // O valor de compra do card é a soma dos itens dele. Não há rateio a
+      // inventar — a proforma é só a soma dos cards que a carregam.
       const usdByCard = new Map<string, number>()
       for (const it of (items.data ?? []) as Array<{ card_id: string; quantity: number | null; unit_price_usd: number | null }>) {
-        const v = Number(it.quantity ?? 0) * Number(it.unit_price_usd ?? 0)
-        usdByCard.set(it.card_id, (usdByCard.get(it.card_id) ?? 0) + v)
+        usdByCard.set(it.card_id,
+          (usdByCard.get(it.card_id) ?? 0) + Number(it.quantity ?? 0) * Number(it.unit_price_usd ?? 0))
       }
 
-      const financeCards: FinanceCard[] = ((cards.data ?? []) as FinanceCard[]).map(c => ({
-        ...c,
-        valueUsd: usdByCard.get(c.id) ?? 0,
-      }))
-
       return {
-        proformas: (pf.data ?? []) as Proforma[],
-        payments: (pay.data ?? []) as Payment[],
-        cards: financeCards,
+        cards: ((cards.data ?? []) as FinanceCard[]).map(c => ({ ...c, valueUsd: usdByCard.get(c.id) ?? 0 })),
+        payments: (pays.data ?? []) as Payment[],
       }
     },
     staleTime: 30_000,
   })
 }
 
-export function useCloseProforma() {
+export function useCloseCard() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (proformaId: string) => {
-      const { error } = await supabase.rpc('close_proforma', { p_id: proformaId })
+    mutationFn: async (cardId: string) => {
+      const { error } = await supabase.rpc('close_card_payment', { p_card_id: cardId })
       if (error) throw error
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }) },
@@ -94,7 +79,6 @@ export interface RecordPaymentInput {
   amount_brl: number | null
   fx_rate: number | null
   channel: Channel | null
-  note?: string | null
 }
 
 export function useRecordPayment() {
@@ -102,7 +86,7 @@ export function useRecordPayment() {
   return useMutation({
     mutationFn: async ({ id, ...fields }: RecordPaymentInput) => {
       const { error } = await supabase
-        .from('proforma_payments')
+        .from('card_payments')
         .update({ ...fields, updated_at: new Date().toISOString() })
         .eq('id', id)
       if (error) throw error
