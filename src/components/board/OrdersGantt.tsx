@@ -236,22 +236,29 @@ export function OrdersGantt() {
         </div>
       </div>
 
+      {/* O painel tem um teto e rola sozinho. Sem isso ele crescia com o número
+          de pedidos, e como o pai corta o que passa, as últimas linhas ficavam
+          inalcançáveis e o board sumia embaixo — sem nada que rolasse. */}
       {open && (
-        <div className="overflow-x-auto scrollbar-thin">
+        <div className="overflow-auto scrollbar-thin max-h-[40vh] overscroll-contain">
           <div ref={chartRef} className="min-w-[620px] relative">
 
-            {/* month axis */}
-            <div className="grid border-b border-border bg-muted/40" style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
-              <div className="px-2.5 py-1 border-r border-border">
-                <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Order</span>
-              </div>
-              <div className="flex">
-                {months.map(m => (
-                  <div key={m.toISOString()}
-                    className="flex-1 border-l border-border/60 first:border-l-0 px-2 py-1 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                    {m.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}
-                  </div>
-                ))}
+            {/* month axis — fica no topo ao rolar, senão as barras lá embaixo
+                perdem a régua. Opaco de propósito: translúcido deixaria as
+                linhas passando por baixo aparecerem através dele. */}
+            <div className="sticky top-0 z-20 bg-card">
+              <div className="grid border-b border-border bg-muted/40" style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
+                <div className="px-2.5 py-1 border-r border-border">
+                  <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Order</span>
+                </div>
+                <div className="flex">
+                  {months.map(m => (
+                    <div key={m.toISOString()}
+                      className="flex-1 border-l border-border/60 first:border-l-0 px-2 py-1 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                      {m.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
