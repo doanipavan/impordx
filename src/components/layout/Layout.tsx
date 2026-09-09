@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Package, ShoppingCart, Bell, Archive,
-  Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search
+  Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search, Wallet
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Clocks } from './Clocks'
@@ -19,6 +19,12 @@ const NAV = [
   { to: '/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/notifications', icon: Bell, label: 'Notifications', badge: true },
   { to: '/archive', icon: Archive, label: 'Archive' },
+]
+
+// O financeiro é da Redantex. A regra que vale está no banco (migração 035);
+// isto só evita oferecer uma tela que não responderia.
+const REDANTEX_NAV = [
+  { to: '/finance', icon: Wallet, label: 'Finance' },
 ]
 
 const ADMIN_NAV = [
@@ -97,6 +103,16 @@ export function Layout({ children }: { children: ReactNode }) {
               exact={exact}
             />
           ))}
+
+          {(user?.role === 'admin' || user?.role === 'member') && (
+            <>
+              <div className={cn('mx-1 my-2 h-px bg-border', collapsed && 'mx-2')} />
+              {REDANTEX_NAV.map(({ to, icon: Icon, label }) => (
+                <SidebarLink key={to} to={to} icon={<Icon className="h-4 w-4 shrink-0" />}
+                  label={label} collapsed={collapsed} />
+              ))}
+            </>
+          )}
 
           {user?.role === 'admin' && (
             <>

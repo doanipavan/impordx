@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/Dashboard'
 import { QuotesPage, SamplesPage, OrdersPage } from './pages/BoardPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ArchivePage } from './pages/ArchivePage'
+import { FinancePage } from './pages/FinancePage'
 import { TeamPage } from './pages/TeamPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Loader2 } from 'lucide-react'
@@ -45,6 +46,7 @@ function AppRoutes() {
       <Route path="/samples/:ref" element={<ProtectedRoute><SamplesPage /></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
       <Route path="/orders/:ref" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+      <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/archive" element={<ProtectedRoute><ArchivePage /></ProtectedRoute>} />
       <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
