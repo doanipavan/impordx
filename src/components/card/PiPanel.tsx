@@ -9,6 +9,10 @@ import { useToast } from '../ui/toast'
 import { cn, formatDateTime, formatFileSize } from '../../lib/utils'
 import { Card } from '../../types'
 
+// Mais estreita que lib/fileTypes de propósito, e por isso fica aqui: uma
+// proforma é um documento assinado, não uma planilha nem um vídeo. Aprovar este
+// anexo move o card e dispara os 60 dias do fornecedor — o que entra aqui tem de
+// ser o papel que foi acordado.
 const ACCEPTED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
 
 // The proforma lives here rather than in the Files tab, because deciding on it

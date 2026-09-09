@@ -16,6 +16,7 @@ import { Select } from '../ui/select'
 import { Label } from '../ui/label'
 import { collectionsFor, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize, mergeMaterialCodes } from '../../lib/utils'
 import { useSupplierFilter, useSuppliers } from '../../hooks/useSupplierFilter'
+import { ACCEPTED_ATTR, fileRejection } from '../../lib/fileTypes'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -58,11 +59,8 @@ interface CreateCardModalProps {
   onClose: () => void
 }
 
-const ACCEPTED = [
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-  'application/pdf',
-  'video/mp4', 'video/webm', 'video/quicktime',
-]
+// O que vale e os tetos de tamanho ficam em lib/fileTypes — a lista estava
+// copiada aqui e já discordava das outras.
 // 50 MB é o teto do bucket, e vale para qualquer tipo — um número menor aqui
 // só recusaria vídeo que o servidor aceitaria.
 const MAX_FILE_SIZE = 50 * 1024 * 1024
@@ -117,10 +115,11 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   }, [collections, chosenCollection, setValue])
 
   function addFiles(files: File[]) {
-    const supported = files.filter(f => ACCEPTED.includes(f.type))
-    const unsupported = files.filter(f => !ACCEPTED.includes(f.type))
-    if (unsupported.length) {
-      toast(`Not supported: ${unsupported.map(f => f.name).join(', ')} — JPG, PNG, WEBP, PDF, MP4 or MOV only`, 'error')
+    const supported: File[] = []
+    for (const f of files) {
+      const refused = fileRejection(f)
+      if (refused) toast(refused, 'error')
+      else supported.push(f)
     }
     const tooBig = supported.filter(f => f.size > MAX_FILE_SIZE)
     if (tooBig.length) {
@@ -388,7 +387,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             >
               <Paperclip className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Drop files or click to attach (JPG, PNG, PDF)</p>
-              <input ref={fileInputRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
+              <input ref={fileInputRef} type="file" className="hidden" multiple accept={ACCEPTED_ATTR}
                 onChange={e => addFiles(Array.from(e.target.files ?? []))} />
             </div>
             {queuedFiles.length > 0 && (

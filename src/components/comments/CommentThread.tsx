@@ -11,12 +11,10 @@ import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import { formatRelative, formatDateTime, cn, formatFileSize } from '../../lib/utils'
 import { Comment, User } from '../../types'
+import { ACCEPTED_ATTR, fileRejection } from '../../lib/fileTypes'
 
-const ACCEPTED = [
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-  'application/pdf',
-  'video/mp4', 'video/webm', 'video/quicktime',
-]
+// O que vale e os tetos de tamanho ficam em lib/fileTypes — a lista estava
+// copiada aqui e já discordava das outras.
 // O bucket recusa acima de 50 MB. Sem este limite aqui a recusa chegaria como
 // erro cru do servidor, depois de o arquivo inteiro ter subido.
 const MAX_SIZE = 50 * 1024 * 1024
@@ -106,9 +104,14 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
     .slice(0, 6)
 
   function addFiles(incoming: File[]) {
-    const invalid = incoming.filter(f => !ACCEPTED.includes(f.type))
-    if (invalid.length) toast(`${invalid.length} unsupported file(s) skipped`, 'error')
-    const supported = incoming.filter(f => ACCEPTED.includes(f.type))
+    // A recusa diz por quê. "1 unsupported file(s) skipped" não dizia qual nem
+    // qual era o problema, e mandava a pessoa tentar o mesmo arquivo de novo.
+    const supported: File[] = []
+    for (const f of incoming) {
+      const refused = fileRejection(f)
+      if (refused) toast(refused, 'error')
+      else supported.push(f)
+    }
     const tooBig = supported.filter(f => f.size > MAX_SIZE)
     for (const f of tooBig) {
       toast(`"${f.name}" is ${formatFileSize(f.size)} — the limit is ${formatFileSize(MAX_SIZE)}`, 'error')
@@ -274,7 +277,7 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
           </div>
         </div>
 
-        <input ref={fileRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
+        <input ref={fileRef} type="file" className="hidden" multiple accept={ACCEPTED_ATTR}
           onChange={e => addFiles(Array.from(e.target.files ?? []))} />
       </div>
     </form>

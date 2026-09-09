@@ -1,27 +1,15 @@
 import { useEffect, useRef, useState, DragEvent } from 'react'
-import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle, Video } from 'lucide-react'
+import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle, Video, FileSpreadsheet } from 'lucide-react'
 import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAttachment, useReviewAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
 import { cn, formatFileSize, formatDateTime, formatRelative, errorText } from '../../lib/utils'
+import { ACCEPTED_ATTR, fileRejection, sizeLimitFor, isVideoType, isSheetType } from '../../lib/fileTypes'
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024
-const MAX_PDF_SIZE = 20 * 1024 * 1024
-// Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês.
-// 50 MB é o teto do plano da Supabase — pedir mais só produziria uma falha
-// confusa no upload. É cerca de um a três minutos de vídeo de celular.
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024
-const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
-const ACCEPTED = [
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-  'application/pdf',
-  ...VIDEO_TYPES,
-]
-
-function isVideoType(type: string) {
-  return type.startsWith('video/')
-}
+// Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês, e
+// planilha é como preço e lista de itens circulam. O que vale, e os tetos de
+// tamanho de cada tipo, moram em lib/fileTypes.
 
 export function AttachmentPanel({ cardId }: { cardId: string }) {
   const { data: attachments = [], isLoading } = useAttachments(cardId)
@@ -71,24 +59,16 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const canApprove = user?.role === 'admin' || user?.role === 'member'
   const canUnapprove = user?.role === 'admin'
 
-  // Every refusal has to name itself. "Failed to upload" sent someone hunting
-  // through policies and buckets for an hour while the real answer was the file
-  // type all along.
   async function uploadFiles(files: File[]) {
     for (const file of files) {
-      if (!ACCEPTED.includes(file.type)) {
-        const kind = file.name.split('.').pop()?.toUpperCase() || 'this'
-        toast(`${kind} files are not accepted — send JPG, PNG, WEBP, GIF, PDF, MP4 or MOV`, 'error')
-        continue
-      }
-      const isImage = file.type.startsWith('image/')
-      const isVideo = isVideoType(file.type)
-      const maxSize = isVideo ? MAX_VIDEO_SIZE : isImage ? MAX_IMAGE_SIZE : MAX_PDF_SIZE
-      const what = isVideo ? 'videos' : isImage ? 'images' : 'PDFs'
-      if (file.size > maxSize) {
+      const refused = fileRejection(file)
+      if (refused) { toast(refused, 'error'); continue }
+
+      const { max, what } = sizeLimitFor(file.type)
+      if (file.size > max) {
         toast(`"${file.name}" is ${formatFileSize(file.size)} — the limit is `
-          + `${formatFileSize(maxSize)} for ${what}`
-          + (isVideo ? '. Trim it or export at a lower resolution.' : ''), 'error')
+          + `${formatFileSize(max)} for ${what}`
+          + (isVideoType(file.type) ? '. Trim it or export at a lower resolution.' : ''), 'error')
         continue
       }
       setUploading(p => [...p, file.name])
@@ -201,6 +181,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
               <div className="h-10 w-10 bg-green-50 rounded flex items-center justify-center shrink-0">
                 {approvedAtt.file_type.startsWith('image/') ? <ImageIcon className="h-5 w-5 text-green-600" />
                   : isVideoType(approvedAtt.file_type) ? <Video className="h-5 w-5 text-green-600" />
+                  : isSheetType(approvedAtt.file_type) ? <FileSpreadsheet className="h-5 w-5 text-green-600" />
                   : <FileText className="h-5 w-5 text-green-600" />}
               </div>
             )}
@@ -247,7 +228,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         <Upload className="h-6 w-6 mx-auto mb-1.5 text-muted-foreground" />
         <p className="text-sm font-medium">Drop files here or click to upload</p>
         <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WEBP, PDF, MP4, MOV — max 10 MB per image, 20 MB per PDF, 50 MB per video</p>
-        <input ref={inputRef} type="file" className="hidden" multiple accept={ACCEPTED.join(',')}
+        <input ref={inputRef} type="file" className="hidden" multiple accept={ACCEPTED_ATTR}
           onChange={e => uploadFiles(Array.from(e.target.files ?? []))} />
       </div>
 
@@ -293,7 +274,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                         ? <ImageIcon className="h-4 w-4 text-blue-600" />
                         : isVideoType(att.file_type)
                           ? <Video className="h-4 w-4 text-violet-600" />
-                          : <FileText className="h-4 w-4 text-amber-600" />
+                          : isSheetType(att.file_type)
+                            ? <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                            : <FileText className="h-4 w-4 text-amber-600" />
                     }
                   </div>
 

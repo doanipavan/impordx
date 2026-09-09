@@ -3,6 +3,7 @@ import imageCompression from 'browser-image-compression'
 import { supabase } from '../lib/supabase'
 import { Attachment } from '../types'
 import { useAuth } from './useAuth'
+import { contentTypeOf } from '../lib/fileTypes'
 
 // Extract storage path from URL or use raw path
 function getStoragePath(fileUrl: string): string {
@@ -76,9 +77,15 @@ export function useUploadAttachment() {
       const ext = file.name.split('.').pop()
       const path = `${cardId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
+      // O tipo declarado pelo navegador vem do sistema operacional e às vezes
+      // vem errado ou vazio — um .csv chega como text/plain em vários. O bucket
+      // confere contra a sua própria lista, então mandar o tipo cru produziria
+      // uma recusa depois do arquivo inteiro ter subido.
+      const contentType = contentTypeOf(file)
+
       const { error: uploadError } = await supabase.storage
         .from('attachments')
-        .upload(path, uploadFile, { contentType: file.type })
+        .upload(path, uploadFile, { contentType })
       if (uploadError) throw uploadError
 
       // Create thumbnail for images
@@ -97,7 +104,7 @@ export function useUploadAttachment() {
           user_id: user!.id,
           filename: file.name,
           file_url: path,              // store path, not public URL
-          file_type: file.type,
+          file_type: contentType,   // o mesmo tipo que foi ao storage, não o cru
           file_size: file.size,
           thumbnail_url: thumbnailPath, // store path
         })
