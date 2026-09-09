@@ -252,12 +252,14 @@ function TrancheCell({ payment, fallback, onEdit }: {
 
   return (
     <td className="px-3 py-1.5 text-right">
-      <button onClick={onEdit} className="hover:underline text-right">
+      <button onClick={onEdit} className="hover:underline text-right"
+        title={payment.note || undefined}>
         <span className="font-semibold">{usd(Number(payment.amount_usd ?? 0))}</span>
         <span className={cn('block text-[9px] leading-tight',
           paid ? 'text-green-600' : overdue ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
           {paid ? `paid ${formatDate(payment.paid_at!)}`
             : payment.due_date ? `due ${formatDate(payment.due_date)}` : 'no date'}
+          {payment.note && <span className="ml-1" title={payment.note}>·</span>}
         </span>
       </button>
     </td>
@@ -275,6 +277,7 @@ function PaymentForm({ payment, label, onDone }: {
   const [amountBrl, setAmountBrl] = useState(payment.amount_brl?.toString() ?? '')
   const [fxRate, setFxRate] = useState(payment.fx_rate?.toString() ?? '')
   const [channel, setChannel] = useState<Channel | ''>(payment.channel ?? '')
+  const [note, setNote] = useState(payment.note ?? '')
 
   const num = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'))
 
@@ -285,7 +288,7 @@ function PaymentForm({ payment, label, onDone }: {
     if (!Number.isFinite(rate) || rate <= 0) return toast('Enter the exchange rate', 'error')
     try {
       await record.mutateAsync({ id: payment.id, paid_at: paidAt, amount_brl: value, fx_rate: rate,
-        channel: (channel || null) as Channel | null })
+        channel: (channel || null) as Channel | null, note: note.trim() || null })
       toast('Payment recorded', 'success')
       onDone()
     } catch (err) { toast(errorText(err) ?? 'Could not save', 'error') }
@@ -293,7 +296,7 @@ function PaymentForm({ payment, label, onDone }: {
 
   async function clear() {
     try {
-      await record.mutateAsync({ id: payment.id, paid_at: null, amount_brl: null, fx_rate: null, channel: null })
+      await record.mutateAsync({ id: payment.id, paid_at: null, amount_brl: null, fx_rate: null, channel: null, note: null })
       toast('Payment cleared', 'info')
       onDone()
     } catch (err) { toast(errorText(err) ?? 'Could not clear', 'error') }
@@ -320,6 +323,12 @@ function PaymentForm({ payment, label, onDone }: {
           <option value="bank">Bank</option>
           <option value="other">Other</option>
         </Select>
+      </Field>
+      {/* O que os números não contam: qual banco, qual contrato, por que a
+          taxa foi essa. É onde a conciliação de daqui a seis meses começa. */}
+      <Field label="Note">
+        <Input className="h-7 text-xs w-56" placeholder="anything worth remembering"
+          value={note} onChange={e => setNote(e.target.value)} />
       </Field>
       <Button size="sm" className="h-7 text-xs" onClick={save} loading={record.isPending}>Save</Button>
       {payment.paid_at && (
