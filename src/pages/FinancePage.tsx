@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input'
 import { Select } from '../components/ui/select'
 import { cn, formatDate, errorText } from '../lib/utils'
 import {
-  useFinance, useCloseCard, useRecordPayment,
+  useFinance, useCloseCard, useReopenCard, useRecordPayment,
   Payment, FinanceCard, Channel, Tranche,
 } from '../hooks/useFinance'
 
@@ -158,9 +158,26 @@ export function FinancePage() {
 function CardRow({ card, tranches }: { card: FinanceCard; tranches: Partial<Record<Tranche, Payment>> }) {
   const toast = useToast()
   const close = useCloseCard()
+  const reopen = useReopenCard()
   const [editing, setEditing] = useState<Tranche | null>(null)
 
   const closed = !!(tranches.deposit || tranches.balance)
+  // Reabrir apaga as duas parcelas. Com pagamento registrado o banco recusa,
+  // então o botão some — melhor não oferecer do que oferecer e negar.
+  const anyPaid = !!(tranches.deposit?.paid_at || tranches.balance?.paid_at)
+
+  async function handleReopen() {
+    if (!confirm(
+      `Reopen ${card.ref_number ?? card.title}?\n\n`
+      + `The deposit and balance are removed. Nothing else changes.`
+    )) return
+    try {
+      await reopen.mutateAsync(card.id)
+      toast(`${card.ref_number ?? 'Order'} reopened`, 'info')
+    } catch (err) {
+      toast(errorText(err) ?? 'Could not reopen', 'error')
+    }
+  }
 
   async function handleClose() {
     if (!confirm(
@@ -195,7 +212,14 @@ function CardRow({ card, tranches }: { card: FinanceCard; tranches: Partial<Reco
               Close
             </button>
           )}
-          {closed && <Check className="h-3 w-3 text-green-600 inline-block" />}
+          {closed && (anyPaid ? (
+            <Check className="h-3 w-3 text-green-600 inline-block" />
+          ) : (
+            <button onClick={handleReopen} disabled={reopen.isPending}
+              className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+              Reopen
+            </button>
+          ))}
         </td>
       </tr>
 

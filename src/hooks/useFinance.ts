@@ -73,6 +73,22 @@ export function useCloseCard() {
   })
 }
 
+/**
+ * Desfaz o fecho. A regra de quando é permitido está no banco: com pagamento
+ * registrado ele recusa, porque apagar as linhas destruiria o registro de
+ * dinheiro que saiu de verdade.
+ */
+export function useReopenCard() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (cardId: string) => {
+      const { error } = await supabase.rpc('reopen_card_payment', { p_card_id: cardId })
+      if (error) throw error
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }) },
+  })
+}
+
 export interface RecordPaymentInput {
   id: string
   paid_at: string | null
