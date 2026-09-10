@@ -100,7 +100,7 @@ export function FinancePage() {
 
               <thead className="sticky top-0 z-10">
                 <tr className="bg-muted/60 border-b border-border text-[9px] uppercase tracking-wider text-muted-foreground">
-                  <th className="text-left font-semibold px-3 py-2">Order - DEQI</th>
+                  <th className="text-left font-semibold px-3 py-2">Order - Supplier</th>
                   {/* O número que a Valéria tem no sistema dela. É por ele que
                       a conciliação começa, não pelo nosso. */}
                   <th className="text-left font-semibold px-3 py-2">RDX - Purchase Order</th>
