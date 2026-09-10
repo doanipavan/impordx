@@ -93,14 +93,17 @@ export function FinancePage() {
                 dimensionar as colunas sozinho, e elas não batiam entre si. */}
             <table className="w-full min-w-[880px] table-fixed text-xs tabular-nums">
               <colgroup>
-                <col className="w-[15%]" /><col className="w-[22%]" /><col className="w-[15%]" />
-                <col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[13%]" />
+                <col className="w-[13%]" /><col className="w-[12%]" /><col className="w-[18%]" /><col className="w-[12%]" />
+                <col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[12%]" />
                 <col className="w-[9%]" />
               </colgroup>
 
               <thead className="sticky top-0 z-10">
                 <tr className="bg-muted/60 border-b border-border text-[9px] uppercase tracking-wider text-muted-foreground">
-                  <th className="text-left font-semibold px-3 py-2">Order</th>
+                  <th className="text-left font-semibold px-3 py-2">Order - DEQI</th>
+                  {/* O número que a Valéria tem no sistema dela. É por ele que
+                      a conciliação começa, não pelo nosso. */}
+                  <th className="text-left font-semibold px-3 py-2">RDX - Purchase Order</th>
                   <th className="text-left font-semibold px-3 py-2">Client</th>
                   <th className="text-left font-semibold px-3 py-2">Stage</th>
                   <th className="text-right font-semibold px-3 py-2">Value</th>
@@ -114,7 +117,7 @@ export function FinancePage() {
                 {groups.map(g => (
                   <Fragment key={g.pi}>
                     <tr className="bg-muted/30 border-y border-border">
-                      <td colSpan={3} className="px-3 py-1.5 font-mono text-[11px] font-semibold">
+                      <td colSpan={4} className="px-3 py-1.5 font-mono text-[11px] font-semibold">
                         {g.pi}
                         <span className="ml-2 font-sans font-normal text-muted-foreground">
                           {g.cards.length} {g.cards.length === 1 ? 'order' : 'orders'}
@@ -137,7 +140,7 @@ export function FinancePage() {
                   <td className="px-3 py-2 text-muted-foreground font-normal">
                     {totals.orders} orders
                   </td>
-                  <td />
+                  <td /><td />
                   <td className="px-3 py-2 text-right">{usd(totals.committed)}</td>
                   <td colSpan={2} className="px-3 py-2 text-right">
                     <span className="text-amber-600">{usd(totals.open)} to pay</span>
@@ -196,6 +199,7 @@ function CardRow({ card, tranches }: { card: FinanceCard; tranches: Partial<Reco
     <>
       <tr className="border-b border-border/60 hover:bg-muted/20">
         <td className="px-3 py-1.5 font-mono text-[11px] truncate">{card.ref_number ?? '—'}</td>
+        <td className="px-3 py-1.5 font-mono text-[11px] truncate">{card.purchase_order || '—'}</td>
         <td className="px-3 py-1.5 truncate">{card.client_name || card.title}</td>
         <td className="px-3 py-1.5 text-muted-foreground truncate">{card.status}</td>
         <td className="px-3 py-1.5 text-right font-semibold">{usd(card.valueUsd)}</td>
@@ -225,7 +229,7 @@ function CardRow({ card, tranches }: { card: FinanceCard; tranches: Partial<Reco
 
       {editing && tranches[editing] && (
         <tr className="bg-muted/20 border-b border-border/60">
-          <td colSpan={7} className="px-3 py-2">
+          <td colSpan={8} className="px-3 py-2">
             <PaymentForm payment={tranches[editing]!} label={editing === 'deposit' ? 'Deposit' : 'Balance'}
               onDone={() => setEditing(null)} />
           </td>

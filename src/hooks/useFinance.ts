@@ -27,6 +27,8 @@ export interface FinanceCard {
   status: string
   pi_number?: string
   delivery_date?: string
+  /** O número do pedido de compra da Redantex — o que a Valéria concilia. */
+  purchase_order?: string
   valueUsd: number
 }
 
@@ -38,7 +40,7 @@ export function useFinance() {
     queryFn: async () => {
       const [cards, items, pays] = await Promise.all([
         supabase.from('cards')
-          .select('id, ref_number, title, client_name, status, pi_number, delivery_date')
+          .select('id, ref_number, title, client_name, status, pi_number, delivery_date, purchase_order')
           .eq('board', 'orders').eq('archived', false),
         supabase.from('card_items').select('card_id, quantity, unit_price_usd'),
         supabase.from('card_payments').select('*'),
