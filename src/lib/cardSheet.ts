@@ -226,7 +226,14 @@ export function parseCardWorkbook(wb: {
   return parsed
 }
 
-/** Card fields ready for insert, with the material codes folded back in. */
+/**
+ * Card fields ready for insert.
+ *
+ * O importador nunca leu código de material — o comentário anterior dizia que
+ * "dobrava os códigos de volta" e a função nunca fez isso. Desde a 041 os
+ * códigos são colunas, e a planilha modelo continua sem uma linha para eles:
+ * quem importa preenche o código depois, no card.
+ */
 export function toCardFields(p: ParsedSheet) {
   return {
     title: p.title,

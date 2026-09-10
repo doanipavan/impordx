@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Trash2, Copy, DollarSign, Package, Layers, Paintbrush, Tag } from 'lucide-react'
+import { X, Trash2, Copy, DollarSign, Package, Layers, Paintbrush, Tag, Hash } from 'lucide-react'
 import { Card, BoardType, BOARD_COLUMNS, CardStatus, STATUS_COLORS, PRIORITY_LABELS, PRIORITY_COLORS , statusLabel } from '../../types'
 import { useUpdateCard, useMoveCard, useDeleteCard, useCreateCard, useReturnToSamples } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
@@ -74,6 +74,10 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
         description: card.description,
         outside_material: card.outside_material,
         inside_material: card.inside_material,
+        // Vinham de carona dentro de description até a 041, então duplicar os
+        // levava sem que ninguém tivesse escrito isto. Agora precisa estar aqui.
+        outside_material_code: card.outside_material_code,
+        inside_material_code: card.inside_material_code,
         logo_color: card.logo_color,
         logo_technique: card.logo_technique,
         logo_technique_outside: card.logo_technique_outside,
@@ -354,13 +358,18 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                   </div>
                 </div>
 
-                {/* Materials */}
-                {(card.outside_material || card.inside_material) && (
+                {/* Materials. O código é o que o fornecedor procura no catálogo
+                    dele — até a migração 041 vinha embutido na descrição, e
+                    tirá-lo de lá sem mostrá-lo aqui seria escondê-lo. */}
+                {(card.outside_material || card.inside_material
+                  || card.outside_material_code || card.inside_material_code) && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Materials & Finish</p>
                     <div className="grid grid-cols-2 gap-3">
                       <InfoField icon={<Paintbrush />} label="Outside" value={card.outside_material} />
                       <InfoField icon={<Paintbrush />} label="Inside" value={card.inside_material} />
+                      <InfoField icon={<Hash />} label="Outside code" value={card.outside_material_code ?? undefined} />
+                      <InfoField icon={<Hash />} label="Inside code" value={card.inside_material_code ?? undefined} />
                     </div>
                   </div>
                 )}

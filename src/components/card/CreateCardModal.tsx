@@ -14,7 +14,7 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
-import { collectionsFor, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize, mergeMaterialCodes } from '../../lib/utils'
+import { collectionsFor, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize } from '../../lib/utils'
 import { useSupplierFilter, useSuppliers } from '../../hooks/useSupplierFilter'
 import { ACCEPTED_ATTR, fileRejection } from '../../lib/fileTypes'
 
@@ -131,9 +131,6 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     try {
-      const finalDescription = mergeMaterialCodes(values.description,
-        values.outside_material_code, values.inside_material_code)
-
       const card = await createCard.mutateAsync({
         board,
         status: values.status as CardStatus,
@@ -147,7 +144,9 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         collection: values.collection || undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
         deadline: values.deadline || undefined,
-        description: finalDescription || undefined,
+        description: values.description?.trim() || undefined,
+        outside_material_code: values.outside_material_code?.trim() || undefined,
+        inside_material_code: values.inside_material_code?.trim() || undefined,
         outside_material: values.outside_material || undefined,
         inside_material: values.inside_material || undefined,
         logo_color: values.logo_color || undefined,

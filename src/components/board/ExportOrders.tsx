@@ -13,7 +13,7 @@ const HEADERS = [
   'Purchase order', 'Sales order', 'PI number',
   'Salesperson', 'Project manager',
   'Confirmed', 'Delivery date',
-  'Outside material', 'Inside material',
+  'Outside material', 'Outside code', 'Inside material', 'Inside code',
   'Outside logo', 'Outside logo text', 'Outside logo colour',
   'Inside logo', 'Inside logo text', 'Inside logo colour',
   'Card notes',
@@ -36,6 +36,7 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
           ref_number, status, client_name, collection, purchase_order, sales_order,
           pi_number, order_confirmed_at, delivery_date, salesperson_name,
           description, outside_material, inside_material,
+          outside_material_code, inside_material_code,
           logo_technique_outside, logo_text_outside, logo_color_outside,
           logo_technique_inside, logo_text_inside, logo_color_inside,
           salesperson:users!cards_salesperson_id_fkey(full_name),
@@ -72,7 +73,10 @@ export function ExportOrders({ statuses }: { statuses?: string[] }) {
           // The spec DEQI actually builds against, repeated on every line so
           // the sheet stays filterable without looking anything up.
           'Outside material': c.outside_material ?? '',
+          // Iam dentro de 'Card notes' até a 041, de carona na descrição.
+          'Outside code': c.outside_material_code ?? '',
           'Inside material': c.inside_material ?? '',
+          'Inside code': c.inside_material_code ?? '',
           'Outside logo': c.logo_technique_outside ?? '',
           'Outside logo text': c.logo_text_outside ?? '',
           'Outside logo colour': c.logo_color_outside ?? '',

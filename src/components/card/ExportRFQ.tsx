@@ -58,9 +58,13 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
         [],
         ['OUTSIDE MATERIAL'],
         ['Material', f(card.outside_material)],
+        // O código é o que o fornecedor procura no catálogo dele. Viajava dentro
+        // de Description até a 041; sem esta linha, sairia do documento.
+        ['Material code', f(card.outside_material_code)],
         [],
         ['INSIDE MATERIAL'],
         ['Material', f(card.inside_material)],
+        ['Material code', f(card.inside_material_code)],
         [],
         ['OUTSIDE LOGO'],
         ['Technique', f(card.logo_technique_outside)],
@@ -190,10 +194,12 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
 
     ${section('Outside Material', [
       ['Material', f(card.outside_material)],
+      ['Material code', f(card.outside_material_code)],
     ])}
 
     ${section('Inside Material', [
       ['Material', f(card.inside_material)],
+      ['Material code', f(card.inside_material_code)],
     ])}
 
     ${(card.logo_technique_outside || card.logo_text_outside || card.logo_color_outside) ? section('Outside Logo', [

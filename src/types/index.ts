@@ -60,6 +60,11 @@ export interface Card {
   quantity?: number
   outside_material?: string
   inside_material?: string
+  // Colunas de verdade desde a migração 041. Antes eram linhas rotuladas dentro
+  // de `description`, empacotadas e desempacotadas por um par de funções — e o
+  // Editar card descartava em silêncio o que se digitava nelas.
+  outside_material_code?: string | null
+  inside_material_code?: string | null
   logo_color?: string
   logo_technique?: string
   logo_positions?: string[]
