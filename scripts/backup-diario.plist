@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Backup diário do hub, gravando no iCloud Drive.
+
+  Instalar:
+    cp scripts/backup-diario.plist ~/Library/LaunchAgents/com.redantex.impordx-backup.plist
+    launchctl load ~/Library/LaunchAgents/com.redantex.impordx-backup.plist
+
+  Desligar:
+    launchctl unload ~/Library/LaunchAgents/com.redantex.impordx-backup.plist
+
+  Rodar agora, sem esperar a hora:
+    launchctl start com.redantex.impordx-backup
+
+  Roda às 20h. Se o Mac estiver desligado ou dormindo nessa hora, o macOS
+  dispara assim que ele voltar — um dia desligado não perde o backup, só o
+  atrasa. É por isso que o agendamento fica no Mac e não num cron dentro do
+  banco: o banco não alcança o iCloud.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.redantex.impordx-backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/doanipavan/Desktop/impordx/scripts/backup.mjs</string>
+    <string>/Users/doanipavan/Library/Mobile Documents/com~apple~CloudDocs/BACKUP HUB</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>20</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <!-- Um backup que falha em silêncio é pior do que nenhum, porque parece que
+       tem. A saída de cada execução fica gravada ao lado das cópias. -->
+  <key>StandardOutPath</key>
+  <string>/Users/doanipavan/Library/Mobile Documents/com~apple~CloudDocs/BACKUP HUB/ultimo-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/doanipavan/Library/Mobile Documents/com~apple~CloudDocs/BACKUP HUB/ultimo-backup.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
