@@ -1,4 +1,4 @@
-import { salePrice } from './utils'
+import { salePrice, clockFor, deliveryAnchor } from './utils'
 import { BoardType, Card, CardStatus, isPlacedOnward } from '../types'
 
 // Aqui não entra nada que fale com o Supabase: são números de dinheiro, e
@@ -118,4 +118,137 @@ export function boardTotals(
   })
 
   return { ...buckets, total: add(buckets.won, buckets.open) }
+}
+
+// ---------------------------------------------------------------------------
+// Quando o dinheiro vira mercadoria no Brasil
+// ---------------------------------------------------------------------------
+
+export interface ArrivalMonth {
+  /** 'YYYY-MM', chave estável para ordenar e casar. */
+  key: string
+  /** 'Dec 2026' — interface em inglês, mês em inglês. */
+  label: string
+  total: OrderTotal
+}
+
+export interface Arrivals {
+  /** Até `horizon` meses a partir do primeiro com chegada, sem pular os vazios. */
+  months: ArrivalMonth[]
+  /** Tudo depois do horizonte, somado. Null quando não há nada depois. */
+  later: OrderTotal | null
+  /** Pedidos sem relógio — sem amostra aprovada nem proforma — que ficaram fora. */
+  withoutClock: number
+  total: OrderTotal
+}
+
+const DAY = 86_400_000
+
+function monthLabel(key: string): string {
+  const [y, m] = key.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, 1))
+    .toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+}
+
+function nextMonth(key: string): string {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m, 1))
+  return d.toISOString().slice(0, 7)
+}
+
+/**
+ * O valor que chega ao Brasil, mês a mês.
+ *
+ * O mês é o do dia 120 da mesma régua que o Gantt desenha — aprovação da
+ * amostra para a DEQI, proforma para a Sconcept, via `deliveryAnchor` e
+ * `clockFor`. Não é uma segunda regra: é a mesma, lida no mesmo lugar. Um
+ * painel que dissesse "dezembro" enquanto a barra do Gantt terminasse em
+ * janeiro seria pior do que nenhum painel.
+ *
+ * Meses vazios entre o primeiro e o último aparecem, com zero. Num fluxo de
+ * caixa, um mês sem chegada é informação — escondê-lo faria dois meses
+ * distantes parecerem consecutivos.
+ */
+export function arrivalsByMonth(
+  cards: Card[],
+  rows: OrderItemRow[],
+  filter: string,
+  horizon = 6
+): Arrivals {
+  const inScope = cards.filter(c => filter === 'all' || c.supplier_id === filter)
+
+  // Primeiro cada card recebe o seu mês. Sem âncora não há mês — e o card é
+  // contado à parte em vez de sumir, para o total do painel não discordar em
+  // silêncio do número de cards no board.
+  const monthOf = new Map<string, string>()
+  let withoutClock = 0
+  for (const card of inScope) {
+    const clock = clockFor(card)
+    const anchor = deliveryAnchor(card, clock)
+    if (!anchor) { withoutClock += 1; continue }
+    const [y, m, d] = anchor.date.slice(0, 10).split('-').map(Number)
+    if (!y || !m || !d) { withoutClock += 1; continue }
+    const arrival = new Date(Date.UTC(y, m - 1, d) + (clock.productionDays + clock.shippingDays) * DAY)
+    monthOf.set(card.id, arrival.toISOString().slice(0, 7))
+  }
+
+  const byMonth = new Map<string, OrderTotal>()
+  const bucket = (key: string) => {
+    let t = byMonth.get(key)
+    if (!t) { t = empty(); byMonth.set(key, t) }
+    return t
+  }
+
+  for (const card of inScope) {
+    const key = monthOf.get(card.id)
+    if (key) bucket(key).orders += 1
+  }
+
+  for (const row of rows) {
+    const key = monthOf.get(row.card_id)
+    if (!key) continue
+    const t = bucket(key)
+    const qty = Number(row.quantity ?? 0)
+    const unit = row.unit_price_usd == null ? null : Number(row.unit_price_usd)
+    const sale = salePrice(row.pricing) ?? null
+    t.items += 1
+    t.pieces += qty
+    if (unit != null && unit > 0) { t.itemsWithPurchase += 1; t.purchaseUsd += qty * unit }
+    if (sale != null && sale > 0) { t.itemsWithSale += 1; t.saleBrl += qty * sale }
+  }
+
+  const add = (a: OrderTotal, c: OrderTotal): OrderTotal => ({
+    orders: a.orders + c.orders,
+    pieces: a.pieces + c.pieces,
+    purchaseUsd: a.purchaseUsd + c.purchaseUsd,
+    saleBrl: a.saleBrl + c.saleBrl,
+    items: a.items + c.items,
+    itemsWithPurchase: a.itemsWithPurchase + c.itemsWithPurchase,
+    itemsWithSale: a.itemsWithSale + c.itemsWithSale,
+  })
+
+  const keys = [...byMonth.keys()].sort()
+  if (keys.length === 0) {
+    return { months: [], later: null, withoutClock, total: empty() }
+  }
+
+  // Do primeiro ao último, contíguo, até o horizonte. O que sobra vai para
+  // "later" — somado, não escondido.
+  const months: ArrivalMonth[] = []
+  let key = keys[0]
+  const last = keys[keys.length - 1]
+  while (key <= last && months.length < horizon) {
+    months.push({ key, label: monthLabel(key), total: byMonth.get(key) ?? empty() })
+    key = nextMonth(key)
+  }
+
+  let later: OrderTotal | null = null
+  for (const k of keys) {
+    if (k >= key) later = add(later ?? empty(), byMonth.get(k)!)
+  }
+
+  let total = empty()
+  for (const k of keys) total = add(total, byMonth.get(k)!)
+
+  return { months, later, withoutClock, total }
 }
