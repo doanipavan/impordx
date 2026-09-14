@@ -5,7 +5,7 @@ export type SampleStatus = 'Requested' | 'In Preparation' | 'Under RDX Revision'
   | 'Under DEQI Revision' | 'Approved' | 'Lost'
 export type OrderStatus = 'Purchasing' | 'Commercial' | 'PI Requested'
   | 'PI In Preparation' | 'PI Approved' | 'Placed'
-  | 'In Production' | 'Ready to Ship' | 'Shipped'
+  | 'In Production' | 'Ready to Ship' | 'Shipped' | 'Arrived'
 export type CardStatus = QuoteStatus | SampleStatus | OrderStatus
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
@@ -91,6 +91,9 @@ export interface Card {
   sample_approved_at?: string
   order_confirmed_at?: string  // fallback anchor when there was no sample
   shipped_at?: string          // stamped by trigger when status becomes Shipped
+  // O dia em que chegou ao Brasil, carimbado ao entrar em Arrived (migração
+  // 042). É o que fecha a meta de logística: arrived_at − delivery_date ≤ 50.
+  arrived_at?: string | null
   status_since?: string        // stamped by trigger on every status change
   logo_technique_outside?: string
   logo_technique_inside?: string
@@ -178,18 +181,20 @@ export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {
   quotes: ['Requested', 'Quoted', 'Confirmed', 'Declined'],
   samples: ['Requested', 'In Preparation', 'Under RDX Revision', 'Under DEQI Revision', 'Approved', 'Lost'],
   orders: ['Purchasing', 'Commercial', 'PI Requested', 'PI In Preparation', 'PI Approved',
-           'Placed', 'In Production', 'Ready to Ship', 'Shipped'],
+           'Placed', 'In Production', 'Ready to Ship', 'Shipped', 'Arrived'],
 }
 
 // Purchasing and Commercial are Redantex's own intake — the supplier has no
-// business seeing a card before it is a real order with a PI to raise.
-export const REDANTEX_ONLY_STATUSES = ['Purchasing', 'Commercial']
+// business seeing a card before it is a real order with a PI to raise. Arrived
+// is the other end: the supplier's leg ends at Shipped, and the day the goods
+// land would reveal the transit time the shipping leg deliberately withholds.
+export const REDANTEX_ONLY_STATUSES = ['Purchasing', 'Commercial', 'Arrived']
 
 // From Placed onward the supplier's price is settled: the proforma is approved
 // and the number stops moving. Before it, everything is still a proposal. The
 // two halves are counted separately because they answer different questions —
 // one is money committed, the other is money at stake.
-export const PLACED_ONWARD: CardStatus[] = ['Placed', 'In Production', 'Ready to Ship', 'Shipped']
+export const PLACED_ONWARD: CardStatus[] = ['Placed', 'In Production', 'Ready to Ship', 'Shipped', 'Arrived']
 
 export function isPlacedOnward(status: CardStatus): boolean {
   return PLACED_ONWARD.includes(status)
@@ -254,7 +259,10 @@ export const STATUS_COLORS: Record<CardStatus, string> = {
   Placed: WAITING,
   'In Production': ACTIVE,
   'Ready to Ship': ACTIVE,
+  // Embarcado é "feito" para o fornecedor; chegado é "feito" para a Redantex.
+  // Os dois são verdes: no vocabulário de cor do hub, verde é concluído.
   Shipped: DONE,
+  Arrived: DONE,
 }
 
 export const PRIORITY_COLORS: Record<Priority, string> = {

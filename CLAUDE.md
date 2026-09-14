@@ -62,21 +62,35 @@ ten hours apart; the same event must not read as two different times.
 pinned** — deadlines are typed as plain dates and stored at UTC midnight, so
 pinning them would shift every deadline a day for the supplier.
 
-**Delivery is 120 days from the day the sample was approved.** Not from the PI,
-not from a monthly cut-off — `sample_approved_at`, stamped by
-`stamp_sample_approved` when a card on the samples board reaches `Approved`, and
-carried through promotion because promotion moves the same row.
-`order_confirmed_at` (stamped at PI Approved) is only the fallback for a
-confirmed quote that never was a sample, and `orderClock` reports which of the
-two it used so the fallback is never silent. The 120 splits into the two
-`ORDER_LEG_DAYS` legs: 60 for DEQI to have it ready, 60 to land it in Brazil.
+**Delivery runs on two rulers, and both live in `orderSchedule`.** The
+**plan** is 120 days from the day the sample was approved — `sample_approved_at`,
+stamped by `stamp_sample_approved` when a card on the samples board reaches
+`Approved`, carried through promotion because promotion moves the same row.
+`order_confirmed_at` (stamped at Placed by the safety net — the "PI Approved"
+branch has never once fired) is the fallback for a confirmed quote that never
+was a sample, and `kind` reports which was used so the fallback is never silent.
+The 120 splits into two `ORDER_LEG_DAYS` legs: 60 for the supplier to have it
+ready, 60 to land it in Brazil.
 
-Nothing about this rule is stored — not the delivery date, not the lead time in
-SQL. It has already changed three times in one day (130 batched → 120 batched →
-120 flat), and a stored value would have kept answering with the dead rule on
-every existing card. Migration 026 adds the column and the trigger; 027 drops the
-batch function that briefly existed. Tests: `node_modules/.bin/jiti
-scripts/check-delivery-schedule.ts`, under `TZ=Asia/Shanghai` too.
+The **forecast** takes over the moment the supplier names a ready date
+(`delivery_date`): the goods land `LOGISTICS_TARGET_DAYS` = 50 days after that
+date — Redantex's own logistics meta, set 14 Sep 2026. The plan's day 60 is
+kept alongside (`plannedReady`) so the supplier's date can still be judged
+against it; otherwise a supplier who slips moves the ruler with them and is
+never late. Doani chose the full 120 as the fallback, not 60 + 50: until the
+supplier speaks, the promise made to the client stands. `Arrived` (migration
+042) stamps `arrived_at`; `logisticsOutcome` scores the leg against the 50.
+The supplier never sees `Arrived` — the day the goods landed would reveal the
+transit time the shipping leg withholds.
+
+Nothing about either rule is stored — not the delivery date, not the lead time
+in SQL. The plan has already changed three times in one day (130 batched → 120
+batched → 120 flat), and a stored value would have kept answering with the dead
+rule on every existing card. Every view — Gantt, arrivals panel, card panel —
+reads `orderSchedule`; the Gantt and the card panel each keeping their own
+"+120" is how two live orders once fell off the chart. Tests:
+`node_modules/.bin/jiti scripts/check-delivery-schedule.ts` and
+`scripts/check-arrivals.ts`, under `TZ=Asia/Shanghai` too.
 
 **A piece keeps one reference number for life.** `allocate_card_ref` mints
 `2026-10014` once and it survives promotion: `QUO-2026-10014` → `SMP-` → `ORD-`,

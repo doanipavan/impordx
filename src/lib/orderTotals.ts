@@ -1,4 +1,4 @@
-import { salePrice, clockFor, deliveryAnchor } from './utils'
+import { salePrice, orderSchedule } from './utils'
 import { BoardType, Card, CardStatus, isPlacedOnward } from '../types'
 
 // Aqui não entra nada que fale com o Supabase: são números de dinheiro, e
@@ -142,7 +142,6 @@ export interface Arrivals {
   total: OrderTotal
 }
 
-const DAY = 86_400_000
 
 function monthLabel(key: string): string {
   const [y, m] = key.split('-').map(Number)
@@ -159,11 +158,11 @@ function nextMonth(key: string): string {
 /**
  * O valor que chega ao Brasil, mês a mês.
  *
- * O mês é o do dia 120 da mesma régua que o Gantt desenha — aprovação da
- * amostra para a DEQI, proforma para a Sconcept, via `deliveryAnchor` e
- * `clockFor`. Não é uma segunda regra: é a mesma, lida no mesmo lugar. Um
- * painel que dissesse "dezembro" enquanto a barra do Gantt terminasse em
- * janeiro seria pior do que nenhum painel.
+ * O mês vem de `orderSchedule`, a mesma régua que o Gantt desenha: a data do
+ * fornecedor + 50 quando ele deu uma, senão o dia 120 do plano — e, se a
+ * mercadoria já chegou, o mês em que chegou de fato. Não é uma segunda regra:
+ * é a mesma, lida no mesmo lugar. Um painel que dissesse "dezembro" enquanto a
+ * barra do Gantt terminasse em janeiro seria pior do que nenhum painel.
  *
  * Meses vazios entre o primeiro e o último aparecem, com zero. Num fluxo de
  * caixa, um mês sem chegada é informação — escondê-lo faria dois meses
@@ -183,13 +182,11 @@ export function arrivalsByMonth(
   const monthOf = new Map<string, string>()
   let withoutClock = 0
   for (const card of inScope) {
-    const clock = clockFor(card)
-    const anchor = deliveryAnchor(card, clock)
-    if (!anchor) { withoutClock += 1; continue }
-    const [y, m, d] = anchor.date.slice(0, 10).split('-').map(Number)
-    if (!y || !m || !d) { withoutClock += 1; continue }
-    const arrival = new Date(Date.UTC(y, m - 1, d) + (clock.productionDays + clock.shippingDays) * DAY)
-    monthOf.set(card.id, arrival.toISOString().slice(0, 7))
+    const sched = orderSchedule(card)
+    if (!sched) { withoutClock += 1; continue }
+    // Chegou: o mês é o real. Senão, a previsão (ou o plano) da régua.
+    const day = sched.arrivedAt ?? sched.arrival
+    monthOf.set(card.id, day.slice(0, 7))
   }
 
   const byMonth = new Map<string, OrderTotal>()

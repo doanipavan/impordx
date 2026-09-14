@@ -6,6 +6,7 @@
 // shift with the reader's clock — the supplier reads the same number we do.
 
 import {
+  orderSchedule, logisticsOutcome, LOGISTICS_TARGET_DAYS,
   orderClock, deliveryAnchor, ORDER_LEG_DAYS,
   supplierClock, DEFAULT_CLOCK, collectionsFor,
   errorText,
@@ -153,6 +154,62 @@ check('erro normal passa intacto',
   errorText(new Error('Purchase order number is required before leaving Purchasing')),
   'Purchase order number is required before leaving Purchasing')
 check('nada continua nada', errorText(null), null)
+
+// ---------------------------------------------------------------------------
+// A meta de logística: 50 dias a partir da data que o fornecedor deu
+// ---------------------------------------------------------------------------
+// Duas réguas, medindo pessoas diferentes. O plano (60 + 60) mede o fornecedor
+// contra o dia 60; a previsão (data dele + 50) mede a Redantex contra a data
+// dele. Doani manteve os 120 como fallback: enquanto o fornecedor não fala, a
+// promessa feita ao cliente é a de antes.
+
+console.log('\n— a meta de logística —')
+check('a meta é 50', LOGISTICS_TARGET_DAYS, 50)
+
+const semData = orderSchedule({ sample_approved_at: '2026-08-12', status: 'Placed' })!
+check('sem data do fornecedor: pronto no dia 60', semData.ready, '2026-10-11')
+check('sem data do fornecedor: é o plano', semData.readyKind, 'plan')
+check('sem data do fornecedor: chega no dia 120', semData.arrival, '2026-12-10')
+check('sem data do fornecedor: janela de 60', semData.shippingDays, 60)
+
+// o RIZZI de verdade: aprovado 12/08, DEQI disse 28/10
+const rizzi = orderSchedule({ sample_approved_at: '2026-08-12', delivery_date: '2026-10-28', status: 'Placed' })!
+check('com data: pronto é a data do fornecedor', rizzi.ready, '2026-10-28')
+check('com data: é dele', rizzi.readyKind, 'supplier')
+check('com data: chega 50 dias depois', rizzi.arrival, '2026-12-17')
+check('com data: é previsão', rizzi.arrivalKind, 'forecast')
+check('com data: janela de 50', rizzi.shippingDays, 50)
+// e o dia 60 do plano continua existindo, para medir o atraso dele
+check('o dia 60 do plano não some', rizzi.plannedReady, '2026-10-11')
+
+// fornecedor que promete ANTES do dia 60 (DAVANZO: 24/08 → disse 12/10)
+const cedo = orderSchedule({ sample_approved_at: '2026-08-24', delivery_date: '2026-10-12', status: 'Placed' })!
+check('promessa antes do dia 60: chega antes do dia 120', cedo.arrival, '2026-12-01')
+
+// o painel do card lê a mesma régua
+const clk = orderClock({ sample_approved_at: '2026-08-12', delivery_date: '2026-10-28', status: 'Placed' })!
+check('orderClock: alvo total = previsão', clk.total.target, '2026-12-17')
+check('orderClock: perna do fornecedor termina na data dele', clk.deqi.target, '2026-10-28')
+check('orderClock: janela da RDX é 50', clk.rdx.windowDays, 50)
+check('orderClock sem data: janela da RDX é 60',
+  orderClock({ sample_approved_at: '2026-08-12', status: 'Placed' })!.rdx.windowDays, 60)
+
+console.log('\n— chegou de verdade —')
+check('sem chegada: nada a medir', logisticsOutcome({ delivery_date: '2026-10-28' }), null)
+check('sem data do fornecedor: nada a medir', logisticsOutcome({ arrived_at: '2026-12-10' }), null)
+const dentro = logisticsOutcome({ delivery_date: '2026-10-28', arrived_at: '2026-12-10' })!
+check('43 dias: dentro da meta', dentro.days, 43)
+check('43 dias: onTarget', dentro.onTarget, true)
+check('43 dias: nada acima', dentro.over, 0)
+const limite = logisticsOutcome({ delivery_date: '2026-10-28', arrived_at: '2026-12-17' })!
+check('50 em ponto: ainda dentro', limite.onTarget, true)
+const fora = logisticsOutcome({ delivery_date: '2026-10-28', arrived_at: '2026-12-25' })!
+check('58 dias: fora', fora.onTarget, false)
+check('58 dias: 8 acima', fora.over, 8)
+check('Arrived: perna da RDX concluída',
+  orderClock({ sample_approved_at: '2026-08-12', delivery_date: '2026-10-28', arrived_at: '2026-12-10', status: 'Arrived' })!.rdx.done, true)
+check('Shipped ainda não é concluída',
+  orderClock({ sample_approved_at: '2026-08-12', delivery_date: '2026-10-28', status: 'Shipped' })!.rdx.done, false)
 
 console.log(bad === 0 ? '\nAll good.' : `\n${bad} failure(s).`)
 process.exit(bad === 0 ? 0 : 1)

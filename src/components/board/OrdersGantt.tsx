@@ -5,7 +5,7 @@ import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
 import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
-import { cn, ORDER_LEG_DAYS, deliveryAnchor, clockFor, supplierAccent, supplierNameOf, deliverySlip } from '../../lib/utils'
+import { cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, orderSchedule, clockFor, supplierAccent, supplierNameOf, deliverySlip, logisticsOutcome } from '../../lib/utils'
 import { Card } from '../../types'
 
 const DAY = 86_400_000
@@ -59,23 +59,30 @@ function shortDate(date: Date) {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }
 
-interface Row {
+export interface Row {
   card: Card
   /** Quando a peça entrou em amostra. Null quando nunca foi uma. */
   sampleStart: Date | null
   sampleDays: number | null
   confirmed: Date
-  handover: Date   // day 60 — DEQI hands over
-  arrival: Date    // day 120 — lands in Brazil
+  /** Onde a perna do fornecedor termina: a data que ele deu, ou o dia 60 do plano. */
+  handover: Date
+  /** Onde a mercadoria chega: data dele + 50, ou o dia 120 do plano. */
+  arrival: Date
+  /** O dia 60 do plano, sempre — é contra ele que a data do fornecedor é julgada. */
+  plannedReady: Date
+  forecast: boolean   // a chegada é previsão (data do fornecedor + 50) e não plano
   delivery: Date | null
+  arrivedAt: Date | null
   shipping: boolean
   shipped: boolean
+  arrived: boolean
   totalLeft: number
   deqiLeft: number
   missedPromise: boolean
 }
 
-function buildRow(card: Card, today: Date): Row | null {
+export function buildRow(card: Card, today: Date): Row | null {
   // Shared with the card panel on purpose. This used to read order_confirmed_at
   // directly, which is only stamped at PI Approved — so an order still waiting
   // on its proforma had no bar at all, however real it was.
@@ -83,15 +90,21 @@ function buildRow(card: Card, today: Date): Row | null {
   // The rule is also the supplier's, not the hub's: DEQI counts from the sample
   // approval, Sconcept from the proforma. Reading the clock here rather than
   // assuming one is the same mistake this comment already describes, one level up.
-  const clock = clockFor(card)
-  const anchor = deliveryAnchor(card, clock)
-  const confirmed = anchor ? calendarDay(anchor.date) : null
-  if (!anchor || !confirmed) return null
+  // Desde 14/set a régua tem duas leituras — plano (60 + 60) e previsão
+  // (data do fornecedor + 50) — e as duas saem de orderSchedule. Somar os
+  // dias aqui de novo seria a terceira cópia da regra, e a que ninguém testa.
+  const sched = orderSchedule(card)
+  const confirmed = sched ? calendarDay(sched.anchor.date) : null
+  if (!sched || !confirmed) return null
+  const anchor = sched.anchor
 
-  const handover = addDays(confirmed, clock.productionDays)
-  const arrival = addDays(confirmed, clock.productionDays + clock.shippingDays)
+  const handover = calendarDay(sched.ready)!
+  const arrival = calendarDay(sched.arrival)!
+  const plannedReady = calendarDay(sched.plannedReady)!
   const delivery = calendarDay(card.delivery_date)
-  const shipping = card.status === 'Ready to Ship' || card.status === 'Shipped'
+  const arrivedAt = calendarDay(card.arrived_at ?? undefined)
+  const arrived = card.status === 'Arrived'
+  const shipping = arrived || card.status === 'Ready to Ship' || card.status === 'Shipped'
 
   // A fase de amostra só existe se o relógio estiver ancorado numa aprovação de
   // amostra. Ancorado na proforma, não houve amostra a desenhar — e inventar
@@ -103,12 +116,17 @@ function buildRow(card: Card, today: Date): Row | null {
     card,
     sampleStart,
     sampleDays: sampleStart ? daysBetween(sampleStart, confirmed) : null,
-    confirmed, handover, arrival, delivery, shipping,
-    shipped: card.status === 'Shipped',
-    totalLeft: daysBetween(today, arrival),
+    confirmed, handover, arrival, plannedReady, delivery, arrivedAt, shipping,
+    forecast: sched.arrivalKind === 'forecast',
+    shipped: card.status === 'Shipped' || arrived,
+    arrived,
+    // Chegou: a barra não corre mais. O que sobra é o resultado, não a espera.
+    totalLeft: arrived && arrivedAt ? daysBetween(arrivedAt, arrival) : daysBetween(today, arrival),
     deqiLeft: daysBetween(today, handover),
-    // DEQI has already told us it will miss the 60 days — visible before it slips.
-    missedPromise: !!delivery && delivery > handover,
+    // The supplier has already told us it will miss the 60 days — visible
+    // before it slips. Judged against the PLAN's day 60, never against its own
+    // date: otherwise a supplier who slips moves the ruler and is never late.
+    missedPromise: !!delivery && delivery > plannedReady,
   }
 }
 
@@ -230,7 +248,7 @@ export function OrdersGantt() {
             label="Sample" />
           <Key className="bg-amber-100 border-amber-500"
             label={deqiOnly ? 'In production' : 'Supplier · production'} />
-          {!deqiOnly && <Key className="bg-slate-200 border-slate-400" label="RDX · to Brazil" />}
+          {!deqiOnly && <Key className="bg-slate-200 border-slate-400" label={`RDX · to Brazil (${LOGISTICS_TARGET_DAYS}d from the supplier's date)`} />}
           <Key className="bg-green-100 border-green-600" label={deqiOnly ? 'Ready' : 'Done'} />
           <Key className="bg-red-100 border-red-500" label="Overdue" />
         </div>
@@ -305,25 +323,30 @@ export function OrdersGantt() {
  * telas que a Ashley e o Carlos também abrem, e a régua de tempo não deve
  * carregar o que a régua de dinheiro protege.
  */
-function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) {
+export function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) {
   const slip = deliverySlip(row.card)
   const clock = clockFor(row.card)
-  const anchor = deliveryAnchor(row.card, clock)
+  const sched = orderSchedule(row.card, clock)
+  const outcome = logisticsOutcome(row.card)
 
   const facts: Array<{ k: string; v: string; tone?: 'late' | 'ok' }> = [
     { k: 'Reference', v: row.card.ref_number ?? '—' },
     { k: 'Supplier', v: supplierNameOf(row.card) ?? '—' },
     { k: 'Status', v: row.card.status },
     {
-      k: anchor?.kind === 'sample' ? 'Sample approved' : 'Proforma approved',
+      k: sched?.anchor.kind === 'sample' ? 'Sample approved' : 'Proforma approved',
       v: shortDate(row.confirmed),
     },
-    { k: `Ready (day ${clock.productionDays})`, v: shortDate(row.handover) },
+    // O dia 60 do plano fica sempre à vista: é a régua contra a qual a data do
+    // fornecedor é julgada. Escondê-lo quando ele dá uma data é esconder o atraso.
+    { k: `Planned ready (day ${clock.productionDays})`, v: shortDate(row.plannedReady) },
   ]
 
   if (!deqiOnly) {
     facts.push({
-      k: `Lands in Brazil (day ${clock.productionDays + clock.shippingDays})`,
+      k: row.forecast
+        ? `Lands in Brazil (supplier date + ${LOGISTICS_TARGET_DAYS})`
+        : `Lands in Brazil (day ${clock.productionDays + clock.shippingDays}, planned)`,
       v: shortDate(row.arrival),
     })
   }
@@ -345,12 +368,27 @@ function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) {
     })
   }
 
-  const left = deqiOnly ? row.deqiLeft : row.totalLeft
-  facts.push({
-    k: 'Days left',
-    v: left < 0 ? `${Math.abs(left)} overdue` : String(left),
-    tone: left < 0 ? 'late' : undefined,
-  })
+  // Chegou: o resultado da meta de logística, em dias e em veredito.
+  if (!deqiOnly && row.arrivedAt) {
+    facts.push({ k: 'Arrived', v: shortDate(row.arrivedAt) })
+    if (outcome) {
+      facts.push({
+        k: `Logistics (target ${LOGISTICS_TARGET_DAYS})`,
+        v: outcome.onTarget ? `${outcome.days} days · on target` : `${outcome.days} days · ${outcome.over} over`,
+        tone: outcome.onTarget ? 'ok' : 'late',
+      })
+    }
+  }
+
+  // Depois de chegar não há "dias que faltam"; o veredito acima já disse tudo.
+  if (!row.arrived) {
+    const left = deqiOnly ? row.deqiLeft : row.totalLeft
+    facts.push({
+      k: 'Days left',
+      v: left < 0 ? `${Math.abs(left)} overdue` : String(left),
+      tone: left < 0 ? 'late' : undefined,
+    })
+  }
 
   return (
     <div className="grid border-b border-border/60 bg-muted/30"
@@ -390,7 +428,7 @@ function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) {
   )
 }
 
-function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, onOpenCard }: {
+export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, onOpenCard }: {
   row: Row; months: number; pct: (d: Date) => number; deqiOnly: boolean; checkpoints: Checkpoint[]
   focused: boolean
   onFocus: () => void
@@ -411,7 +449,11 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
   const deqiWidth = deqiOnly ? rest : (span > 0 ? ((mid - anchorX) / span) * 100 : rest)
 
   const deqiState = row.shipping ? 'done' : row.deqiLeft < 0 ? 'late' : 'deqi'
-  const rdxState = row.shipped ? 'done' : row.totalLeft < 0 ? 'late' : 'rdx'
+  // Embarcado não é entregue. A perna da RDX só fecha quando a mercadoria
+  // chega — e fecha verde ou vermelha conforme a meta de 50 dias.
+  const outcome = logisticsOutcome(row.card)
+  const rdxState = row.arrived ? (outcome && !outcome.onTarget ? 'late' : 'done')
+    : row.totalLeft < 0 ? 'late' : 'rdx'
 
   const segment = {
     deqi: 'bg-amber-100 text-amber-700',
@@ -421,8 +463,8 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
   }
 
   const daysLeft = deqiOnly ? row.deqiLeft : row.totalLeft
-  const finished = deqiOnly ? row.shipping : row.shipped
-  const chip = finished ? 'bg-green-100 text-green-700'
+  const finished = deqiOnly ? row.shipping : row.arrived
+  const chip = finished ? (outcome && !outcome.onTarget ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700')
     : daysLeft < 0 ? 'bg-red-100 text-red-700'
     : daysLeft <= 21 ? 'bg-amber-100 text-amber-700'
     : 'bg-muted text-muted-foreground'
@@ -546,14 +588,18 @@ function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, o
                 : 'border-foreground bg-card')}
             style={{ left: `${pct(row.delivery)}%`, transform: 'translate(-50%, -50%) rotate(45deg)' }}
             title={row.missedPromise
-              ? `DEQI gave ${shortDate(row.delivery)} — past the ${ORDER_LEG_DAYS}-day window`
-              : `Delivery date from DEQI: ${shortDate(row.delivery)}`}
+              ? `${supplierNameOf(row.card) ?? 'Supplier'} gave ${shortDate(row.delivery)} — past the planned day ${ORDER_LEG_DAYS} (${shortDate(row.plannedReady)})`
+              : `Ready date from ${supplierNameOf(row.card) ?? 'the supplier'}: ${shortDate(row.delivery)}`}
           />
         )}
 
         <div className={cn('absolute top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap', chip)}
           style={{ left: `calc(${right}% + 10px)` }}>
-          {finished ? (deqiOnly ? 'ready' : 'delivered')
+          {finished
+            ? (deqiOnly ? 'ready'
+              : outcome ? `arrived · ${outcome.days}d${outcome.onTarget ? '' : ` (${outcome.over} over)`}`
+              : 'arrived')
+            : row.shipped && !deqiOnly ? `shipped · ${daysLeft < 0 ? `${Math.abs(daysLeft)}d over` : `${daysLeft}d`}`
             : daysLeft < 0 ? `${Math.abs(daysLeft)}d over`
             : `${daysLeft}d`}
         </div>

@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Card } from '../../types'
-import { orderClock, formatDate, cn, ORDER_LEG_DAYS, OrderClock, LegClock, deliverySlip } from '../../lib/utils'
+import { orderClock, formatDate, cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, OrderClock, LegClock, deliverySlip, supplierNameOf } from '../../lib/utils'
 
 // A delivery date is a calendar day, stored as a `date` and never parsed into an
 // instant — that is what keeps it from sliding a day between São Paulo and DEQI.
@@ -102,7 +102,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
         )}
       </div>
 
-      {clock && !editing && <OrderClockPanel clock={clock} deqiOnly={isDeqi} />}
+      {clock && !editing && <OrderClockPanel clock={clock} deqiOnly={isDeqi} supplierName={supplierNameOf(card) ?? 'Supplier'} />}
 
       {editing ? (
         <div className="space-y-3">
@@ -253,7 +253,7 @@ function Field({ label, value, missing, mono, emphasis, alarm }: {
 
 // The 120-day journey as one headline number, with the two 60-day legs that
 // make it up underneath — so a slip is attributable, not just visible.
-function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boolean }) {
+function OrderClockPanel({ clock, deqiOnly, supplierName }: { clock: OrderClock; deqiOnly: boolean; supplierName: string }) {
   const { total, deqi, rdx, activeLeg } = clock
   // The supplier is accountable for the first leg only, so that is the whole
   // clock on their screen — otherwise hiding transit on the board is cosmetic.
@@ -273,7 +273,15 @@ function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boo
           {late ? 'days over' : deqiOnly ? 'days to ready' : 'days to Brazil'}
         </span>
         <span className="ml-auto text-xs text-muted-foreground">
-          {deqiOnly ? ORDER_LEG_DAYS : ORDER_LEG_DAYS * 2}-day target · {formatDate(headline.target)}
+          {/* Duas réguas: o plano (60 + 60) até o fornecedor dar uma data, e a
+              meta de logística (data dele + 50) depois. O rótulo diz qual está
+              valendo, senão o número troca de significado sem avisar. */}
+          {deqiOnly
+            ? `${ORDER_LEG_DAYS}-day target`
+            : rdx.windowDays === LOGISTICS_TARGET_DAYS
+              ? `supplier's date + ${LOGISTICS_TARGET_DAYS} · target`
+              : `${ORDER_LEG_DAYS * 2}-day plan`}
+          {' · '}{formatDate(headline.target)}
         </span>
       </div>
 
@@ -287,7 +295,7 @@ function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boo
 
       {!deqiOnly && (
         <div className="grid grid-cols-2 gap-3 mt-3">
-          <LegBox label="DEQI" caption="production" leg={deqi} active={activeLeg === 'deqi'} />
+          <LegBox label={supplierName} caption="production" leg={deqi} active={activeLeg === 'deqi'} />
           <LegBox label="RDX" caption="to Brazil" leg={rdx} active={activeLeg === 'rdx'} />
         </div>
       )}
@@ -303,7 +311,7 @@ function LegBox({ label, caption, leg, active }: {
 }) {
   const late = !leg.done && leg.daysLeft < 0
   const status = leg.done ? 'done'
-    : !leg.started ? `${ORDER_LEG_DAYS}d — not started`
+    : !leg.started ? `${leg.windowDays}d — not started`
     : late ? `${Math.abs(leg.daysLeft)}d over`
     : `${leg.daysLeft}d left`
 

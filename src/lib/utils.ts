@@ -68,8 +68,17 @@ export function formatRelative(date: string | null | undefined): string {
 
 // An order runs on two consecutive 60-day legs from the day the sample was
 // approved: DEQI has 60 days to have it ready, then Redantex has 60 to land it
-// in Brazil. 120 days, counted from that approval and from nothing else.
+// in Brazil. 120 days, counted from that approval and from nothing else. That
+// is the PLAN — what is promised before the supplier has said anything.
 export const ORDER_LEG_DAYS = 60
+
+// Once the supplier names the day the goods are ready, the shipping leg is
+// measured from THAT day, and the target is 50 — Redantex's own logistics
+// meta, set by Doani on 14 Sep 2026. The 60 above stays for the plan; this is
+// what the forecast and the scorecard use. Two numbers on purpose: one
+// measures the supplier against the plan, the other measures Redantex against
+// the supplier's date. Folding them into one would lose one of the two.
+export const LOGISTICS_TARGET_DAYS = 50
 
 /**
  * A supplier's delivery rule.
@@ -245,6 +254,8 @@ export interface LegClock {
   target: string     // 'YYYY-MM-DD'
   started: boolean
   done: boolean
+  /** How long this leg is meant to take: 60 on the plan, 50 once the supplier named a date. */
+  windowDays: number
 }
 
 export interface OrderClock {
@@ -300,6 +311,103 @@ export function deliveryAnchor(
   return null
 }
 
+export interface OrderSchedule {
+  anchor: DeliveryAnchor
+  /** Day 60 of the plan. The supplier's own date is judged against this. */
+  plannedReady: string
+  /** Day the goods are ready: the supplier's date when given, else the plan's day 60. */
+  ready: string
+  readyKind: 'supplier' | 'plan'
+  /** Day the goods land: supplier's date + 50 when given, else the plan's day 120. */
+  arrival: string
+  arrivalKind: 'forecast' | 'plan'
+  /** Length of the shipping window in days — 50 on a forecast, 60 on the plan. */
+  shippingDays: number
+  /** When the goods actually landed, if they have. */
+  arrivedAt: string | null
+}
+
+/**
+ * The whole schedule of an order, from one function.
+ *
+ * Two rules live here and both matter:
+ *
+ *   plan      anchor → +60 ready → +60 landed        (nothing from the supplier yet)
+ *   forecast  anchor → supplier's date → +50 landed  (the supplier named a day)
+ *
+ * The forecast does NOT replace the plan's day 60 — `plannedReady` is kept so
+ * the supplier's date can still be measured against it. Otherwise a supplier
+ * who slips just moves the whole ruler with them and is never late.
+ *
+ * Doani chose to keep the 120-day plan as the fallback rather than 60 + 50:
+ * until the supplier speaks, the promise made to the client stands as it was.
+ *
+ * The Gantt, the arrivals panel, the card panel and the export all read this.
+ * Each of them computing "+120" on its own is how two live orders once fell
+ * off the chart while the card panel still showed them.
+ */
+export function orderSchedule(
+  card: {
+    sample_approved_at?: string | null
+    order_confirmed_at?: string | null
+    delivery_date?: string | null
+    arrived_at?: string | null
+    supplier?: { short_name?: string } | null
+  },
+  clock: SupplierClock = clockFor(card)
+): OrderSchedule | null {
+  const anchor = deliveryAnchor(card, clock)
+  if (!anchor) return null
+  const start = calendarDay(anchor.date)
+  if (!start) return null
+
+  const at = (from: Date, days: number) =>
+    new Date(from.getTime() + days * MS_PER_DAY).toISOString().slice(0, 10)
+
+  const plannedReady = at(start, clock.productionDays)
+  const supplierDay = card.delivery_date ? calendarDay(card.delivery_date) : null
+
+  if (supplierDay) {
+    return {
+      anchor, plannedReady,
+      ready: card.delivery_date!, readyKind: 'supplier',
+      arrival: at(supplierDay, LOGISTICS_TARGET_DAYS), arrivalKind: 'forecast',
+      shippingDays: LOGISTICS_TARGET_DAYS,
+      arrivedAt: card.arrived_at ?? null,
+    }
+  }
+  return {
+    anchor, plannedReady,
+    ready: plannedReady, readyKind: 'plan',
+    arrival: at(start, clock.productionDays + clock.shippingDays), arrivalKind: 'plan',
+    shippingDays: clock.shippingDays,
+    arrivedAt: card.arrived_at ?? null,
+  }
+}
+
+export interface LogisticsOutcome {
+  /** Calendar days from the supplier's ready date to the day it landed. */
+  days: number
+  onTarget: boolean
+  /** Positive when over the 50-day target. */
+  over: number
+}
+
+/**
+ * How the shipping leg actually went — only once the goods have landed and
+ * the supplier had named a ready date. Without both there is nothing to score.
+ */
+export function logisticsOutcome(card: {
+  delivery_date?: string | null
+  arrived_at?: string | null
+}): LogisticsOutcome | null {
+  const ready = card.delivery_date ? calendarDay(card.delivery_date) : null
+  const landed = card.arrived_at ? calendarDay(card.arrived_at) : null
+  if (!ready || !landed) return null
+  const days = Math.round((landed.getTime() - ready.getTime()) / MS_PER_DAY)
+  return { days, onTarget: days <= LOGISTICS_TARGET_DAYS, over: Math.max(0, days - LOGISTICS_TARGET_DAYS) }
+}
+
 export interface DeliverySlip {
   promised: string   // 'YYYY-MM-DD' — the first date DEQI gave
   current: string    // 'YYYY-MM-DD' — where it stands now
@@ -338,49 +446,50 @@ export function orderClock(
   card: {
     sample_approved_at?: string | null
     order_confirmed_at?: string | null
+    delivery_date?: string | null
+    arrived_at?: string | null
     status?: string
     supplier?: { short_name?: string } | null
   },
   clock: SupplierClock = clockFor(card)
 ): OrderClock | null {
   const status = card.status ?? ''
-  const found = deliveryAnchor(card, clock)
-  if (!found) return null
-  const { date: anchorDate, kind: anchor } = found
-  const start = calendarDay(anchorDate)
-  if (!start) return null
+  // Um cálculo só, partilhado com o Gantt e o painel de chegadas. Esta função
+  // somava os 120 por conta própria; agora só traduz a régua em "dias que
+  // faltam" para o painel do card.
+  const sched = orderSchedule(card, clock)
+  if (!sched) return null
 
   const today = todayInSaoPaulo().getTime()
-  const daysUntil = (offset: number) =>
-    Math.round((start.getTime() + offset * MS_PER_DAY - today) / MS_PER_DAY)
-  const dateAt = (offset: number) =>
-    new Date(start.getTime() + offset * MS_PER_DAY).toISOString().slice(0, 10)
+  const daysUntil = (ymd: string) => {
+    const d = calendarDay(ymd)!
+    return Math.round((d.getTime() - today) / MS_PER_DAY)
+  }
 
   // Status is the truth about which leg is running: goods that are ready have
   // left the factory's hands even if the calendar disagrees.
-  const shipping = status === 'Ready to Ship' || status === 'Shipped'
-  const handover = clock.productionDays
-  const arrival = clock.productionDays + clock.shippingDays
-  const deqiDaysLeft = daysUntil(handover)
-  const deqiDone = shipping
+  const arrived = status === 'Arrived'
+  const shipping = arrived || status === 'Ready to Ship' || status === 'Shipped'
 
   return {
     activeLeg: shipping ? 'rdx' : 'deqi',
-    anchor,
-    anchorDate,
-    total: { daysLeft: daysUntil(arrival), target: dateAt(arrival) },
+    anchor: sched.anchor.kind,
+    anchorDate: sched.anchor.date,
+    total: { daysLeft: daysUntil(sched.arrival), target: sched.arrival },
     deqi: {
-      daysLeft: deqiDaysLeft,
-      target: dateAt(handover),
+      daysLeft: daysUntil(sched.ready),
+      target: sched.ready,
       started: true,
-      done: deqiDone,
+      done: shipping,
+      windowDays: clock.productionDays,
     },
     rdx: {
       // Before the factory hands over, shipping has its full window untouched.
-      daysLeft: shipping ? daysUntil(arrival) : clock.shippingDays,
-      target: dateAt(arrival),
+      daysLeft: shipping ? daysUntil(sched.arrival) : sched.shippingDays,
+      target: sched.arrival,
       started: shipping,
-      done: status === 'Shipped' && daysUntil(arrival) >= 0,
+      done: arrived,
+      windowDays: sched.shippingDays,
     },
   }
 }
