@@ -6,6 +6,7 @@ import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/Login'
 import { DashboardPage } from './pages/Dashboard'
 import { QuotesPage, SamplesPage, OrdersPage } from './pages/BoardPage'
+import { TimelinePage } from './pages/TimelinePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ArchivePage } from './pages/ArchivePage'
 import { FinancePage } from './pages/FinancePage'
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/samples/:ref" element={<ProtectedRoute><SamplesPage /></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
       <Route path="/orders/:ref" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+      <Route path="/timeline" element={<ProtectedRoute><TimelinePage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/archive" element={<ProtectedRoute><ArchivePage /></ProtectedRoute>} />

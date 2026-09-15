@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, MessageSquare, Package, ShoppingCart, Bell, Archive,
+  LayoutDashboard, MessageSquare, Package, ShoppingCart, ChartGantt, Bell, Archive,
   Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search, Wallet
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -17,6 +17,9 @@ const NAV = [
   { to: '/quotes', icon: MessageSquare, label: 'Quotes' },
   { to: '/samples', icon: Package, label: 'Samples' },
   { to: '/orders', icon: ShoppingCart, label: 'Orders' },
+  // Right under Orders: it is the same orders, drawn against time. Suppliers
+  // get it too — they see their production leg there, as they did on the board.
+  { to: '/timeline', icon: ChartGantt, label: 'Timeline' },
   { to: '/notifications', icon: Bell, label: 'Notifications', badge: true },
   { to: '/archive', icon: Archive, label: 'Archive' },
 ]

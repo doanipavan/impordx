@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { BoardType, BOARD_LABELS, Card } from '../types'
 import { Board } from '../components/board/Board'
-import { OrdersGantt } from '../components/board/OrdersGantt'
 import { ExportOrders } from '../components/board/ExportOrders'
 import { ImportCard } from '../components/board/ImportCard'
 import { SupplierSwitch } from '../components/board/SupplierSwitch'
@@ -78,8 +77,9 @@ function BoardPage({ board }: { board: BoardType }) {
             ainda, e uma tabela de zeros não informa nada. */}
         {board !== 'quotes' && <BoardTotals board={board} />}
 
-        {/* Only orders run a 120-day clock, so only orders get a timeline. */}
-        {board === 'orders' && <OrdersGantt />}
+        {/* A timeline dos pedidos morou aqui em cima até 15/set; hoje é uma
+            aba própria (/timeline), porque dividida com o board nenhum dos
+            dois tinha altura. */}
         <div className="flex-1 overflow-hidden">
           <Board board={board} autoOpenCard={autoOpenCard} onAutoOpenClear={() => { setAutoOpenCard(null); navigate('/' + board, { replace: true }) }} />
         </div>

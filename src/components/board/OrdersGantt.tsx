@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, X, ExternalLink } from 'lucide-react'
+import { X, ExternalLink } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
@@ -10,16 +10,6 @@ import { Card } from '../../types'
 
 const DAY = 86_400_000
 const LABEL_WIDTH = 150
-const STORAGE_KEY = 'rdx.ordersGantt.open'
-
-// localStorage throws in some in-app browsers and private modes. Remembering
-// a panel is open is never worth taking the page down with it.
-function readOpen(): boolean {
-  try { return localStorage.getItem(STORAGE_KEY) !== 'false' } catch { return true }
-}
-function writeOpen(value: boolean) {
-  try { localStorage.setItem(STORAGE_KEY, String(value)) } catch { /* not worth failing over */ }
-}
 
 function calendarDay(ymd?: string): Date | null {
   if (!ymd) return null
@@ -139,7 +129,6 @@ export function OrdersGantt() {
   const [supplierFilter] = useSupplierFilter()
   // Where the order actually was, from the history already being recorded.
   const { data: checkpoints = [] } = useCheckpoints(cards.map(c => c.id))
-  const [open, setOpen] = useState(readOpen)
   // Qual negócio está em foco. Null = o quadro inteiro.
   const [focusId, setFocusId] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -195,7 +184,6 @@ export function OrdersGantt() {
   // The today line spans the whole chart, so it is positioned in pixels once
   // the tracks have a measured width rather than per row.
   useEffect(() => {
-    if (!open) return
     function place() {
       const el = chartRef.current
       if (!el) return
@@ -205,25 +193,29 @@ export function OrdersGantt() {
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [open, drawn, start, end, today]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [drawn, start, end, today]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function toggle() {
-    setOpen(o => {
-      writeOpen(!o)
-      return !o
-    })
+  // A página é só isto. Vazia, tem de dizer por quê — um branco aqui parece
+  // um gráfico que não carregou.
+  if (rows.length === 0) {
+    return (
+      <section className="flex-1 border border-border rounded-lg bg-card flex items-center justify-center">
+        <p className="text-sm text-muted-foreground text-center px-6">
+          No orders on the clock yet.
+          <span className="block text-xs mt-1">
+            An order joins the timeline once its sample is approved or its proforma is confirmed.
+          </span>
+        </p>
+      </section>
+    )
   }
 
-  if (rows.length === 0) return null
-
   return (
-    <section className="mx-4 mb-3 border border-border rounded-lg bg-card overflow-hidden shrink-0">
-      <div className="flex items-center gap-2.5 px-3 py-1.5 border-b border-border bg-muted/40">
-        <button onClick={toggle} aria-expanded={open}
-          className="flex items-center gap-1.5 text-sm font-semibold hover:text-primary transition-colors">
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          {deqiOnly ? 'Production schedule' : 'Timeline'}
-        </button>
+    // Preenche a página que o recebe: antes (até 15/set) morava em cima do
+    // board de Orders com um teto de 40% da altura, e nem ele nem o board
+    // cabiam. Sem teto, quem rola é o próprio gráfico.
+    <section className="flex-1 min-h-0 border border-border rounded-lg bg-card overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2.5 px-3 py-1.5 border-b border-border bg-muted/40 shrink-0">
         <span className="text-[11px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
           {rows.length} {rows.length === 1 ? 'order' : 'orders'}
         </span>
@@ -254,11 +246,9 @@ export function OrdersGantt() {
         </div>
       </div>
 
-      {/* O painel tem um teto e rola sozinho. Sem isso ele crescia com o número
-          de pedidos, e como o pai corta o que passa, as últimas linhas ficavam
-          inalcançáveis e o board sumia embaixo — sem nada que rolasse. */}
-      {open && (
-        <div className="overflow-auto scrollbar-thin max-h-[40vh] overscroll-contain">
+      {/* Quem rola é este miolo, não a página: o eixo dos meses fica preso no
+          topo enquanto as linhas passam por baixo. */}
+      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin overscroll-contain">
           <div ref={chartRef} className="min-w-[620px] relative">
 
             {/* month axis — fica no topo ao rolar, senão as barras lá embaixo
@@ -306,8 +296,7 @@ export function OrdersGantt() {
               </>
             )}
           </div>
-        </div>
-      )}
+      </div>
     </section>
   )
 }
