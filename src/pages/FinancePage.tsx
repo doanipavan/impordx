@@ -5,7 +5,7 @@ import { useToast } from '../components/ui/toast'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Select } from '../components/ui/select'
-import { cn, formatDate, errorText } from '../lib/utils'
+import { cn, formatDate, errorText, supplierAccent, supplierNameOf } from '../lib/utils'
 import {
   useFinance, useCloseCard, useReopenCard, useRecordPayment,
   Payment, FinanceCard, Channel, Tranche,
@@ -117,7 +117,11 @@ export function FinancePage() {
                 {groups.map(g => (
                   <Fragment key={g.pi}>
                     <tr className="bg-muted/30 border-y border-border">
-                      <td colSpan={4} className="px-3 py-1.5 font-mono text-[11px] font-semibold">
+                      {/* A mesma marca do Gantt: quem é o fornecedor está na cor da
+                          borda, não escrito. Uma proforma é de um fornecedor só, então
+                          a cor do primeiro pedido vale para o bloco. */}
+                      <td colSpan={4} className={cn('px-3 py-1.5 font-mono text-[11px] font-semibold border-l-[3px]',
+                        supplierAccent(supplierNameOf(g.cards[0])).edge)}>
                         {g.pi}
                         <span className="ml-2 font-sans font-normal text-muted-foreground">
                           {g.cards.length} {g.cards.length === 1 ? 'order' : 'orders'}
@@ -198,7 +202,9 @@ function CardRow({ card, tranches }: { card: FinanceCard; tranches: Partial<Reco
   return (
     <>
       <tr className="border-b border-border/60 hover:bg-muted/20">
-        <td className="px-3 py-1.5 font-mono text-[11px] truncate">{card.ref_number ?? '—'}</td>
+        <td className={cn('px-3 py-1.5 font-mono text-[11px] truncate border-l-[3px]', supplierAccent(supplierNameOf(card)).edge)}>
+          {card.ref_number ?? '—'}
+        </td>
         <td className="px-3 py-1.5 font-mono text-[11px] truncate">{card.purchase_order || '—'}</td>
         <td className="px-3 py-1.5 truncate">{card.client_name || card.title}</td>
         <td className="px-3 py-1.5 text-muted-foreground truncate">{card.status}</td>

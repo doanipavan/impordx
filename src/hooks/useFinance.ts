@@ -29,6 +29,8 @@ export interface FinanceCard {
   delivery_date?: string
   /** O número do pedido de compra da Redantex — o que a Valéria concilia. */
   purchase_order?: string
+  /** Só para a cor da borda: o hub não escreve o nome do fornecedor. */
+  supplier?: { short_name?: string } | null
   valueUsd: number
 }
 
@@ -40,7 +42,7 @@ export function useFinance() {
     queryFn: async () => {
       const [cards, items, pays] = await Promise.all([
         supabase.from('cards')
-          .select('id, ref_number, title, client_name, status, pi_number, delivery_date, purchase_order')
+          .select('id, ref_number, title, client_name, status, pi_number, delivery_date, purchase_order, supplier:suppliers(short_name)')
           .eq('board', 'orders').eq('archived', false),
         supabase.from('card_items').select('card_id, quantity, unit_price_usd'),
         supabase.from('card_payments').select('*'),
@@ -56,7 +58,14 @@ export function useFinance() {
       }
 
       return {
-        cards: ((cards.data ?? []) as FinanceCard[]).map(c => ({ ...c, valueUsd: usdByCard.get(c.id) ?? 0 })),
+        // O embed do fornecedor chega como objeto ou como lista de um — depende
+        // de o PostgREST reconhecer a FK como um-para-um. Normalizado aqui, como
+        // salePrice() já faz para o preço de venda.
+        cards: ((cards.data ?? []) as unknown as Array<FinanceCard & { supplier?: unknown }>).map(c => ({
+          ...c,
+          supplier: (Array.isArray(c.supplier) ? c.supplier[0] : c.supplier) as FinanceCard['supplier'],
+          valueUsd: usdByCard.get(c.id) ?? 0,
+        })),
         payments: (pays.data ?? []) as Payment[],
       }
     },
