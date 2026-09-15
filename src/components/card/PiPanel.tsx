@@ -6,7 +6,7 @@ import {
 } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
-import { cn, formatDateTime, formatFileSize, supplierNameOf } from '../../lib/utils'
+import { cn, formatDateTime, formatFileSize } from '../../lib/utils'
 import { Card } from '../../types'
 
 // Mais estreita que lib/fileTypes de propósito, e por isso fica aqui: uma
@@ -109,7 +109,7 @@ export function PiPanel({ card }: { card: Card }) {
       {!pi ? (
         <div>
           <p className="text-xs text-muted-foreground mb-2.5">
-            No PI uploaded yet. {supplierNameOf(card) ?? 'The supplier'} attaches it here.
+            No PI uploaded yet. The supplier attaches it here.
           </p>
           <button onClick={() => fileRef.current?.click()} disabled={busy}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-60">
@@ -180,7 +180,7 @@ export function PiPanel({ card }: { card: Card }) {
                 What is wrong with it? <span className="font-normal text-muted-foreground">(required)</span>
               </label>
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} autoFocus
-                placeholder={`Price, quantity, terms — say what ${supplierNameOf(card) ?? 'the supplier'} needs to change`}
+                placeholder="Price, quantity, terms — say what the supplier needs to change"
                 className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
               <div className="flex gap-2">
                 <button onClick={() => handleReview('rejected')} disabled={!note.trim() || busy}

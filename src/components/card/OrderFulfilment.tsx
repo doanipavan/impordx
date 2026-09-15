@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Card } from '../../types'
-import { orderClock, formatDate, cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, OrderClock, LegClock, deliverySlip, supplierNameOf } from '../../lib/utils'
+import { orderClock, formatDate, cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, OrderClock, LegClock, deliverySlip } from '../../lib/utils'
 
 // A delivery date is a calendar day, stored as a `date` and never parsed into an
 // instant — that is what keeps it from sliding a day between São Paulo and DEQI.
@@ -91,7 +91,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
         <p className={waiting ? 'text-sm font-semibold text-amber-900' : 'text-sm font-semibold'}>Order Details</p>
         {waiting && !editing && (
           <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-            <AlertCircle className="h-3 w-3" /> WAITING ON {(supplierNameOf(card) ?? 'SUPPLIER').toUpperCase()}
+            <AlertCircle className="h-3 w-3" /> WAITING ON SUPPLIER
           </span>
         )}
         {!editing && (
@@ -102,7 +102,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
         )}
       </div>
 
-      {clock && !editing && <OrderClockPanel clock={clock} deqiOnly={isDeqi} supplierName={supplierNameOf(card) ?? 'Supplier'} />}
+      {clock && !editing && <OrderClockPanel clock={clock} deqiOnly={isDeqi} />}
 
       {editing ? (
         <div className="space-y-3">
@@ -200,7 +200,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
           )}
           <Field label={committed ? 'Current delivery' : 'Delivery Date'}
             value={formatDeliveryDate(card.delivery_date)}
-            missing={card.delivery_date ? undefined : `Awaiting ${supplierNameOf(card) ?? 'supplier'}`} emphasis
+            missing={card.delivery_date ? undefined : 'Awaiting supplier'} emphasis
             alarm={!!slip} />
           <Field label="Sales order" mono value={card.sales_order} />
           <Field label="Purchase order" mono value={card.purchase_order} />
@@ -253,7 +253,7 @@ function Field({ label, value, missing, mono, emphasis, alarm }: {
 
 // The 120-day journey as one headline number, with the two 60-day legs that
 // make it up underneath — so a slip is attributable, not just visible.
-function OrderClockPanel({ clock, deqiOnly, supplierName }: { clock: OrderClock; deqiOnly: boolean; supplierName: string }) {
+function OrderClockPanel({ clock, deqiOnly }: { clock: OrderClock; deqiOnly: boolean }) {
   const { total, deqi, rdx, activeLeg } = clock
   // The supplier is accountable for the first leg only, so that is the whole
   // clock on their screen — otherwise hiding transit on the board is cosmetic.
@@ -295,7 +295,7 @@ function OrderClockPanel({ clock, deqiOnly, supplierName }: { clock: OrderClock;
 
       {!deqiOnly && (
         <div className="grid grid-cols-2 gap-3 mt-3">
-          <LegBox label={supplierName} caption="production" leg={deqi} active={activeLeg === 'deqi'} />
+          <LegBox label="Supplier" caption="production" leg={deqi} active={activeLeg === 'deqi'} />
           <LegBox label="RDX" caption="to Brazil" leg={rdx} active={activeLeg === 'rdx'} />
         </div>
       )}

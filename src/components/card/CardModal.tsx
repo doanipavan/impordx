@@ -409,7 +409,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                     <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">References</p>
                     <div className="grid grid-cols-2 gap-3">
                       <InfoField label="RDX Code" value={card.reference_code} monospace />
-                      <InfoField label={`${supplierNameOf(card) ?? 'Supplier'} Ref`} value={card.supplier_ref} monospace />
+                      <InfoField label="Supplier Ref" value={card.supplier_ref} monospace />
                     </div>
                   </div>
                 )}

@@ -4,7 +4,7 @@ import { Card } from '../../types'
 import { CardItem } from '../../hooks/useCardItems'
 import { Button } from '../ui/button'
 import { useToast } from '../ui/toast'
-import { formatDate, supplierNameOf } from '../../lib/utils'
+import { formatDate } from '../../lib/utils'
 import { CATALOG } from '../../lib/catalog'
 import { getSignedUrl } from '../../hooks/useAttachments'
 
@@ -262,7 +262,7 @@ export function ExportRFQ({ card, items, onClose }: ExportRFQProps) {
           <h3 className="font-semibold">Export RFQ</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
-        <p className="text-sm text-muted-foreground mb-5">Export this card as a formatted document to send to {supplierNameOf(card) ?? 'the supplier'}.</p>
+        <p className="text-sm text-muted-foreground mb-5">Export this card as a formatted document to send to the supplier.</p>
         <div className="space-y-2">
           <Button className="w-full" onClick={exportExcel} loading={exporting}>
             <Download className="h-4 w-4" /> Export as Excel (.xlsx)
