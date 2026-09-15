@@ -46,7 +46,7 @@ function BoardPage({ board }: { board: BoardType }) {
         <div className="flex-1 min-w-0">
         <h1 className="text-lg font-semibold">{BOARD_LABELS[board]}</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {board === 'quotes' && 'Request for Quotation — track pricing and negotiation with DEQI'}
+          {board === 'quotes' && 'Request for Quotation — track pricing and negotiation with the supplier'}
           {board === 'samples' && 'Track sample production and approval flow'}
           {board === 'orders' && 'Monitor production status and delivery'}
         </p>

@@ -364,7 +364,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
               <Input id="reference_code" placeholder="500578" {...register('reference_code')} />
             </div>
             <div>
-              <Label htmlFor="supplier_ref">Supplier Ref (DEQI)</Label>
+              <Label htmlFor="supplier_ref">Supplier Ref</Label>
               <Input id="supplier_ref" {...register('supplier_ref')} />
             </div>
           </div>

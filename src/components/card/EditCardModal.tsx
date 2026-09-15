@@ -275,7 +275,7 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
               <Input id="reference_code" {...register('reference_code')} />
             </div>
             <div>
-              <Label htmlFor="supplier_ref">Supplier Ref (DEQI)</Label>
+              <Label htmlFor="supplier_ref">Supplier Ref</Label>
               <Input id="supplier_ref" {...register('supplier_ref')} />
             </div>
           </div>

@@ -91,7 +91,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
         <p className={waiting ? 'text-sm font-semibold text-amber-900' : 'text-sm font-semibold'}>Order Details</p>
         {waiting && !editing && (
           <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-            <AlertCircle className="h-3 w-3" /> WAITING ON DEQI
+            <AlertCircle className="h-3 w-3" /> WAITING ON {(supplierNameOf(card) ?? 'SUPPLIER').toUpperCase()}
           </span>
         )}
         {!editing && (
@@ -200,7 +200,7 @@ export function OrderFulfilment({ card }: { card: Card }) {
           )}
           <Field label={committed ? 'Current delivery' : 'Delivery Date'}
             value={formatDeliveryDate(card.delivery_date)}
-            missing={card.delivery_date ? undefined : 'Awaiting DEQI'} emphasis
+            missing={card.delivery_date ? undefined : `Awaiting ${supplierNameOf(card) ?? 'supplier'}`} emphasis
             alarm={!!slip} />
           <Field label="Sales order" mono value={card.sales_order} />
           <Field label="Purchase order" mono value={card.purchase_order} />

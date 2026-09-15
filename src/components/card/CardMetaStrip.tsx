@@ -4,7 +4,7 @@ import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { useCardViews } from '../../hooks/useCardViews'
 import { useAttachments } from '../../hooks/useAttachments'
-import { cn, formatDate, formatDateTime, cardAge, isOverdue, dueDateFor } from '../../lib/utils'
+import { cn, formatDate, formatDateTime, cardAge, isOverdue, dueDateFor, supplierNameOf } from '../../lib/utils'
 import { salespersonLabel } from '../../types'
 
 // Client, owners and dates used to occupy a third of the card in a column of
@@ -151,8 +151,8 @@ export function CardMetaStrip({ card }: { card: Card }) {
         )}
         {!deqiSeen && (
           <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 whitespace-nowrap"
-            title="DEQI hasn't opened this card yet">
-            DEQI not opened
+            title={`${supplierNameOf(card) ?? 'The supplier'} hasn't opened this card yet`}>
+            {supplierNameOf(card) ?? 'Supplier'} not opened
           </span>
         )}
       </div>
