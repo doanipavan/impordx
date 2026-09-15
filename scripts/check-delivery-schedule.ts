@@ -124,10 +124,10 @@ check('no supplier means the full list', collectionsFor(undefined).includes('Par
 // 'Under DEQI Revision' is a samples column every supplier sees. Sconcept must
 // not read DEQI's name off its own board — that is the one fact the isolation
 // exists to withhold, and it would be leaking through a column header.
-check('Sconcept sees its own name',
-  statusLabel('Under DEQI Revision', 'Sconcept'), 'Under Sconcept Revision')
-check('DEQI still sees its own',
-  statusLabel('Under DEQI Revision', 'DEQI'), 'Under DEQI Revision')
+check('Sconcept reads generic — by decision, 14 Sep',
+  statusLabel('Under DEQI Revision', 'Sconcept'), 'Under Supplier Revision')
+check('DEQI reads generic too',
+  statusLabel('Under DEQI Revision', 'DEQI'), 'Under Supplier Revision')
 check('no supplier reads generic',
   statusLabel('Under DEQI Revision', undefined), 'Under Supplier Revision')
 check('every other status is untouched',

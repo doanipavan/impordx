@@ -121,6 +121,8 @@ export interface SupplierAccent {
   dot: string
   chip: string
   bar: string
+  /** Borda esquerda de uma linha do Gantt — a identidade do fornecedor sem o nome. */
+  edge: string
   stroke: string
 }
 
@@ -129,12 +131,14 @@ const SUPPLIER_ACCENTS: Record<string, SupplierAccent> = {
     dot: 'bg-sky-600',
     chip: 'bg-sky-50 text-sky-700 border-sky-200',
     bar: 'bg-sky-500',
+    edge: 'border-l-sky-500',
     stroke: '#0284c7',
   },
   Sconcept: {
     dot: 'bg-violet-600',
     chip: 'bg-violet-50 text-violet-700 border-violet-200',
     bar: 'bg-violet-500',
+    edge: 'border-l-violet-500',
     stroke: '#7c3aed',
   },
 }
@@ -143,6 +147,7 @@ const UNKNOWN_ACCENT: SupplierAccent = {
   dot: 'bg-slate-400',
   chip: 'bg-slate-50 text-slate-600 border-slate-200',
   bar: 'bg-slate-400',
+  edge: 'border-l-slate-300',
   stroke: '#94a3b8',
 }
 

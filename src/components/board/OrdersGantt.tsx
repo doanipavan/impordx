@@ -331,7 +331,6 @@ export function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) 
 
   const facts: Array<{ k: string; v: string; tone?: 'late' | 'ok' }> = [
     { k: 'Reference', v: row.card.ref_number ?? '—' },
-    { k: 'Supplier', v: supplierNameOf(row.card) ?? '—' },
     { k: 'Status', v: row.card.status },
     {
       k: sched?.anchor.kind === 'sample' ? 'Sample approved' : 'Proforma approved',
@@ -470,7 +469,13 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
     : 'bg-muted text-muted-foreground'
 
   return (
-    <div className="grid border-b border-border/60 last:border-b-0 hover:bg-muted/30 transition-colors"
+    // Quem é o fornecedor não está escrito em lugar nenhum da linha, por decisão
+    // (14 Sep: o hub se refere ao fornecedor genericamente). Está na cor da
+    // borda esquerda — a mesma paleta de acento que o hub já usa, fora das cores
+    // de status — e no nome ao passar o mouse. O filtro no topo é onde os nomes
+    // vivem: escolhido um fornecedor, todas as linhas ficam da mesma cor.
+    <div className={cn('grid border-b border-border/60 last:border-b-0 hover:bg-muted/30 transition-colors',
+        'border-l-[3px]', supplierAccent(supplierNameOf(row.card)).edge)}
       style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
       {/* Client and number on one line. The prefix is ORD-2026- on every row,
           so it distinguishes nothing and costs the height of a second line;
@@ -492,10 +497,6 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary',
             onOpenCard && 'hover:text-primary cursor-pointer'
           )}>
-          {/* Which supplier owns this bar, in the one place a bar is named.
-              Two suppliers sharing one time axis is the reason this chart exists. */}
-          <span className={cn('h-2 w-1 rounded-sm shrink-0', supplierAccent(supplierNameOf(row.card)).bar)}
-            aria-hidden="true" />
           <span className="truncate">{row.card.client_name || row.card.title}</span>
           {row.card.ref_number && (
             <span className="font-mono font-normal text-[9px] text-muted-foreground/70 tabular-nums">
@@ -544,11 +545,9 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
           )}
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
             style={{ width: `${deqiWidth}%` }}>
-            {/* O nome de quem produz esta peça, não o de quem produzia tudo
-                quando havia um fornecedor só. */}
-            <span className="text-[9px] font-bold tracking-wide px-1 truncate">
-              {supplierNameOf(row.card) ?? 'Supplier'}
-            </span>
+            {/* De quem é a perna, não quem é o fornecedor: o nome dele não
+                aparece em texto em lugar nenhum do gráfico, por decisão. */}
+            <span className="text-[9px] font-bold tracking-wide px-1 truncate">SUPPLIER</span>
           </div>
           {!deqiOnly && (
             <>
@@ -588,8 +587,8 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
                 : 'border-foreground bg-card')}
             style={{ left: `${pct(row.delivery)}%`, transform: 'translate(-50%, -50%) rotate(45deg)' }}
             title={row.missedPromise
-              ? `${supplierNameOf(row.card) ?? 'Supplier'} gave ${shortDate(row.delivery)} — past the planned day ${ORDER_LEG_DAYS} (${shortDate(row.plannedReady)})`
-              : `Ready date from ${supplierNameOf(row.card) ?? 'the supplier'}: ${shortDate(row.delivery)}`}
+              ? `The supplier gave ${shortDate(row.delivery)} — past the planned day ${ORDER_LEG_DAYS} (${shortDate(row.plannedReady)})`
+              : `Ready date from the supplier: ${shortDate(row.delivery)}`}
           />
         )}
 

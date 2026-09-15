@@ -215,10 +215,11 @@ export function visibleColumns(board: BoardType, isSupplier: boolean): CardStatu
  * the label moves: each supplier sees its own name, Redantex sees whichever
  * supplier the card belongs to.
  */
-export function statusLabel(status: CardStatus, supplierShortName?: string | null): string {
-  if (status === 'Under DEQI Revision') {
-    return `Under ${supplierShortName || 'Supplier'} Revision`
-  }
+// O segundo parâmetro fica por compatibilidade com quem chama e é ignorado:
+// desde 14 Sep o hub se refere ao fornecedor genericamente, por decisão. O
+// banco faz o mesmo em status_label() (migração 044).
+export function statusLabel(status: CardStatus, _supplierShortName?: string | null): string {
+  if (status === 'Under DEQI Revision') return 'Under Supplier Revision'
   return status
 }
 
