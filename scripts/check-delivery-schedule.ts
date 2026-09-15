@@ -194,6 +194,14 @@ check('orderClock: janela da RDX é 50', clk.rdx.windowDays, 50)
 check('orderClock sem data: janela da RDX é 60',
   orderClock({ sample_approved_at: '2026-08-12', status: 'Placed' })!.rdx.windowDays, 60)
 
+// pedido antigo inserido hoje: âncora carimbada hoje, data do fornecedor no passado
+const antigo = orderSchedule({ sample_approved_at: '2026-09-14', delivery_date: '2026-09-08', status: 'Shipped' })!
+check('pedido antigo: pronto é a data do fornecedor', antigo.ready, '2026-09-08')
+check('pedido antigo: o "dia 60 do plano" não fica no futuro', antigo.plannedReady, '2026-09-08')
+check('pedido antigo: chega data + 50', antigo.arrival, '2026-10-28')
+check('pedido antigo: nada de atraso inventado',
+  new Date(antigo.ready) > new Date(antigo.plannedReady), false)
+
 console.log('\n— chegou de verdade —')
 check('sem chegada: nada a medir', logisticsOutcome({ delivery_date: '2026-10-28' }), null)
 check('sem data do fornecedor: nada a medir', logisticsOutcome({ arrived_at: '2026-12-10' }), null)

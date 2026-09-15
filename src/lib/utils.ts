@@ -373,8 +373,14 @@ export function orderSchedule(
   const supplierDay = card.delivery_date ? calendarDay(card.delivery_date) : null
 
   if (supplierDay) {
+    // Pedido antigo inserido hoje: o carimbo da âncora é de hoje, mas o
+    // fornecedor já tinha dado uma data — anterior. Não há plano a comparar;
+    // o dia 60 "do plano" seria hoje + 60, e a barra de produção teria largura
+    // negativa. A perna do fornecedor colapsa na data dele e o julgamento de
+    // atraso não se aplica. A previsão de chegada (data + 50) continua certa.
+    const backfilled = supplierDay.getTime() < start.getTime()
     return {
-      anchor, plannedReady,
+      anchor, plannedReady: backfilled ? card.delivery_date! : plannedReady,
       ready: card.delivery_date!, readyKind: 'supplier',
       arrival: at(supplierDay, LOGISTICS_TARGET_DAYS), arrivalKind: 'forecast',
       shippingDays: LOGISTICS_TARGET_DAYS,
