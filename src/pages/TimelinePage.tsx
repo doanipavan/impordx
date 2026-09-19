@@ -1,6 +1,7 @@
 import { LOGISTICS_TARGET_DAYS, ORDER_LEG_DAYS } from '../lib/utils'
 import { OrdersGantt } from '../components/board/OrdersGantt'
 import { SupplierSwitch } from '../components/board/SupplierSwitch'
+import { TimelineReport } from '../components/board/TimelineReport'
 import { useAuth } from '../hooks/useAuth'
 
 /**
@@ -29,6 +30,7 @@ export function TimelinePage() {
         <div className="shrink-0 mr-44 flex items-center gap-2">
           {/* Same scope switch as the boards; renders nothing for a supplier login. */}
           <SupplierSwitch className="mr-1" />
+          <TimelineReport />
         </div>
       </div>
 
