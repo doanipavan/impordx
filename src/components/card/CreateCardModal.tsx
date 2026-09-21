@@ -14,9 +14,11 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Select } from '../ui/select'
 import { Label } from '../ui/label'
-import { collectionsFor, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize } from '../../lib/utils'
+import { collectionsFor, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS, formatFileSize, cn } from '../../lib/utils'
 import { useSupplierFilter, useSuppliers } from '../../hooks/useSupplierFilter'
 import { ACCEPTED_ATTR, fileRejection } from '../../lib/fileTypes'
+import { AttachmentKind, QueuedFile, allCategorised } from '../../lib/attachmentKinds'
+import { KindPicker } from '../attachments/KindPicker'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -71,7 +73,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const { data: staff = [] } = useRedantexUsers()
   const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [queuedFiles, setQueuedFiles] = useState<File[]>([])
+  // Cada arquivo com a categoria dele; o card não é criado enquanto faltar uma.
+  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Who is making this piece. It decides which catalogue the collection list
@@ -125,10 +128,11 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
     if (tooBig.length) {
       toast(`Too large: ${tooBig.map(f => f.name).join(', ')} — 50 MB max`, 'error')
     }
-    setQueuedFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_FILE_SIZE)])
+    setQueuedFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_FILE_SIZE).map(file => ({ file, kind: null }))])
   }
 
   const onSubmit = async (values: FormValues) => {
+    if (!allCategorised(queuedFiles)) { toast('Choose what each attached file is first', 'error'); return }
     setIsSubmitting(true)
     try {
       const card = await createCard.mutateAsync({
@@ -160,9 +164,9 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         supplier_ref: values.supplier_ref || undefined,
       })
 
-      for (const file of queuedFiles) {
+      for (const { file, kind } of queuedFiles) {
         try {
-          await uploadAttachment.mutateAsync({ cardId: card.id, file })
+          await uploadAttachment.mutateAsync({ cardId: card.id, file, kind: kind! })
         } catch (err) {
           // The card is already saved at this point, so the upload failing is
           // recoverable — but only if it says why.
@@ -391,11 +395,14 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
             </div>
             {queuedFiles.length > 0 && (
               <div className="mt-2 space-y-1">
-                {queuedFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-muted rounded px-2 py-1.5 text-xs">
+                {queuedFiles.map(({ file, kind }, idx) => (
+                  <div key={idx} className={cn('flex items-center gap-2 rounded px-2 py-1.5 text-xs',
+                      kind ? 'bg-muted' : 'bg-amber-50 border border-amber-200')}>
                     {file.type.startsWith('image/') ? <ImageIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" /> : <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                     <span className="flex-1 truncate">{file.name}</span>
-                    <span className="text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+                    <span className="text-muted-foreground shrink-0 hidden sm:inline">{formatFileSize(file.size)}</span>
+                    <KindPicker value={kind} size="xs"
+                      onChange={(k: AttachmentKind) => setQueuedFiles(p => p.map((q, i) => i === idx ? { ...q, kind: k } : q))} />
                     <button type="button" onClick={() => setQueuedFiles(p => p.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive">
                       <X className="h-3 w-3" />
                     </button>
@@ -408,7 +415,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={isSubmitting}>
+          <Button type="submit" loading={isSubmitting} disabled={!allCategorised(queuedFiles)}
+            title={allCategorised(queuedFiles) ? undefined : 'Choose what each attached file is first'}>
             {isSubmitting ? 'Creating...' : 'Create Card'}
           </Button>
         </DialogFooter>

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { FileText, Upload, CheckCircle2, XCircle, Eye, Loader2 } from 'lucide-react'
 import {
-  useAttachments, useUploadAttachment, useMarkAttachment,
+  useAttachments, useUploadAttachment,
   useReviewAttachment, getSignedUrl,
 } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
@@ -21,7 +21,6 @@ const ACCEPTED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
 export function PiPanel({ card }: { card: Card }) {
   const { data: attachments = [] } = useAttachments(card.id)
   const upload = useUploadAttachment()
-  const mark = useMarkAttachment()
   const review = useReviewAttachment()
   const { user } = useAuth()
   const toast = useToast()
@@ -46,8 +45,8 @@ export function PiPanel({ card }: { card: Card }) {
     }
     setBusy(true)
     try {
-      const created = await upload.mutateAsync({ cardId: card.id, file })
-      await mark.mutateAsync({ id: created.id, cardId: card.id, kind: 'pi' })
+      // This panel is the PI's: the category is known before the file is.
+      await upload.mutateAsync({ cardId: card.id, file, kind: 'pi' })
       toast('Proforma invoice uploaded', 'success')
     } catch (err) {
       console.error('PI upload failed:', err)

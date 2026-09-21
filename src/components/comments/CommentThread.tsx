@@ -12,6 +12,8 @@ import { Textarea } from '../ui/textarea'
 import { formatRelative, formatDateTime, cn, formatFileSize } from '../../lib/utils'
 import { Comment, User } from '../../types'
 import { ACCEPTED_ATTR, fileRejection } from '../../lib/fileTypes'
+import { AttachmentKind, QueuedFile, allCategorised, isReviewed } from '../../lib/attachmentKinds'
+import { KindPicker } from '../attachments/KindPicker'
 
 // O que vale e os tetos de tamanho ficam em lib/fileTypes — a lista estava
 // copiada aqui e já discordava das outras.
@@ -78,7 +80,9 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   const linkAttachments = useLinkAttachmentsToComment()
   const toast = useToast()
   const [body, setBody] = useState(quoteName ? `@[${quoteName}] ` : '')
-  const [files, setFiles] = useState<File[]>([])
+  // Cada arquivo espera com a categoria dele; o comentário só sai quando
+  // todos têm uma (migração 045 recusa o arquivo sem).
+  const [files, setFiles] = useState<QueuedFile[]>([])
   const [submitting, setSubmitting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -116,7 +120,7 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
     for (const f of tooBig) {
       toast(`"${f.name}" is ${formatFileSize(f.size)} — the limit is ${formatFileSize(MAX_SIZE)}`, 'error')
     }
-    setFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_SIZE)])
+    setFiles(prev => [...prev, ...supported.filter(f => f.size <= MAX_SIZE).map(file => ({ file, kind: null }))])
   }
 
   function handleBodyChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -163,13 +167,14 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!body.trim() && files.length === 0) return
+    if (!allCategorised(files)) { toast('Choose what each file is before posting', 'error'); return }
     setSubmitting(true)
     try {
       // Upload files first
       const uploadedNames: string[] = []
       const uploadedIds: string[] = []
-      for (const file of files) {
-        const attachment = await uploadAttachment.mutateAsync({ cardId, file })
+      for (const { file, kind } of files) {
+        const attachment = await uploadAttachment.mutateAsync({ cardId, file, kind: kind! })
         uploadedNames.push(file.name)
         uploadedIds.push(attachment.id)
       }
@@ -241,11 +246,14 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
           {/* Queued files */}
           {files.length > 0 && (
             <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-              {files.map((f, i) => (
-                <div key={i} className="flex items-center gap-1.5 bg-muted rounded px-2 py-1 text-xs">
-                  {f.type.startsWith('image/') ? <ImageIcon className="h-3 w-3 text-blue-500" /> : <FileText className="h-3 w-3 text-muted-foreground" />}
-                  <span className="max-w-[120px] truncate">{f.name}</span>
-                  <span className="text-muted-foreground">{formatFileSize(f.size)}</span>
+              {files.map((q, i) => (
+                <div key={i} className={cn('flex items-center gap-1.5 rounded px-2 py-1 text-xs',
+                    q.kind ? 'bg-muted' : 'bg-amber-50 border border-amber-200')}>
+                  {q.file.type.startsWith('image/') ? <ImageIcon className="h-3 w-3 text-blue-500" /> : <FileText className="h-3 w-3 text-muted-foreground" />}
+                  <span className="max-w-[120px] truncate">{q.file.name}</span>
+                  <span className="text-muted-foreground hidden sm:inline">{formatFileSize(q.file.size)}</span>
+                  <KindPicker value={q.kind} size="xs"
+                    onChange={(kind: AttachmentKind) => setFiles(prev => prev.map((f, j) => j === i ? { ...f, kind } : f))} />
                   <button type="button" onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
                     <X className="h-3 w-3" />
                   </button>
@@ -270,7 +278,9 @@ function CommentComposer({ cardId, parentId, onDone, autoFocus, placeholder = 'W
                 <Button type="button" size="sm" variant="ghost" onClick={onDone}>Cancel</Button>
               )}
               <p className="text-xs text-muted-foreground hidden sm:block">Ctrl+Enter to submit</p>
-              <Button type="submit" size="sm" loading={submitting} disabled={!body.trim() && files.length === 0}>
+              <Button type="submit" size="sm" loading={submitting}
+                disabled={(!body.trim() && files.length === 0) || !allCategorised(files)}
+                title={allCategorised(files) ? undefined : 'Choose what each file is first'}>
                 {parentId ? 'Reply' : 'Post comment'}
               </Button>
             </div>
@@ -443,7 +453,7 @@ function CommentBody({ comment, cardId, isOwn }: { comment: Comment; cardId: str
                   const approved = !!found?.approved_at
                   // A sample's verdict belongs where the file was handed over,
                   // not only in the Files tab nobody scrolls to.
-                  const review = found?.kind ? { kind: found.kind, status: found.review_status ?? 'pending' } : null
+                  const review = isReviewed(found?.kind) ? { kind: found!.kind, status: found!.review_status ?? 'pending' } : null
                   return (
                     <button
                       key={i}

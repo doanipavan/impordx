@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { Attachment } from '../types'
 import { useAuth } from './useAuth'
 import { contentTypeOf } from '../lib/fileTypes'
+import { AttachmentKind } from '../lib/attachmentKinds'
 
 // Extract storage path from URL or use raw path
 function getStoragePath(fileUrl: string): string {
@@ -61,7 +62,9 @@ export function useUploadAttachment() {
   const { user } = useAuth()
 
   return useMutation({
-    mutationFn: async ({ cardId, file }: { cardId: string; file: File }) => {
+    // A category is not optional: the database refuses the row without one
+    // (migration 045). Whoever calls this has already asked the uploader.
+    mutationFn: async ({ cardId, file, kind }: { cardId: string; file: File; kind: AttachmentKind }) => {
       const isImage = file.type.startsWith('image/')
       let uploadFile = file
       let thumbnailPath: string | null = null
@@ -107,6 +110,7 @@ export function useUploadAttachment() {
           file_type: contentType,   // o mesmo tipo que foi ao storage, não o cru
           file_size: file.size,
           thumbnail_url: thumbnailPath, // store path
+          kind,                        // the trigger sets review_status from it
         })
         .select('*, user:users!user_id(id, full_name, email, avatar_url, role, created_at)')
         .single()
@@ -135,23 +139,15 @@ export function useLinkAttachmentsToComment() {
   })
 }
 
+// Changing a file's category. The verdict follows the category in the
+// database trigger — sample and PI reopen as pending, anything else clears —
+// so this sends the category and nothing more. Removing one is refused there.
 export function useMarkAttachment() {
   const qc = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, kind }: { id: string; cardId: string; kind: 'sample' | 'pi' | null }) => {
-      const { error } = await supabase
-        .from('attachments')
-        .update({
-          kind,
-          // Un-marking clears the verdict with it; a decision about a file that
-          // is no longer under review is just a leftover.
-          ...(kind ? { review_status: 'pending' } : {
-            review_status: null, reviewed_at: null,
-            reviewed_by: null, review_note: null,
-          }),
-        })
-        .eq('id', id)
+    mutationFn: async ({ id, kind }: { id: string; cardId: string; kind: AttachmentKind }) => {
+      const { error } = await supabase.from('attachments').update({ kind }).eq('id', id)
       if (error) throw error
     },
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['attachments', vars.cardId] }),

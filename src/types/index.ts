@@ -139,8 +139,10 @@ export interface Attachment {
   approval_note?: string
   // One review mechanic for two kinds of document: a digital sample, and the
   // proforma invoice. Redantex judges; a rejection carries its reason.
-  kind?: 'sample' | 'pi'
-  review_status?: 'pending' | 'approved' | 'rejected'
+  // Every upload since 21 Sep 2026 carries one of four (migration 045); older
+  // files may have none. Only sample and pi get a review_status.
+  kind?: 'reference' | 'sample' | 'pi' | 'quotation' | null
+  review_status?: 'pending' | 'approved' | 'rejected' | null
   reviewed_at?: string
   reviewed_by?: string
   reviewer?: { full_name: string }

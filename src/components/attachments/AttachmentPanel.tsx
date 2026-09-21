@@ -6,6 +6,8 @@ import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
 import { cn, formatFileSize, formatDateTime, formatRelative, errorText } from '../../lib/utils'
 import { ACCEPTED_ATTR, fileRejection, sizeLimitFor, isVideoType, isSheetType } from '../../lib/fileTypes'
+import { AttachmentKind, QueuedFile, allCategorised, isReviewed, kindLabel } from '../../lib/attachmentKinds'
+import { KindPicker, KindChip } from './KindPicker'
 
 // Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês, e
 // planilha é como preço e lista de itens circulam. O que vale, e os tetos de
@@ -24,6 +26,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState<string[]>([])
+  // Arquivos esperam aqui até cada um dizer o que é. Antes subiam na hora e
+  // a categoria era um botão depois — que quase ninguém apertava.
+  const [queue, setQueue] = useState<QueuedFile[]>([])
   // Guarda o tipo junto com a URL: o mesmo botão de olho agora abre uma
   // imagem ou um vídeo, e o modal precisa saber qual desenhar.
   const [preview, setPreview] = useState<{ url: string; video: boolean } | null>(null)
@@ -59,7 +64,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   const canApprove = user?.role === 'admin' || user?.role === 'member'
   const canUnapprove = user?.role === 'admin'
 
-  async function uploadFiles(files: File[]) {
+  function queueFiles(files: File[]) {
+    const accepted: QueuedFile[] = []
     for (const file of files) {
       const refused = fileRejection(file)
       if (refused) { toast(refused, 'error'); continue }
@@ -71,10 +77,24 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
           + (isVideoType(file.type) ? '. Trim it or export at a lower resolution.' : ''), 'error')
         continue
       }
+      accepted.push({ file, kind: null })
+    }
+    if (accepted.length) setQueue(q => [...q, ...accepted])
+  }
+
+  const setQueuedKind = (i: number, kind: AttachmentKind) =>
+    setQueue(q => q.map((f, j) => j === i ? { ...f, kind } : f))
+  const applyToAll = (kind: AttachmentKind) => setQueue(q => q.map(f => ({ ...f, kind })))
+
+  async function uploadQueue() {
+    if (!allCategorised(queue)) return
+    const batch = queue
+    setQueue([])
+    for (const { file, kind } of batch) {
       setUploading(p => [...p, file.name])
       try {
-        await uploadAttachment.mutateAsync({ cardId, file })
-        toast(`"${file.name}" uploaded`, 'success')
+        await uploadAttachment.mutateAsync({ cardId, file, kind: kind! })
+        toast(`"${file.name}" uploaded as ${kindLabel(kind)}`, 'success')
       } catch (err) {
         console.error('Upload failed:', file.name, file.type, file.size, err)
         const detail = errorText(err)
@@ -86,7 +106,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
   function handleDrop(e: DragEvent) {
     e.preventDefault(); setDragging(false)
-    uploadFiles(Array.from(e.dataTransfer.files))
+    queueFiles(Array.from(e.dataTransfer.files))
   }
 
   async function handlePreview(att: Attachment) {
@@ -128,15 +148,14 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
     } catch { toast('Failed to remove approval', 'error') }
   }
 
-  async function handleMark(att: Attachment, kind: 'sample' | 'pi' | null) {
+  async function handleMark(att: Attachment, kind: AttachmentKind) {
+    if (kind === att.kind) return
     try {
       await markAttachment.mutateAsync({ id: att.id, cardId, kind })
-      toast(kind === null ? 'Mark removed'
-        : kind === 'pi' ? 'Marked as the proforma invoice'
-        : 'Marked as a digital sample', 'info')
+      toast(isReviewed(kind) ? `Now a ${kindLabel(kind)} — awaiting review` : `Now ${kindLabel(kind).toLowerCase()}`, 'info')
     } catch (err) {
-      console.error('Failed to flag sample:', err)
-      toast('Failed to update', 'error')
+      console.error('Failed to change category:', err)
+      toast(errorText(err) ?? 'Failed to update', 'error')
     }
   }
 
@@ -229,8 +248,55 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         <p className="text-sm font-medium">Drop files here or click to upload</p>
         <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WEBP, PDF, MP4, MOV — max 10 MB per image, 20 MB per PDF, 50 MB per video</p>
         <input ref={inputRef} type="file" className="hidden" multiple accept={ACCEPTED_ATTR}
-          onChange={e => uploadFiles(Array.from(e.target.files ?? []))} />
+          onChange={e => { queueFiles(Array.from(e.target.files ?? [])); e.target.value = '' }} />
       </div>
+
+      {/* Waiting for a category. The button only wakes up when every file has
+          one — an upload that asks afterwards is an upload nobody answers. */}
+      {queue.length > 0 && (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold">
+              What is each file? <span className="font-normal text-muted-foreground">({queue.length} waiting)</span>
+            </p>
+            {queue.length > 1 && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                all: <KindPicker value={null} onChange={applyToAll} size="xs" />
+              </div>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {queue.map((q, i) => (
+              <div key={`${q.file.name}-${i}`} className="flex items-center gap-2 bg-card border border-border rounded-md px-2 py-1.5">
+                {q.file.type.startsWith('image/') ? <ImageIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  : isVideoType(q.file.type) ? <Video className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                  : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                <span className="text-xs truncate flex-1 min-w-0">{q.file.name}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:inline">{formatFileSize(q.file.size)}</span>
+                <KindPicker value={q.kind} onChange={k => setQueuedKind(i, k)} />
+                <button type="button" onClick={() => setQueue(qq => qq.filter((_, j) => j !== i))}
+                  className="text-muted-foreground hover:text-destructive shrink-0" title="Remove">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              {allCategorised(queue) ? 'Ready.' : 'Choose a category for every file to upload.'}
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setQueue([])}
+                className="h-7 px-2.5 rounded text-xs text-muted-foreground hover:bg-accent">Clear</button>
+              <button type="button" onClick={uploadQueue} disabled={!allCategorised(queue)}
+                className="h-7 px-3 rounded flex items-center gap-1.5 text-xs font-medium text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Upload className="h-3.5 w-3.5" />
+                Upload {queue.length === 1 ? 'file' : `${queue.length} files`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {uploading.map(name => (
         <div key={name} className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -297,7 +363,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                           {isApproved && (
                             <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
                           )}
-                          {att.kind && <ReviewBadge kind={att.kind} status={att.review_status} />}
+                          <KindChip kind={att.kind} />
+                          {isReviewed(att.kind) && <ReviewBadge kind={att.kind} status={att.review_status ?? undefined} />}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
                         {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
@@ -312,26 +379,9 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                             <CheckCircle2 className="h-3.5 w-3.5" /> Approve
                           </button>
                         )}
-                        {att.kind ? (
-                          <button onClick={() => handleMark(att, null)}
-                            className="h-7 px-2 rounded flex items-center gap-1 text-xs font-medium border text-muted-foreground bg-muted border-border hover:bg-accent"
-                            title="Remove the mark and its verdict">
-                            Unmark
-                          </button>
-                        ) : (
-                          <>
-                            <button onClick={() => handleMark(att, 'sample')}
-                              className="h-7 px-2 rounded text-xs font-medium border text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
-                              title="Flag this file as a digital sample">
-                              Sample
-                            </button>
-                            <button onClick={() => handleMark(att, 'pi')}
-                              className="h-7 px-2 rounded text-xs font-medium border text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100"
-                              title="Flag this file as the proforma invoice">
-                              PI
-                            </button>
-                          </>
-                        )}
+                        {/* Set (for a file from before the rule) or change the category. */}
+                        <KindPicker value={att.kind ?? null} onChange={k => handleMark(att, k)}
+                          disabled={markAttachment.isPending} />
                         {(isImage || isVideoType(att.file_type)) && (
                           <button onClick={() => handlePreview(att)} disabled={isLoading}
                             className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
@@ -353,7 +403,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
 
                     {/* A sample carries its verdict and, when refused, the reason —
                         so the factory is never sent back to work without one. */}
-                    {att.kind && (
+                    {isReviewed(att.kind) && (
                       <div className="mt-2.5 pt-2.5 border-t border-border/70">
                         {att.review_note && (
                           <p className={cn('text-xs mb-2 whitespace-pre-wrap',
@@ -377,7 +427,7 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                             {att.review_status !== 'approved' && (
                               <button onClick={() => handleReview(att, 'approved')}
                                 className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700">
-                                <CheckCircle2 className="h-3.5 w-3.5" /> Approve sample
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Approve {att.kind === 'pi' ? 'PI' : 'sample'}
                               </button>
                             )}
                             {att.review_status !== 'rejected' && (
