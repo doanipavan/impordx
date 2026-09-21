@@ -363,8 +363,10 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                           {isApproved && (
                             <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
                           )}
-                          <KindChip kind={att.kind} />
-                          {isReviewed(att.kind) && <ReviewBadge kind={att.kind} status={att.review_status ?? undefined} />}
+                          {/* The review badge already names the category; one chip per file. */}
+                          {isReviewed(att.kind)
+                            ? <ReviewBadge kind={att.kind} status={att.review_status ?? undefined} />
+                            : <KindChip kind={att.kind} />}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
                         {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
