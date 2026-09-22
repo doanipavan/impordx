@@ -6,6 +6,7 @@ import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Card } from '../../types'
+import { CardGantt } from './CardGantt'
 import { orderClock, formatDate, cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, OrderClock, LegClock, deliverySlip } from '../../lib/utils'
 
 // A delivery date is a calendar day, stored as a `date` and never parsed into an
@@ -103,6 +104,11 @@ export function OrderFulfilment({ card }: { card: Card }) {
       </div>
 
       {clock && !editing && <OrderClockPanel clock={clock} deqiOnly={isDeqi} />}
+
+      {/* O painel acima diz quantos dias faltam; este diz onde isso cai no
+          calendário. Some ao editar, porque a régua que ele desenha é a que
+          está gravada — não a que está sendo digitada. */}
+      {!editing && <CardGantt card={card} />}
 
       {editing ? (
         <div className="space-y-3">
