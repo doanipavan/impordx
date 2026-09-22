@@ -152,10 +152,11 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      {/* 1400px is what a 14" MacBook can actually give: it works at 1512, and
-          the backdrop keeps a margin either side. Wider screens stop here — three
-          columns any broader start reading as three separate pages. */}
-      <div className="relative z-10 w-full max-w-[1400px] max-h-[90vh] bg-card rounded-xl shadow-modal border border-border flex flex-col animate-slide-up">
+      {/* 90% da tela, largura e altura — pedido em 22/set. Antes parava em
+          1400px, e num monitor grande sobrava tela enquanto o painel de
+          arquivos cortava o próprio texto. A moldura escura em volta continua,
+          que é o que diz que isto é uma janela e não a página. */}
+      <div className="relative z-10 w-[90vw] max-w-[90vw] h-[90vh] max-h-[90vh] bg-card rounded-xl shadow-modal border border-border flex flex-col animate-slide-up">
 
         {/* Header */}
         <div className="flex items-start gap-3 px-6 py-4 border-b border-border shrink-0">

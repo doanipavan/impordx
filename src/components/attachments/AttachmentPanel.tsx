@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, DragEvent } from 'react'
 import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle, Video, FileSpreadsheet } from 'lucide-react'
 import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAttachment, useReviewAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
 import { cn, formatFileSize, formatDateTime, formatRelative, errorText } from '../../lib/utils'
 import { ACCEPTED_ATTR, fileRejection, sizeLimitFor, isVideoType, isSheetType } from '../../lib/fileTypes'
-import { AttachmentKind, QueuedFile, allCategorised, isReviewed, kindLabel } from '../../lib/attachmentKinds'
+import { ATTACHMENT_KINDS, AttachmentKind, QueuedFile, allCategorised, isReviewed, kindLabel } from '../../lib/attachmentKinds'
 import { KindPicker, KindChip } from './KindPicker'
 
 // Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês, e
@@ -178,6 +178,206 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
     catch { toast('Failed to delete', 'error') }
   }
 
+  // As categorias na ordem do fluxo, e os sem categoria por último: são os
+  // de antes de 21/set, e ficam onde não atrapalham quem procura o de hoje.
+  const groups = useMemo(() => {
+    const order: Array<{ id: AttachmentKind | null; label: string }> = [
+      ...ATTACHMENT_KINDS.map(k => ({ id: k.id as AttachmentKind | null, label: k.label })),
+      { id: null, label: 'No category' },
+    ]
+    return order
+      .map(g => ({ ...g, files: attachments.filter(a => (a.kind ?? null) === g.id) }))
+      .filter(g => g.files.length > 0)
+  }, [attachments])
+
+  // Uma linha da lista, extraída do map para que os grupos por categoria
+  // desenhem exatamente a mesma coisa.
+  function fileRow(att: Attachment) {
+            const isImage = att.file_type.startsWith('image/')
+            const isApproved = !!att.approved_at
+            const canDelete = att.user_id === user?.id || user?.role === 'admin'
+            const isLoading = loadingId === att.id
+
+            return (
+              <div key={att.id} className="flex gap-3 group relative">
+                <div className={cn(
+                  'h-9 w-9 rounded-full border-2 border-background flex items-center justify-center shrink-0 z-10 mt-0.5',
+                  isApproved ? 'bg-green-100'
+                    : isImage ? 'bg-blue-100'
+                    : isVideoType(att.file_type) ? 'bg-violet-100'
+                    : 'bg-amber-100'
+                )}>
+                  {isApproved
+                    ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    : isImage
+                      ? <ImageIcon className="h-4 w-4 text-blue-600" />
+                      : isVideoType(att.file_type)
+                        ? <Video className="h-4 w-4 text-violet-600" />
+                        : isSheetType(att.file_type)
+                          ? <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                          : <FileText className="h-4 w-4 text-amber-600" />
+                  }
+                </div>
+
+                <div className={cn(
+                  'flex-1 min-w-0 bg-card border rounded-lg p-3 hover:shadow-card-hover transition-all',
+                  isApproved ? 'border-green-300 bg-green-50/30' : 'border-border'
+                )}>
+                  <div className="flex items-start gap-3">
+                    {thumbUrls[att.id] && (
+                      <button onClick={() => handlePreview(att)} title="Open preview"
+                        className="shrink-0 rounded overflow-hidden border border-border hover:border-primary/50 transition-colors">
+                        <img src={thumbUrls[att.id]} alt="" className="h-14 w-14 object-cover block" />
+                      </button>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileName name={att.filename} />
+                        {isApproved && (
+                          <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
+                        )}
+                        {/* The review badge already names the category; one chip per file. */}
+                        {isReviewed(att.kind)
+                          ? <ReviewBadge kind={att.kind} status={att.review_status ?? undefined} />
+                          : <KindChip kind={att.kind} />}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
+                      {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
+                    </div>
+
+                  </div>
+                  {/* Os botões numa linha só, abaixo do arquivo. Ao lado do nome
+                      eles disputavam a largura e, num painel estreito, sobrava um
+                      fio para o nome. */}
+                  <div className="mt-2 hidden flex-wrap justify-end gap-1 group-hover:flex group-focus-within:flex">
+                    {/* Approve button — only for member/admin, only images/PDFs */}
+                    {canApprove && !isApproved && approvingId !== att.id && (
+                      <button onClick={() => { setApprovingId(att.id); setApprovalNote('') }}
+                        className="h-7 px-2 rounded flex items-center gap-1 text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 font-medium"
+                        title="Mark as approved artwork">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                      </button>
+                    )}
+                    {/* Set (for a file from before the rule) or change the category. */}
+                    <KindPicker value={att.kind ?? null} onChange={k => handleMark(att, k)}
+                      disabled={markAttachment.isPending} />
+                    {(isImage || isVideoType(att.file_type)) && (
+                      <button onClick={() => handlePreview(att)} disabled={isLoading}
+                        className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button onClick={() => handleDownload(att)} disabled={isLoading}
+                      className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
+                      {isLoading ? <div className="h-3 w-3 border border-primary border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    </button>
+                    {canDelete && !isApproved && (
+                      <button onClick={() => handleDelete(att)}
+                        className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* A sample carries its verdict and, when refused, the reason —
+                      so the factory is never sent back to work without one. */}
+                  {isReviewed(att.kind) && (
+                    <div className="mt-2.5 pt-2.5 border-t border-border/70">
+                      {att.review_note && (
+                        <p className={cn('text-xs mb-2 whitespace-pre-wrap',
+                          att.review_status === 'rejected' ? 'text-red-700' : 'text-green-800')}>
+                          <span className="font-semibold">
+                            {att.review_status === 'rejected' ? 'Rejected: ' : 'Note: '}
+                          </span>
+                          {att.review_note}
+                        </p>
+                      )}
+
+                      {att.reviewed_at && (
+                        <p className="text-[10px] text-muted-foreground mb-2">
+                          Reviewed {formatDateTime(att.reviewed_at)}
+                          {att.reviewer && ` by ${att.reviewer.full_name}`}
+                        </p>
+                      )}
+
+                      {canApprove && rejectingId !== att.id && (
+                        <div className="flex flex-wrap gap-2">
+                          {att.review_status !== 'approved' && (
+                            <button onClick={() => handleReview(att, 'approved')}
+                              className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Approve {att.kind === 'pi' ? 'PI' : 'sample'}
+                            </button>
+                          )}
+                          {att.review_status !== 'rejected' && (
+                            <button onClick={() => { setRejectingId(att.id); setRejectNote('') }}
+                              className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200">
+                              <XCircle className="h-3.5 w-3.5" /> Reject
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {canApprove && rejectingId === att.id && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-red-800 block">
+                            Why is it rejected? <span className="text-muted-foreground font-normal">(required)</span>
+                          </label>
+                          <textarea
+                            value={rejectNote}
+                            onChange={e => setRejectNote(e.target.value)}
+                            rows={2}
+                            autoFocus
+                            placeholder="What is wrong, and what should change..."
+                            className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          />
+                          <div className="flex gap-2">
+                            <button onClick={() => handleReview(att, 'rejected', rejectNote)}
+                              disabled={!rejectNote.trim() || reviewAttachment.isPending}
+                              className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
+                              <XCircle className="h-3.5 w-3.5" /> Confirm rejection
+                            </button>
+                            <button onClick={() => { setRejectingId(null); setRejectNote('') }}
+                              className="h-7 px-3 rounded text-xs text-muted-foreground hover:bg-accent">
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Approving is the moment the reason is known, so the note is
+                      captured here rather than left to a later comment. */}
+                  {approvingId === att.id && (
+                    <div className="mt-3 pt-3 border-t border-green-200 space-y-2">
+                      <label className="text-xs font-medium text-green-800 block">
+                        Approval note <span className="text-muted-foreground font-normal">(optional)</span>
+                      </label>
+                      <textarea
+                        value={approvalNote}
+                        onChange={e => setApprovalNote(e.target.value)}
+                        rows={2}
+                        autoFocus
+                        placeholder="What is being approved, and any condition attached to it..."
+                        className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={() => handleApprove(att)} disabled={approveAttachment.isPending}
+                          className="h-7 px-3 rounded flex items-center gap-1 text-xs text-white bg-green-600 hover:bg-green-700 font-medium disabled:opacity-60">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Confirm approval
+                        </button>
+                        <button onClick={() => { setApprovingId(null); setApprovalNote('') }}
+                          className="h-7 px-3 rounded text-xs text-muted-foreground hover:bg-accent">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+  }
+
   return (
     <div className="space-y-4">
       {/* Approved artwork banner */}
@@ -267,11 +467,11 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
           </div>
           <div className="space-y-1.5">
             {queue.map((q, i) => (
-              <div key={`${q.file.name}-${i}`} className="flex items-center gap-2 bg-card border border-border rounded-md px-2 py-1.5">
+              <div key={`${q.file.name}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 bg-card border border-border rounded-md px-2 py-1.5">
                 {q.file.type.startsWith('image/') ? <ImageIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                   : isVideoType(q.file.type) ? <Video className="h-3.5 w-3.5 text-violet-500 shrink-0" />
                   : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                <span className="text-xs truncate flex-1 min-w-0">{q.file.name}</span>
+                <span className="text-xs truncate flex-1 min-w-[6rem]">{q.file.name}</span>
                 <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:inline">{formatFileSize(q.file.size)}</span>
                 <KindPicker value={q.kind} onChange={k => setQueuedKind(i, k)} />
                 <button type="button" onClick={() => setQueue(qq => qq.filter((_, j) => j !== i))}
@@ -314,194 +514,28 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
         </div>
       )}
 
-      {/* Timeline */}
+      {/* Por categoria: Reference, Sample, PI, Quotation e, no fim, os
+          arquivos de antes da regra. Uma lista corrida misturava a foto da
+          amostra com a cotação e o logo do cliente. */}
       {attachments.length > 0 && (
-        <div className="relative">
-          <div className="absolute left-[18px] top-2 bottom-2 w-px bg-border" />
-          <div className="space-y-3">
-            {attachments.map(att => {
-              const isImage = att.file_type.startsWith('image/')
-              const isApproved = !!att.approved_at
-              const canDelete = att.user_id === user?.id || user?.role === 'admin'
-              const isLoading = loadingId === att.id
-
-              return (
-                <div key={att.id} className="flex gap-3 group relative">
-                  <div className={cn(
-                    'h-9 w-9 rounded-full border-2 border-background flex items-center justify-center shrink-0 z-10 mt-0.5',
-                    isApproved ? 'bg-green-100'
-                      : isImage ? 'bg-blue-100'
-                      : isVideoType(att.file_type) ? 'bg-violet-100'
-                      : 'bg-amber-100'
-                  )}>
-                    {isApproved
-                      ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      : isImage
-                        ? <ImageIcon className="h-4 w-4 text-blue-600" />
-                        : isVideoType(att.file_type)
-                          ? <Video className="h-4 w-4 text-violet-600" />
-                          : isSheetType(att.file_type)
-                            ? <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                            : <FileText className="h-4 w-4 text-amber-600" />
-                    }
-                  </div>
-
-                  <div className={cn(
-                    'flex-1 bg-card border rounded-lg p-3 hover:shadow-card-hover transition-all',
-                    isApproved ? 'border-green-300 bg-green-50/30' : 'border-border'
-                  )}>
-                    <div className="flex items-start gap-3">
-                      {thumbUrls[att.id] && (
-                        <button onClick={() => handlePreview(att)} title="Open preview"
-                          className="shrink-0 rounded overflow-hidden border border-border hover:border-primary/50 transition-colors">
-                          <img src={thumbUrls[att.id]} alt="" className="h-14 w-14 object-cover block" />
-                        </button>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <FileName name={att.filename} />
-                          {isApproved && (
-                            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">✓ APPROVED</span>
-                          )}
-                          {/* The review badge already names the category; one chip per file. */}
-                          {isReviewed(att.kind)
-                            ? <ReviewBadge kind={att.kind} status={att.review_status ?? undefined} />
-                            : <KindChip kind={att.kind} />}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{formatFileSize(att.file_size)} · {formatDateTime(att.created_at)}</p>
-                        {att.user && <p className="text-xs text-muted-foreground">by {att.user.full_name}</p>}
-                      </div>
-
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        {/* Approve button — only for member/admin, only images/PDFs */}
-                        {canApprove && !isApproved && approvingId !== att.id && (
-                          <button onClick={() => { setApprovingId(att.id); setApprovalNote('') }}
-                            className="h-7 px-2 rounded flex items-center gap-1 text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 font-medium"
-                            title="Mark as approved artwork">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-                          </button>
-                        )}
-                        {/* Set (for a file from before the rule) or change the category. */}
-                        <KindPicker value={att.kind ?? null} onChange={k => handleMark(att, k)}
-                          disabled={markAttachment.isPending} />
-                        {(isImage || isVideoType(att.file_type)) && (
-                          <button onClick={() => handlePreview(att)} disabled={isLoading}
-                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <button onClick={() => handleDownload(att)} disabled={isLoading}
-                          className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent">
-                          {isLoading ? <div className="h-3 w-3 border border-primary border-t-transparent rounded-full animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                        </button>
-                        {canDelete && !isApproved && (
-                          <button onClick={() => handleDelete(att)}
-                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* A sample carries its verdict and, when refused, the reason —
-                        so the factory is never sent back to work without one. */}
-                    {isReviewed(att.kind) && (
-                      <div className="mt-2.5 pt-2.5 border-t border-border/70">
-                        {att.review_note && (
-                          <p className={cn('text-xs mb-2 whitespace-pre-wrap',
-                            att.review_status === 'rejected' ? 'text-red-700' : 'text-green-800')}>
-                            <span className="font-semibold">
-                              {att.review_status === 'rejected' ? 'Rejected: ' : 'Note: '}
-                            </span>
-                            {att.review_note}
-                          </p>
-                        )}
-
-                        {att.reviewed_at && (
-                          <p className="text-[10px] text-muted-foreground mb-2">
-                            Reviewed {formatDateTime(att.reviewed_at)}
-                            {att.reviewer && ` by ${att.reviewer.full_name}`}
-                          </p>
-                        )}
-
-                        {canApprove && rejectingId !== att.id && (
-                          <div className="flex flex-wrap gap-2">
-                            {att.review_status !== 'approved' && (
-                              <button onClick={() => handleReview(att, 'approved')}
-                                className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700">
-                                <CheckCircle2 className="h-3.5 w-3.5" /> Approve {att.kind === 'pi' ? 'PI' : 'sample'}
-                              </button>
-                            )}
-                            {att.review_status !== 'rejected' && (
-                              <button onClick={() => { setRejectingId(att.id); setRejectNote('') }}
-                                className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200">
-                                <XCircle className="h-3.5 w-3.5" /> Reject
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        {canApprove && rejectingId === att.id && (
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium text-red-800 block">
-                              Why is it rejected? <span className="text-muted-foreground font-normal">(required)</span>
-                            </label>
-                            <textarea
-                              value={rejectNote}
-                              onChange={e => setRejectNote(e.target.value)}
-                              rows={2}
-                              autoFocus
-                              placeholder="What is wrong, and what should change..."
-                              className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            />
-                            <div className="flex gap-2">
-                              <button onClick={() => handleReview(att, 'rejected', rejectNote)}
-                                disabled={!rejectNote.trim() || reviewAttachment.isPending}
-                                className="h-7 px-3 rounded flex items-center gap-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">
-                                <XCircle className="h-3.5 w-3.5" /> Confirm rejection
-                              </button>
-                              <button onClick={() => { setRejectingId(null); setRejectNote('') }}
-                                className="h-7 px-3 rounded text-xs text-muted-foreground hover:bg-accent">
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Approving is the moment the reason is known, so the note is
-                        captured here rather than left to a later comment. */}
-                    {approvingId === att.id && (
-                      <div className="mt-3 pt-3 border-t border-green-200 space-y-2">
-                        <label className="text-xs font-medium text-green-800 block">
-                          Approval note <span className="text-muted-foreground font-normal">(optional)</span>
-                        </label>
-                        <textarea
-                          value={approvalNote}
-                          onChange={e => setApprovalNote(e.target.value)}
-                          rows={2}
-                          autoFocus
-                          placeholder="What is being approved, and any condition attached to it..."
-                          className="w-full text-sm rounded-md border border-input bg-background px-2.5 py-1.5 resize-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                        <div className="flex gap-2">
-                          <button onClick={() => handleApprove(att)} disabled={approveAttachment.isPending}
-                            className="h-7 px-3 rounded flex items-center gap-1 text-xs text-white bg-green-600 hover:bg-green-700 font-medium disabled:opacity-60">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Confirm approval
-                          </button>
-                          <button onClick={() => { setApprovingId(null); setApprovalNote('') }}
-                            className="h-7 px-3 rounded text-xs text-muted-foreground hover:bg-accent">
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+        <div className="space-y-4">
+          {groups.map(g => (
+            <section key={g.id ?? 'none'}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{g.label}</h4>
+                <span className="text-[10px] font-semibold text-muted-foreground bg-muted rounded-full px-1.5">
+                  {g.files.length}
+                </span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="relative">
+                <div className="absolute left-[18px] top-2 bottom-2 w-px bg-border" />
+                <div className="space-y-3">
+                  {g.files.map(fileRow)}
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
@@ -536,7 +570,7 @@ function FileName({ name }: { name: string }) {
     return <p className="text-sm font-medium truncate" title={name}>{name}</p>
   }
   return (
-    <p className="text-sm font-medium flex min-w-0" title={name}>
+    <p className="text-sm font-medium flex min-w-0 flex-1" title={name}>
       <span className="truncate">{name.slice(0, -TAIL)}</span>
       <span className="shrink-0">{name.slice(-TAIL)}</span>
     </p>
