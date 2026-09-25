@@ -227,6 +227,56 @@ export function usePromoteToOrder() {
   })
 }
 
+// O mesmo movimento, uma casa antes: uma cotação confirmada vira amostra.
+// Move o próprio card, como a promoção para Orders — a conversa, os arquivos e
+// o histórico continuam colados na peça, e a referência mantém a família
+// (QUO-2026-10079 → SMP-2026-10079).
+//
+// Desde 21/set isto deixou de ser opcional na prática: um pedido só chega a
+// PI Requested com uma amostra aprovada como arquivo, e a amostra nasce aqui.
+export function usePromoteToSample() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data: ref, error: refError } = await supabase
+        .rpc('allocate_card_ref', { p_board: 'samples', p_source_card_id: id })
+        .single<{ ref_number: string; ref_root: string }>()
+      if (refError) throw refError
+
+      const { data, error } = await supabase
+        .from('cards')
+        .update({
+          board: 'samples',
+          // A amostra começa do começo: pedida, ainda não em preparação.
+          status: 'Requested',
+          ref_number: ref.ref_number,
+          ref_root: ref.ref_root,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single()
+      if (error) throw error
+
+      const uid = (await supabase.auth.getUser()).data.user?.id ?? ''
+      await supabase.from('activity_logs').insert({
+        card_id: id, user_id: uid, action: 'generated_sample',
+        old_value: 'quotes', new_value: ref.ref_number,
+      })
+
+      return data as Card
+    },
+    onSuccess: (_d, vars) => {
+      // Os dois quadros mudam: o card sai de um e chega no outro.
+      qc.invalidateQueries({ queryKey: CARDS_QUERY('quotes') })
+      qc.invalidateQueries({ queryKey: CARDS_QUERY('samples') })
+      qc.invalidateQueries({ queryKey: ['card', vars.id] })
+      qc.invalidateQueries({ queryKey: ['activity', vars.id] })
+    },
+  })
+}
+
 // The way back. Promotion moved the card and left no return, so a card sent to
 // Orders by mistake was stuck there. The permission lives in the database, not
 // here: the button being hidden is a courtesy, the function is the rule.

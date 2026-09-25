@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip } from 'lucide-react'
+import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip, Package } from 'lucide-react'
 import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
-import { usePromoteToOrder } from '../../hooks/useCards'
+import { usePromoteToOrder, usePromoteToSample } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { cn, formatFileSize, COLLECTION_SIZES } from '../../lib/utils'
+import { cn, formatFileSize, errorText, COLLECTION_SIZES } from '../../lib/utils'
 import { Card, BoardType } from '../../types'
 import { CatalogPicker } from './CatalogPicker'
 import { ExportRFQ } from './ExportRFQ'
@@ -114,6 +114,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const updateItem = useUpdateCardItem()
   const deleteItem = useDeleteCardItem()
   const promoteToOrder = usePromoteToOrder()
+  const promoteToSample = usePromoteToSample()
   const toast = useToast()
 
   const [adding, setAdding] = useState(false)
@@ -129,6 +130,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   const [editPrice, setEditPrice] = useState('')
   const [editSale, setEditSale] = useState('')
   const [generatingOrder, setGeneratingOrder] = useState(false)
+  const [generatingSample, setGeneratingSample] = useState(false)
   const [customSize, setCustomSize] = useState(false)
 
   // Item files live in private storage, so each needs its own signed URL
@@ -275,10 +277,28 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
     }
   }
 
+  async function handleGenerateSample() {
+    setGeneratingSample(true)
+    try {
+      const sample = await promoteToSample.mutateAsync({ id: card.id })
+      toast(`Moved to Samples as ${sample.ref_number ?? 'a new sample'}`, 'success')
+    } catch (err) {
+      console.error('Failed to move card to Samples:', err)
+      toast(errorText(err) ?? 'Failed to move to Samples', 'error')
+    } finally {
+      setGeneratingSample(false)
+    }
+  }
+
   if (isLoading) return <p className="text-xs text-muted-foreground">Loading items...</p>
 
   const canGenerateOrder = (card.board === 'samples' && card.status === 'Approved') ||
     (card.board === 'quotes' && card.status === 'Confirmed')
+  // Uma cotação confirmada tem dois caminhos: fazer a amostra antes, que é o
+  // normal desde que o pedido passou a exigir uma amostra aprovada, ou ir
+  // direto a pedido quando a peça já é conhecida. Sem itens não há o que
+  // pedir ao fornecedor, então a amostra não depende deles.
+  const canGenerateSample = card.board === 'quotes' && card.status === 'Confirmed'
 
   return (
     <div className="space-y-3">
@@ -300,8 +320,18 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
               Export RFQ
             </Button>
           )}
+          {canGenerateSample && (
+            <Button size="sm" variant="outline" onClick={handleGenerateSample} loading={generatingSample}
+              className="gap-1.5" title="Move this quote to the Samples board as a new sample request">
+              <Package className="h-3.5 w-3.5" />
+              Generate Sample
+            </Button>
+          )}
           {canGenerateOrder && (
-            <Button size="sm" onClick={handleGenerateOrder} loading={generatingOrder} className="gap-1.5">
+            <Button size="sm" onClick={handleGenerateOrder} loading={generatingOrder} className="gap-1.5"
+              title={card.board === 'quotes'
+                ? 'Skip the sample and move straight to Orders'
+                : 'Move this approved sample to Orders'}>
               <ShoppingCart className="h-3.5 w-3.5" />
               Generate Order
             </Button>

@@ -12,6 +12,8 @@ const ACTION_CONFIG: Record<string, { label: (e: { old_value?: string; new_value
   uploaded:         { label: (e) => `uploaded "${e.new_value ?? 'a file'}"`, icon: Upload, color: 'text-purple-600' },
   commented:        { label: () => 'posted a comment', icon: MessageSquare, color: 'text-slate-500' },
   generated_order:  { label: (e) => `generated order ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-green-700' },
+  generated_sample: { label: (e) => `generated sample ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-violet-700' },
+  promoted_to_order: { label: (e) => `moved to Orders as ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-green-700' },
 }
 
 export function ActivityLog({ cardId }: { cardId: string }) {
