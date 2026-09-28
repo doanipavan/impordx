@@ -90,7 +90,27 @@ export const TERMS_SECTIONS: TermsSection[] = [
   },
 ]
 
+// ATENÇÃO — cláusula acrescentada pelo hub em 28/09/2026, ainda **não revisada
+// pelo jurídico da Redantex**. É ela que faz a assinatura eletrônica simples
+// valer entre as partes (MP 2.200-2/2001, art. 10, §2º): sem o aceite expresso
+// do meio, o registro existe mas o documento não diz que ele vale.
+export const TERMS_ELECTRONIC: TermsSection = {
+  n: 6,
+  heading: 'Aceite eletrônico e conferência',
+  body: [
+    'As partes reconhecem como válida e vinculante a aprovação manifestada por meio eletrônico nesta ' +
+    'plataforma, nos termos do art. 10, §2º, da Medida Provisória nº 2.200-2/2001 e da Lei nº 14.063/2020.',
+    'O aceite é comprovado pelo registro eletrônico gerado no momento da assinatura, que contém nome, ' +
+    'e-mail, documento informado, data e hora, endereço IP, dispositivo utilizado, o conteúdo exato ' +
+    'apresentado na tela e o seu resumo criptográfico (hash SHA-256).',
+    'Cada aprovação recebe um código de conferência, impresso no comprovante, que permite verificar o ' +
+    'registro a qualquer tempo em impordx.netlify.app/verificar.',
+  ],
+}
+
 /** O parágrafo que o cliente assina — o mesmo que a caixinha repete. */
+export const TERMS_CONFIRMATION_N = 7
+
 export const TERMS_CONFIRMATION = [
   'Declaro que conferi as informações do meu pedido, tive acesso à arte digital e estou de acordo com as ' +
   'especificações informadas.',

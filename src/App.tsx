@@ -5,6 +5,7 @@ import { ToastProvider } from './components/ui/toast'
 import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/Login'
 import { ApprovalPage } from './pages/ApprovalPage'
+import { VerifyPage } from './pages/VerifyPage'
 import { DashboardPage } from './pages/Dashboard'
 import { QuotesPage, SamplesPage, OrdersPage } from './pages/BoardPage'
 import { TimelinePage } from './pages/TimelinePage'
@@ -44,6 +45,10 @@ function AppRoutes() {
       {/* O link do cliente. Sem login e sem Layout: quem abre não tem conta,
           e o que ele vê vem inteiro da função approval_view. */}
       <Route path="/aprovar/:token" element={<ApprovalPage />} />
+      {/* A conferência do comprovante, também sem login: é ela que faz o
+          registro servir de prova para quem não tem acesso ao hub. */}
+      <Route path="/verificar" element={<VerifyPage />} />
+      <Route path="/verificar/:code" element={<VerifyPage />} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/quotes" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
       <Route path="/quotes/:ref" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />

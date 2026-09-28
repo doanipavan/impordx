@@ -1,5 +1,6 @@
 import {
   TERMS_TITLE, TERMS_INTRO, TERMS_SECTIONS, TERMS_CONFIRMATION, TERMS_SIGNATORY, TermsFields,
+  TERMS_ELECTRONIC, TERMS_CONFIRMATION_N,
 } from './approvalTerms'
 
 /**
@@ -18,6 +19,8 @@ export interface ReceiptInput {
     decision: 'approved' | 'changes'
     name: string
     email: string
+    document?: string
+    verifyCode?: string
     at: string
     note?: string
     acceptedTerms?: boolean
@@ -31,7 +34,7 @@ const esc = (s: string | null | undefined) =>
 export function approvalReceiptHtml(r: ReceiptInput): string {
   const approved = r.signature.decision === 'approved'
 
-  const sections = TERMS_SECTIONS.map(s => `
+  const sections = [...TERMS_SECTIONS, TERMS_ELECTRONIC].map(s => `
     <h2>${s.n}. ${esc(s.heading)}</h2>
     ${(s.body ?? []).map(t => `<p>${esc(t)}</p>`).join('')}
     ${s.bullets ? `<ul>${s.bullets.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
@@ -65,6 +68,10 @@ export function approvalReceiptHtml(r: ReceiptInput): string {
   figure img { display: block; width: 100%; max-height: 150mm; object-fit: contain; background: #fff; }
   figcaption { font-size: 9px; color: #64748b; padding: 4px 8px; border-top: 1px solid #e5e7eb; }
   .sign { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e5e7eb; page-break-inside: avoid; }
+  .check { margin-top: 12px; padding: 8px 10px; border: 1px dashed #94a3b8; border-radius: 6px; background: #f8fafc;
+           page-break-inside: avoid; }
+  .check b { font-size: 11.5px; letter-spacing: .06em; }
+  .check p { margin: 3px 0 0; color: #475569; font-size: 9px; }
   .foot { margin-top: 12px; padding-top: 6px; border-top: 1px solid #e5e7eb; color: #64748b; font-size: 8.5px;
           display: flex; justify-content: space-between; }
 </style></head><body>
@@ -83,6 +90,7 @@ export function approvalReceiptHtml(r: ReceiptInput): string {
     <dt>Assinado por</dt><dd>${esc(r.signature.name)}</dd>
     <dt>E-mail</dt><dd>${esc(r.signature.email)}</dd>
     <dt>Data e hora</dt><dd>${esc(r.signature.at)}</dd>
+    ${r.signature.document ? `<dt>CPF / CNPJ</dt><dd>${esc(r.signature.document)}</dd>` : ''}
     ${r.signature.acceptedTerms ? '<dt>Termo</dt><dd>Aceito na mesma assinatura</dd>' : ''}
     ${r.signature.note ? `<dt>Pedido</dt><dd>${esc(r.signature.note)}</dd>` : ''}
   </dl>
@@ -99,7 +107,7 @@ ${r.art.map(a => `<figure><img src="${a.url}" alt="">${a.caption ? `<figcaption>
 <p>${esc(TERMS_INTRO)}</p>
 ${sections}
 
-<h2>6. Confirmação do cliente</h2>
+<h2>${TERMS_CONFIRMATION_N}. Confirmação do cliente</h2>
 ${TERMS_CONFIRMATION.map(t => `<p>${esc(t)}</p>`).join('')}
 
 <div class="sign">
@@ -109,6 +117,14 @@ ${TERMS_CONFIRMATION.map(t => `<p>${esc(t)}</p>`).join('')}
   </dl>
   <p style="margin-top:8px">${esc(TERMS_SIGNATORY)}</p>
 </div>
+
+${r.signature.verifyCode ? `
+<div class="check">
+  <b>Código de conferência: ${esc(r.signature.verifyCode)}</b>
+  <p>Qualquer pessoa pode confirmar este comprovante em
+     <b>impordx.netlify.app/verificar</b>, digitando o código acima. A conferência mostra a
+     decisão, quem assinou, a data e o resumo criptográfico do conteúdo — sem expor o pedido.</p>
+</div>` : ''}
 
 <div class="foot">
   <span>impordx.netlify.app · aceite eletrônico registrado com nome, e-mail, data, hora e IP</span>

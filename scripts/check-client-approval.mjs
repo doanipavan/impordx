@@ -192,6 +192,58 @@ try {
   const { rows: [seenByAnon] } = await db.query(`select count(*)::int as n from approval_requests`)
   check('anônimo não lê os pedidos', seenByAnon.n === 0, String(seenByAnon.n))
 
+  // ── a prova: documento, código e trilha (migração 048) ───────────────────
+  await asUser(me.id)
+  const { rows: [forProof] } = await db.query(`select * from approval_create($1, $2)`, [card.id, [art.id]])
+
+  await asAnon()
+  const before = (await db.query(`select approval_view($1)`, [forProof.token])).rows[0].approval_view
+  check('o link abre antes de ser tocado', before.state === 'open')
+  await db.query(`select approval_touch($1)`, [forProof.token])
+  await db.query(`select approval_touch($1)`, [forProof.token])
+  await asOwner()
+  const { rows: [touched] } = await db.query(
+    `select first_opened_at, open_count from approval_requests where token_hash = encode(extensions.digest($1,'sha256'),'hex')`,
+    [forProof.token])
+  check('a abertura do link fica registrada', touched.first_opened_at !== null && touched.open_count === 2,
+    `${touched.open_count} aberturas`)
+
+  await asAnon()
+  const shortDoc = await refused(
+    `select approval_sign($1,'Ana Caroline','a@b.co','approved',true,'{}',NULL,NULL,'123')`, [forProof.token])
+  check('CPF pela metade é recusado', !!shortDoc && shortDoc.includes('inválido'), shortDoc ?? 'aceitou')
+
+  const { rows: [{ approval_sign: proof }] } = await db.query(
+    `select approval_sign($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [forProof.token, 'Ana Caroline', 'ana@cliente.com.br', 'approved', true,
+     JSON.stringify({ reference: card.ref_number }), null, 'probe', '123.456.789-09'])
+  check('a assinatura devolve o código de conferência',
+    typeof proof.verify_code === 'string' && proof.verify_code.length === 10, String(proof.verify_code))
+
+  const v = (await db.query(`select approval_verify($1)`, [proof.verify_code])).rows[0].approval_verify
+  check('o código confere', v.found === true)
+  check('a conferência traz decisão, pedido e data',
+    v.decision === 'approved' && v.reference === card.ref_number && !!v.signed_at)
+  check('a conferência mascara o e-mail', v.signer_email === 'a***@cliente.com.br', v.signer_email)
+  check('a conferência mascara o documento', v.signer_document === '123*****09', String(v.signer_document))
+  check('a conferência traz o hash do conteúdo', typeof v.snapshot_hash === 'string' && v.snapshot_hash.length === 64)
+  check('a conferência traz a trilha do link',
+    !!v.sent_at && !!v.first_opened_at && v.open_count >= 2, JSON.stringify([v.first_opened_at, v.open_count]))
+  check('a conferência não entrega a arte nem o preço',
+    !JSON.stringify(v).includes('marina.png') && !JSON.stringify(v).includes('12345'))
+
+  const nothing = (await db.query(`select approval_verify('ZZZZZZZZZZ')`)).rows[0].approval_verify
+  check('código inventado não confere nada', nothing.found === false)
+
+  await asOwner()
+  const { rows: [savedDoc] } = await db.query(
+    `select signer_document from approval_signatures where verify_code = $1`, [proof.verify_code])
+  check('o documento é guardado só com dígitos', savedDoc.signer_document === '12345678909', String(savedDoc.signer_document))
+
+  await asAnon()
+  const { rows: [anonVerify] } = await db.query(`select count(*)::int as n from approval_signatures`)
+  check('a conferência não abre a tabela para anônimo', anonVerify.n === 0, String(anonVerify.n))
+
   console.log(failures ? `\n${failures} FALHARAM` : '\ntudo certo')
 } finally {
   await db.query('rollback').catch(() => {})

@@ -3,7 +3,7 @@ import { Check, PencilLine, ShieldCheck, Clock, Download, AlertCircle, ZoomIn, F
 import { cn } from '../lib/utils'
 import {
   TERMS_TITLE, TERMS_INTRO, TERMS_SECTIONS, TERMS_CONFIRMATION, TERMS_SIGNATORY,
-  TERMS_CHECKBOX_LABEL, TermsFields,
+  TERMS_CHECKBOX_LABEL, TermsFields, TERMS_ELECTRONIC, TERMS_CONFIRMATION_N,
 } from '../lib/approvalTerms'
 import { approvalReceiptHtml } from '../lib/approvalReceipt'
 import { useSignApproval } from '../hooks/useApproval'
@@ -41,6 +41,10 @@ export interface SignedReceipt {
   decision: 'approved' | 'changes'
   name: string
   email: string
+  /** CPF ou CNPJ, como foi digitado. */
+  document?: string
+  /** O código impresso no comprovante, que qualquer um confere em /verificar. */
+  verifyCode?: string
   at: string
   note?: string
   /** Fica no comprovante: a aprovação e o aceite do termo são um ato só. */
@@ -61,6 +65,7 @@ export function ClientApproval({ piece, token, initial }: {
   const [receipt, setReceipt] = useState<SignedReceipt | undefined>(initial)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [doc, setDoc] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [note, setNote] = useState('')
@@ -68,7 +73,10 @@ export function ClientApproval({ piece, token, initial }: {
   // Imagens que o navegador não conseguiu desenhar.
   const [broken, setBroken] = useState<Record<string, boolean>>({})
 
-  const identified = name.trim().length > 2 && /.+@.+\..+/.test(email)
+  const digits = doc.replace(/\D/g, '')
+  // O documento é opcional, mas pela metade não serve: ou 11, ou 14, ou nada.
+  const docOk = digits.length === 0 || digits.length === 11 || digits.length === 14
+  const identified = name.trim().length > 2 && /.+@.+\..+/.test(email) && docOk
   // Aprovar a arte e aceitar o termo são duas caixinhas: uma diz o que ele viu,
   // a outra diz sob que condições. Juntas numa só, ninguém sabe o que assinou.
   const canApprove = identified && agreed && acceptedTerms
@@ -82,15 +90,17 @@ export function ClientApproval({ piece, token, initial }: {
         timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
       }).format(new Date()) + ' (horário de Brasília)',
+      document: digits || undefined,
       note: decision === 'changes' ? note.trim() : undefined,
       acceptedTerms: decision === 'approved' ? acceptedTerms : undefined,
     }
 
     if (token) {
       try {
-        await signApproval.mutateAsync({
+        const done = await signApproval.mutateAsync({
           name: local.name, email: local.email, decision,
           acceptedTerms: decision === 'approved' ? acceptedTerms : false,
+          document: digits || undefined,
           note: local.note,
           // O retrato do que ele viu: é sobre isto que o banco calcula o hash.
           snapshot: {
@@ -100,6 +110,7 @@ export function ClientApproval({ piece, token, initial }: {
             terms: { ...piece.terms, title: TERMS_TITLE },
           },
         })
+        local.verifyCode = done?.verify_code
       } catch (err) {
         console.error('Falha ao assinar:', err)
         setFailure((err as { message?: string })?.message
@@ -236,6 +247,19 @@ export function ClientApproval({ piece, token, initial }: {
                              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   placeholder="para receber o comprovante" />
               </label>
+              <label className="block sm:col-span-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  CPF ou CNPJ <span className="font-normal">(opcional, mas recomendado)</span>
+                </span>
+                <input value={doc} onChange={e => setDoc(e.target.value)} inputMode="numeric"
+                  className={cn('mt-1 w-full h-10 rounded-md border bg-background px-3 text-sm',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    docOk ? 'border-input' : 'border-red-400')}
+                  placeholder="identifica quem assinou" />
+                {!docOk && (
+                  <span className="text-[11px] text-red-600">Digite um CPF (11 dígitos) ou CNPJ (14).</span>
+                )}
+              </label>
             </div>
 
             {stage === 'reviewing' ? (
@@ -344,7 +368,7 @@ function TermsBox({ fields }: { fields: TermsFields }) {
 
       <div className="max-h-72 overflow-y-auto px-4 py-3 space-y-3 text-xs leading-relaxed text-foreground/90">
         <p>{TERMS_INTRO}</p>
-        {TERMS_SECTIONS.map(sec => (
+        {[...TERMS_SECTIONS, TERMS_ELECTRONIC].map(sec => (
           <div key={sec.n}>
             <h3 className="font-semibold uppercase tracking-wide text-[11px] mb-1">
               {sec.n}. {sec.heading}
@@ -358,7 +382,9 @@ function TermsBox({ fields }: { fields: TermsFields }) {
           </div>
         ))}
         <div>
-          <h3 className="font-semibold uppercase tracking-wide text-[11px] mb-1">6. Confirmação do cliente</h3>
+          <h3 className="font-semibold uppercase tracking-wide text-[11px] mb-1">
+            {TERMS_CONFIRMATION_N}. Confirmação do cliente
+          </h3>
           {TERMS_CONFIRMATION.map((t, i) => <p key={i} className="mb-1">{t}</p>)}
         </div>
         <p className="text-muted-foreground pt-1 border-t border-border/70">{TERMS_SIGNATORY}</p>
@@ -400,7 +426,9 @@ function Receipt({ receipt, piece, onDownload }: {
         <Line k="Peça" v={`${piece.title} · ${piece.reference}`} />
         <Line k="Assinado por" v={`${receipt.name} · ${receipt.email}`} />
         <Line k="Quando" v={receipt.at} />
+        {receipt.document && <Line k="CPF / CNPJ" v={receipt.document} />}
         {receipt.acceptedTerms && <Line k="Termo" v="Aceito na mesma assinatura" />}
+        {receipt.verifyCode && <Line k="Código" v={receipt.verifyCode} />}
         {receipt.note && <Line k="Pedido" v={receipt.note} />}
       </dl>
 
@@ -409,6 +437,13 @@ function Receipt({ receipt, piece, onDownload }: {
                    flex items-center gap-2 hover:bg-accent">
         <Download className="h-4 w-4" /> Baixar comprovante e termo (PDF)
       </button>
+
+      {receipt.verifyCode && (
+        <p className="text-[11px] text-muted-foreground mt-2.5 border-t border-border/60 pt-2">
+          Guarde o código <b className="font-mono tracking-wider">{receipt.verifyCode}</b>: com ele,
+          qualquer pessoa confirma este comprovante em <b>/verificar</b>, sem precisar do link.
+        </p>
+      )}
 
       <p className="text-[11px] text-muted-foreground mt-2.5">
         {approved

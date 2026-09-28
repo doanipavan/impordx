@@ -51,6 +51,9 @@ export function useApprovalView(token: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase.rpc('approval_view', { p_token: token })
       if (error) throw error
+      // Registra que o link foi aberto. Falhar aqui não pode impedir a leitura:
+      // é prova de recebimento, não pré-requisito para ver a arte.
+      supabase.rpc('approval_touch', { p_token: token }).then(undefined, () => {})
       return data as ApprovalView
     },
     enabled: !!token,
@@ -67,11 +70,13 @@ export function useSignApproval(token: string | undefined) {
       email: string
       decision: 'approved' | 'changes'
       acceptedTerms: boolean
+      /** CPF ou CNPJ declarado por quem assina. Opcional. */
+      document?: string
       note?: string
       /** O retrato do que estava na tela. Vira hash do lado do banco. */
       snapshot: unknown
     }) => {
-      const { error } = await supabase.rpc('approval_sign', {
+      const { data, error } = await supabase.rpc('approval_sign', {
         p_token: token,
         p_name: input.name,
         p_email: input.email,
@@ -80,8 +85,10 @@ export function useSignApproval(token: string | undefined) {
         p_snapshot: input.snapshot,
         p_note: input.note ?? null,
         p_user_agent: navigator.userAgent,
+        p_document: input.document ?? null,
       })
       if (error) throw error
+      return data as { ok: boolean; verify_code: string; at: string }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['approval', token] }),
   })
@@ -178,5 +185,35 @@ export function useClientResponses(cardId: string) {
       return (data ?? []) as unknown as ClientResponse[]
     },
     enabled: !!cardId,
+  })
+}
+
+export interface VerifiedSignature {
+  found: boolean
+  decision?: 'approved' | 'changes'
+  reference?: string
+  signer_name?: string
+  signer_email?: string
+  signer_document?: string | null
+  signed_at?: string
+  accepted_terms?: boolean
+  snapshot_hash?: string
+  ip?: string | null
+  sent_at?: string
+  first_opened_at?: string | null
+  open_count?: number
+}
+
+/** A conferência pública de um comprovante, pelo código impresso nele. */
+export function useVerifySignature(code: string | undefined) {
+  return useQuery({
+    queryKey: ['verify', code],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('approval_verify', { p_code: code })
+      if (error) throw error
+      return data as VerifiedSignature
+    },
+    enabled: !!code && code.length >= 6,
+    retry: false,
   })
 }
