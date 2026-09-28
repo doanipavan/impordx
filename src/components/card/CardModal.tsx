@@ -457,7 +457,7 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
             </div>
 
             <div className="flex-1 xl:min-h-0 xl:overflow-y-auto scrollbar-thin p-4">
-              {side === 'comments' ? <CommentThread cardId={card.id} /> : <AttachmentPanel cardId={card.id} />}
+              {side === 'comments' ? <CommentThread cardId={card.id} /> : <AttachmentPanel cardId={card.id} card={card} />}
             </div>
           </section>
         </div>

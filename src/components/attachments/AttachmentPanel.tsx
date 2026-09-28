@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useRef, useState, DragEvent } from 'react'
-import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle, Video, FileSpreadsheet } from 'lucide-react'
+import { Upload, File, Trash2, Download, X, Eye, FileText, Image as ImageIcon, CheckCircle2, XCircle, Video, FileSpreadsheet, Send } from 'lucide-react'
 import { useAttachments, useUploadAttachment, useDeleteAttachment, useApproveAttachment, useUnapproveAttachment, useMarkAttachment, useReviewAttachment, getSignedUrl } from '../../hooks/useAttachments'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Attachment } from '../../types'
 import { cn, formatFileSize, formatDateTime, formatRelative, errorText } from '../../lib/utils'
-import { ACCEPTED_ATTR, fileRejection, sizeLimitFor, isVideoType, isSheetType } from '../../lib/fileTypes'
+import { ACCEPTED_ATTR, fileRejection, sizeLimitFor, isVideoType, isSheetType, PDF_TYPE } from '../../lib/fileTypes'
 import { ATTACHMENT_KINDS, AttachmentKind, QueuedFile, allCategorised, isReviewed, kindLabel } from '../../lib/attachmentKinds'
 import { KindPicker, KindChip } from './KindPicker'
+import { SendForApproval } from './SendForApproval'
+import { Card } from '../../types'
 
 // Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês, e
 // planilha é como preço e lista de itens circulam. O que vale, e os tetos de
 // tamanho de cada tipo, moram em lib/fileTypes.
 
-export function AttachmentPanel({ cardId }: { cardId: string }) {
+export function AttachmentPanel({ cardId, card }: { cardId: string; card?: Card }) {
   const { data: attachments = [], isLoading } = useAttachments(cardId)
   const uploadAttachment = useUploadAttachment()
   const deleteAttachment = useDeleteAttachment()
@@ -29,6 +31,8 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
   // Arquivos esperam aqui até cada um dizer o que é. Antes subiam na hora e
   // a categoria era um botão depois — que quase ninguém apertava.
   const [queue, setQueue] = useState<QueuedFile[]>([])
+  // Qual arquivo está indo para o cliente. Null = a caixa está fechada.
+  const [sending, setSending] = useState<string | null>(null)
   // Guarda o tipo junto com a URL: o mesmo botão de olho agora abre uma
   // imagem ou um vídeo, e o modal precisa saber qual desenhar.
   const [preview, setPreview] = useState<{ url: string; video: boolean } | null>(null)
@@ -258,6 +262,18 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
                         <CheckCircle2 className="h-3.5 w-3.5" /> Approve
                       </button>
                     )}
+                    {/* A arte que o fornecedor subiu vira link de aprovação do
+                        cliente. Só a Redantex envia, e só o que o cliente
+                        consegue conferir no celular: imagem ou PDF. */}
+                    {card && canApprove && (isImage || att.file_type === PDF_TYPE) && (
+                      <button onClick={() => setSending(att.id)}
+                        className="h-7 px-2 rounded flex items-center gap-1 text-xs font-medium border
+                                   text-primary bg-primary/5 border-primary/30 hover:bg-primary/10"
+                        title="Send this file to the client to sign">
+                        <Send className="h-3.5 w-3.5" /> Send to client
+                      </button>
+                    )}
+
                     {/* Set (for a file from before the rule) or change the category. */}
                     <KindPicker value={att.kind ?? null} onChange={k => handleMark(att, k)}
                       disabled={markAttachment.isPending} />
@@ -537,6 +553,11 @@ export function AttachmentPanel({ cardId }: { cardId: string }) {
             </section>
           ))}
         </div>
+      )}
+
+      {sending && card && (
+        <SendForApproval card={card} attachments={attachments} initialId={sending}
+          onClose={() => setSending(null)} />
       )}
 
       {preview && (

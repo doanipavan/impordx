@@ -94,6 +94,9 @@ export interface Card {
   // O dia em que chegou ao Brasil, carimbado ao entrar em Arrived (migração
   // 042). É o que fecha a meta de logística: arrived_at − delivery_date ≤ 50.
   arrived_at?: string | null
+  // Quem assinou a arte pelo cliente, e quando (migração 046).
+  client_approved_at?: string | null
+  client_approved_by?: string | null
   status_since?: string        // stamped by trigger on every status change
   logo_technique_outside?: string
   logo_technique_inside?: string

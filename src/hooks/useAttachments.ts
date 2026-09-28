@@ -69,12 +69,34 @@ export function useUploadAttachment() {
       let uploadFile = file
       let thumbnailPath: string | null = null
 
-      if (isImage && file.size > 500 * 1024) {
-        uploadFile = await imageCompression(file, {
-          maxSizeMB: 2,
-          maxWidthOrHeight: 2000,
-          useWebWorker: true,
-        })
+      // Toda imagem é reescrita, não só a grande. Uma arte que a DEQI mandou
+      // veio como PNG de 16 bits: o storage guardou, o navegador baixou e não
+      // conseguiu desenhar — quadro quebrado no hub e, pior, na tela do
+      // cliente. O canvas devolve sempre 8 bits, que todo navegador lê.
+      if (isImage) {
+        try {
+          uploadFile = await imageCompression(file, {
+            maxSizeMB: 2,
+            maxWidthOrHeight: 2000,
+            useWebWorker: true,
+          })
+        } catch (err) {
+          console.warn('Could not normalise the image:', err)
+        }
+
+        // Última prova: o navegador consegue desenhar o que vai ser guardado?
+        // Seis arquivos no acervo são HEIC com nome .png — o Mac exporta assim
+        // e o Safari mostra, então quem subiu nunca viu problema; o Chrome e o
+        // celular do cliente mostram um quadro vazio. Recusar aqui é melhor do
+        // que descobrir isso na tela de aprovação.
+        try {
+          const bitmap = await createImageBitmap(uploadFile)
+          bitmap.close?.()
+        } catch {
+          throw new Error(
+            `"${file.name}" está num formato que o navegador não abre (HEIC, do Mac/iPhone). `
+            + 'Exporte como JPG ou PNG e suba de novo.')
+        }
       }
 
       const ext = file.name.split('.').pop()

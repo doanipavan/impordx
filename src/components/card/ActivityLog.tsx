@@ -1,4 +1,4 @@
-import { Clock, ArrowRight, Plus, Trash2, Upload, MessageSquare } from 'lucide-react'
+import { Clock, ArrowRight, Plus, Trash2, Upload, MessageSquare, Check } from 'lucide-react'
 import { useActivityLog } from '../../hooks/useActivityLog'
 import { Avatar } from '../ui/avatar'
 import { formatRelative, formatWeekdayDateTime } from '../../lib/utils'
@@ -13,6 +13,9 @@ const ACTION_CONFIG: Record<string, { label: (e: { old_value?: string; new_value
   commented:        { label: () => 'posted a comment', icon: MessageSquare, color: 'text-slate-500' },
   generated_order:  { label: (e) => `generated order ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-green-700' },
   generated_sample: { label: (e) => `generated sample ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-violet-700' },
+  approval_sent:    { label: (e) => `sent ${e.new_value ?? 'the art'} to the client for approval`, icon: Upload, color: 'text-primary' },
+  client_approved:  { label: (e) => `${e.old_value ?? 'The client'} approved the art`, icon: Check, color: 'text-green-700' },
+  client_changes:   { label: (e) => `${e.old_value ?? 'The client'} asked for a change`, icon: MessageSquare, color: 'text-amber-700' },
   promoted_to_order: { label: (e) => `moved to Orders as ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-green-700' },
 }
 

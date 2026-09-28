@@ -1,4 +1,4 @@
-import { Eye } from 'lucide-react'
+import { Eye, CheckCircle2 } from 'lucide-react'
 import { Card } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
@@ -51,6 +51,23 @@ export function CardMetaStrip({ card }: { card: Card }) {
 
   return (
     <div className="px-6 py-2 border-t border-border/60 bg-muted/30 flex items-center gap-x-4 gap-y-1.5 flex-wrap shrink-0">
+
+      {/* O aceite do cliente vem primeiro: é a informação que decide se a
+          produção pode começar, e o card inteiro gira em torno dela. */}
+      {card.client_approved_at && (
+        <>
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-800
+                           bg-green-100 border border-green-300 rounded-full px-2 py-0.5"
+            title={`Arte aprovada pelo cliente em ${formatDateTime(card.client_approved_at)}`}>
+            <CheckCircle2 className="h-3 w-3" />
+            Client approved
+            {card.client_approved_by && (
+              <span className="font-normal">· {card.client_approved_by}</span>
+            )}
+          </span>
+          <Sep />
+        </>
+      )}
 
       {card.client_name && (
         <>
