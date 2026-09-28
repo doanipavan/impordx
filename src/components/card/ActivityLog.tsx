@@ -15,7 +15,7 @@ const ACTION_CONFIG: Record<string, { label: (e: { old_value?: string; new_value
   generated_sample: { label: (e) => `generated sample ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-violet-700' },
   approval_sent:    { label: (e) => `sent ${e.new_value ?? 'the art'} to the client for approval`, icon: Upload, color: 'text-primary' },
   client_approved:  { label: (e) => `${e.old_value ?? 'The client'} approved the art`, icon: Check, color: 'text-green-700' },
-  client_changes:   { label: (e) => `${e.old_value ?? 'The client'} asked for a change`, icon: MessageSquare, color: 'text-amber-700' },
+  client_changes:   { label: (e) => `${e.old_value ?? 'The client'} asked for a change${e.new_value ? `: "${e.new_value}"` : ''}`, icon: MessageSquare, color: 'text-amber-700' },
   promoted_to_order: { label: (e) => `moved to Orders as ${e.new_value ?? ''}`, icon: ArrowRight, color: 'text-green-700' },
 }
 

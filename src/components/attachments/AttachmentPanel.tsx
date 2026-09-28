@@ -9,6 +9,7 @@ import { ACCEPTED_ATTR, fileRejection, sizeLimitFor, isVideoType, isSheetType, P
 import { ATTACHMENT_KINDS, AttachmentKind, QueuedFile, allCategorised, isReviewed, kindLabel } from '../../lib/attachmentKinds'
 import { KindPicker, KindChip } from './KindPicker'
 import { SendForApproval } from './SendForApproval'
+import { ClientResponses } from './ClientResponses'
 import { Card } from '../../types'
 
 // Vídeo instrui o fornecedor mais depressa do que uma descrição em inglês, e
@@ -449,6 +450,10 @@ export function AttachmentPanel({ cardId, card }: { cardId: string; card?: Card 
           )}
         </div>
       )}
+
+      {/* A resposta do cliente vem antes de tudo: é ela que decide se a
+          próxima arte é necessária. Só a Redantex vê. */}
+      {canApprove && <ClientResponses cardId={cardId} />}
 
       {/* Upload zone */}
       <div

@@ -147,3 +147,36 @@ export function useRevokeApproval() {
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['approval-requests', vars.cardId] }),
   })
 }
+
+export interface ClientResponse {
+  id: string
+  decision: 'approved' | 'changes'
+  signer_name: string
+  signer_email: string
+  note: string | null
+  signed_at: string
+  accepted_terms: boolean
+}
+
+/**
+ * O que o cliente respondeu neste card, do mais recente para o mais antigo.
+ *
+ * Existe porque o pedido de ajuste dele ficava só no histórico e no sino —
+ * dois lugares onde o texto do pedido não aparecia. A resposta pertence ao
+ * card, ao lado da arte de que ela fala.
+ */
+export function useClientResponses(cardId: string) {
+  return useQuery({
+    queryKey: ['client-responses', cardId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('approval_signatures')
+        .select('id, decision, signer_name, signer_email, note, signed_at, accepted_terms, request:approval_requests!inner(card_id)')
+        .eq('request.card_id', cardId)
+        .order('signed_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as unknown as ClientResponse[]
+    },
+    enabled: !!cardId,
+  })
+}

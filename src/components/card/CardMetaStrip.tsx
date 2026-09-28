@@ -1,9 +1,10 @@
-import { Eye, CheckCircle2 } from 'lucide-react'
+import { Eye, CheckCircle2, MessageSquareWarning } from 'lucide-react'
 import { Card } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { useCardViews } from '../../hooks/useCardViews'
 import { useAttachments } from '../../hooks/useAttachments'
+import { useClientResponses } from '../../hooks/useApproval'
 import { cn, formatDate, formatDateTime, cardAge, isOverdue, dueDateFor } from '../../lib/utils'
 import { salespersonLabel } from '../../types'
 
@@ -33,6 +34,7 @@ function Sep() {
 export function CardMetaStrip({ card }: { card: Card }) {
   const { data: views = [] } = useCardViews(card.id)
   const { data: attachments = [] } = useAttachments(card.id)
+  const { data: responses = [] } = useClientResponses(card.id)
 
   const age = cardAge(card.created_at, card.shipped_at)
   const overdue = isOverdue(dueDateFor(card))
@@ -46,11 +48,30 @@ export function CardMetaStrip({ card }: { card: Card }) {
   const piDate = piApproval?.reviewed_at ?? null
   const confirmedDate = card.order_confirmed_at ?? null
 
+  // A última palavra do cliente. Um pedido de ajuste não carimba o card, então
+  // sem isto ele não apareceria em lugar nenhum fora do histórico.
+  const changes = responses[0]?.decision === 'changes' ? responses[0] : null
+
   const seen = views[0]
   const deqiSeen = views.some(v => v.user?.role === 'viewer')
 
   return (
     <div className="px-6 py-2 border-t border-border/60 bg-muted/30 flex items-center gap-x-4 gap-y-1.5 flex-wrap shrink-0">
+
+      {/* Um pedido de ajuste pesa tanto quanto um aceite: os dois decidem se
+          a produção começa. O texto do pedido fica na aba Files. */}
+      {changes && !card.client_approved_at && (
+        <>
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-900
+                           bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5"
+            title={changes.note ?? undefined}>
+            <MessageSquareWarning className="h-3 w-3" />
+            Client asked for a change
+            <span className="font-normal">· {changes.signer_name}</span>
+          </span>
+          <Sep />
+        </>
+      )}
 
       {/* O aceite do cliente vem primeiro: é a informação que decide se a
           produção pode começar, e o card inteiro gira em torno dela. */}
