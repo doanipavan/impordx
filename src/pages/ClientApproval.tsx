@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { Check, PencilLine, ShieldCheck, Clock, Download, AlertCircle, ZoomIn, FileText } from 'lucide-react'
+import {
+  Check, PencilLine, ShieldCheck, Clock, Download, AlertCircle, ZoomIn, FileText,
+  ChevronDown, ChevronRight,
+} from 'lucide-react'
 import { cn } from '../lib/utils'
 import {
   TERMS_TITLE, TERMS_INTRO, TERMS_SECTIONS, TERMS_CONFIRMATION, TERMS_SIGNATORY,
@@ -224,13 +227,11 @@ export function ClientApproval({ piece, token, initial }: {
           </section>
         )}
 
-        {/* O termo, por extenso e rolável. Escondido atrás de um link, vira
-            aquilo que ninguém abriu e mesmo assim assinou. */}
-        {stage !== 'done' && <TermsBox fields={piece.terms} />}
-
         {stage !== 'done' && (
           <section className="bg-card border-2 border-primary/30 rounded-lg p-4 space-y-3">
-            <h2 className="text-sm font-semibold">Sua resposta</h2>
+            <h2 className="text-base font-bold uppercase tracking-wide leading-tight">
+              Aprove ou corrija sua arte aqui.
+            </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
@@ -279,10 +280,13 @@ export function ClientApproval({ piece, token, initial }: {
                   <span className="text-xs leading-snug">{TERMS_CHECKBOX_LABEL}</span>
                 </label>
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
+                {/* Aprovar pesa mais do que corrigir, e a tela diz isso: um pouco
+                    mais largo e mais alto, não o dobro — pedir ajuste continua
+                    sendo uma resposta legítima, não um arrependimento. */}
+                <div className="flex gap-2 pt-0.5">
                   <button type="button" disabled={!canApprove || signApproval.isPending}
                     onClick={() => sign('approved')}
-                    className={cn('h-11 px-5 rounded-md font-semibold text-sm flex items-center justify-center gap-2 flex-1',
+                    className={cn('h-12 px-4 rounded-md font-bold text-sm flex items-center justify-center gap-2 flex-[3] min-w-0',
                       canApprove && !signApproval.isPending ? 'bg-green-600 text-white hover:bg-green-700'
                         : 'bg-muted text-muted-foreground cursor-not-allowed')}>
                     {signApproval.isPending
@@ -291,9 +295,9 @@ export function ClientApproval({ piece, token, initial }: {
                     Aprovo a arte
                   </button>
                   <button type="button" onClick={() => setStage('asking')}
-                    className="h-11 px-5 rounded-md font-semibold text-sm flex items-center justify-center gap-2
-                               border border-input bg-background hover:bg-accent">
-                    <PencilLine className="h-4 w-4" /> Peço um ajuste
+                    className="h-12 px-3 rounded-md font-semibold text-[13px] flex items-center justify-center gap-1.5
+                               flex-[2] min-w-0 border border-input bg-background hover:bg-accent">
+                    <PencilLine className="h-4 w-4 shrink-0" /> Peço ajuste
                   </button>
                 </div>
               </>
@@ -336,6 +340,12 @@ export function ClientApproval({ piece, token, initial }: {
           </section>
         )}
 
+        {/* O termo por último, dobrado: quem vai aprovar não rola seis seções
+            para achar o botão, e quem quer ler abre. Fica na página — e no
+            retrato que a assinatura guarda —, não atrás de um link que ninguém
+            abre e mesmo assim assina. */}
+        {stage !== 'done' && <TermsBox fields={piece.terms} />}
+
         <footer className="text-[11px] text-muted-foreground flex items-center gap-1.5 pb-8">
           <Clock className="h-3.5 w-3.5" />
           Este link é exclusivo desta arte e expira em {piece.expiresOn}.
@@ -352,12 +362,19 @@ export function ClientApproval({ piece, token, initial }: {
 }
 
 function TermsBox({ fields }: { fields: TermsFields }) {
+  const [open, setOpen] = useState(false)
   return (
     <section className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-accent/50 transition-colors">
+        {open ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
         <h2 className="text-sm font-semibold leading-tight">{TERMS_TITLE}</h2>
-      </div>
+      </button>
+
+      {open && (<>
+      <div className="border-t border-border" />
 
       {/* Os campos que o papel deixava em branco, já preenchidos. */}
       <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 px-4 py-3 bg-muted/40 border-b border-border">
@@ -393,6 +410,13 @@ function TermsBox({ fields }: { fields: TermsFields }) {
       <p className="text-[11px] text-muted-foreground px-4 py-2 border-t border-border bg-muted/20">
         Role para ler o termo completo. Ele vai junto no comprovante em PDF.
       </p>
+      </>)}
+
+      {!open && (
+        <p className="text-[11px] text-muted-foreground px-4 pb-3 -mt-1">
+          Toque para ler. O termo vai junto no comprovante em PDF.
+        </p>
+      )}
     </section>
   )
 }

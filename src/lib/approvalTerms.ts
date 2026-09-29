@@ -121,7 +121,7 @@ export const TERMS_SIGNATORY = 'Redantex Expositores e Embalagens'
 
 /** Frase curta ao lado da caixinha, para quem não vai ler as seis seções. */
 export const TERMS_CHECKBOX_LABEL =
-  'Li e aceito o Termo de Aprovação de Produto Personalizado acima.'
+  'Li e aceito o Termo de Aprovação de Produto Personalizado, no fim desta página.'
 
 /** O que preenche os campos que o papel deixa em branco. */
 export interface TermsFields {
