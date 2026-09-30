@@ -1,4 +1,5 @@
 import type { Config, Context } from '@netlify/edge-functions'
+import { displayClient } from '../lib/approvalView.mjs'
 
 /**
  * O que o WhatsApp mostra quando o link de aprovação é colado numa conversa.
@@ -19,6 +20,7 @@ const LOOKUP_TIMEOUT_MS = 2500
 export interface View {
   state?: string
   client?: string
+  title?: string
   reference?: string
   signature?: { decision?: string } | null
 }
@@ -28,8 +30,7 @@ const esc = (s: string) => s
 
 /** O título e o texto da prévia, por situação do link. */
 export function copyFor(view: View): { title: string; description: string } | null {
-  const client = (view.client ?? '').trim()
-  const who = client || 'Redantex'
+  const who = displayClient(view) || 'Redantex'
 
   switch (view.state) {
     case 'open':

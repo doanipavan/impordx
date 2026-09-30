@@ -106,7 +106,21 @@ check('link cancelado não expõe o cliente',
   copyFor({ state: 'revoked' })!.title === 'Link cancelado · Redantex')
 check('token inventado não ganha prévia sob medida', copyFor({ state: 'unknown' }) === null)
 check('resposta sem estado não ganha prévia sob medida', copyFor({}) === null)
-check('cliente em branco não deixa buraco no título',
+// Dois cards de sessenta e três não têm `client_name`, e nos dois o nome do
+// cliente está no título. Sem esta regra a prévia chegava sem nome — que é
+// exatamente o que ela existe para evitar.
+check('sem client_name, vale o título da peça',
+  copyFor({ state: 'open', title: 'ANA CAROLINE JOIAS' })!.title
+    === 'ANA CAROLINE JOIAS · Aprovação de arte')
+check('client_name vence o título quando os dois existem',
+  copyFor({ state: 'open', client: 'BLANCHE', title: 'BLANCHE v1 - BASED ON PARMA' })!.title
+    === 'BLANCHE · Aprovação de arte')
+check('client_name em branco não ganha do título',
+  copyFor({ state: 'open', client: '   ', title: 'TREOR' })!.title === 'TREOR · Aprovação de arte')
+check('as duas funções aplicam a mesma regra',
+  readFileSync('netlify/functions/approval-card.mts', 'utf8').includes('displayClient(view)')
+    && readFileSync('netlify/edge-functions/approval-preview.ts', 'utf8').includes('displayClient(view)'))
+check('sem nome nenhum, não deixa buraco no título',
   copyFor({ state: 'open', client: '  ' })!.title === 'Redantex · Aprovação de arte')
 
 // ------------------------------------------------------------- a substituição

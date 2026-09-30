@@ -1,6 +1,7 @@
 import type { Config } from '@netlify/functions'
 import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { cardSvg, renderCard } from '../lib/approvalCard.mjs'
+import { displayClient } from '../lib/approvalView.mjs'
 
 /**
  * O cartão 1200x630 que aparece na prévia do link de aprovação.
@@ -60,6 +61,7 @@ async function load(origin: string) {
 interface View {
   state?: string
   client?: string
+  title?: string
   reference?: string
   signature?: { decision?: string } | null
 }
@@ -95,7 +97,7 @@ export default async (request: Request) => {
     if (!token) return fallback
 
     const view = await lookup(token)
-    const client = view?.client?.trim()
+    const client = view ? displayClient(view) : ''
     if (!client || (view!.state !== 'open' && view!.state !== 'signed')) return fallback
 
     const { fonts, logoDataUrl } = await load(origin)
