@@ -31,6 +31,77 @@ export interface ReceiptInput {
 const esc = (s: string | null | undefined) =>
   String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 
+/** Uma assinatura como ela sai do banco, com os anexos daquele link. */
+export interface StoredSignature {
+  decision: string
+  signer_name: string
+  signer_email: string
+  signer_document?: string | null
+  note?: string | null
+  signed_at: string
+  accepted_terms: boolean
+  verify_code?: string | null
+  snapshot: {
+    reference?: string; title?: string; client?: string
+    terms?: TermsFields
+  } | null
+}
+
+export interface StoredFile { id: string; filename: string; file_url: string }
+
+/** O mesmo carimbo de data e hora que o cliente viu no comprovante dele. */
+export function receiptDateTime(iso: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(iso)) + ' (horário de Brasília)'
+}
+
+/**
+ * Monta o comprovante a partir do que está gravado.
+ *
+ * Tudo que descreve a peça vem do retrato (`snapshot`), não do card de hoje:
+ * é sobre o retrato que o hash foi calculado, e é ele que vale como prova. Se
+ * o título ou o nome do cliente mudarem amanhã, este documento continua
+ * dizendo o que estava na tela no dia em que a pessoa assinou.
+ *
+ * A arte vem dos anexos daquele link, na ordem em que foram enviados — que é
+ * a ordem em que o cliente os viu. O retrato guarda só os nomes dos arquivos,
+ * então a imagem precisa vir do acervo.
+ *
+ * `fileUrl` entra de fora porque o endereço público depende de uma variável
+ * que só existe dentro do navegador; assim esta função continua conferível
+ * fora dele.
+ */
+export function receiptFromSignature(
+  sig: StoredSignature, attachmentIds: string[], files: StoredFile[],
+  fileUrl: (path: string) => string,
+): ReceiptInput {
+  const snapshot = sig.snapshot ?? {}
+  return {
+    piece: {
+      reference: snapshot.reference ?? '—',
+      title: snapshot.title ?? '—',
+      client: snapshot.client ?? '—',
+    },
+    terms: snapshot.terms ?? { order: snapshot.reference ?? '—', artVersion: '—', date: '—' },
+    art: attachmentIds
+      .map(id => files.find(f => f.id === id))
+      .filter((f): f is StoredFile => !!f)
+      .map(f => ({ url: fileUrl(f.file_url), caption: f.filename })),
+    signature: {
+      decision: sig.decision === 'changes' ? 'changes' : 'approved',
+      name: sig.signer_name,
+      email: sig.signer_email,
+      document: sig.signer_document ?? undefined,
+      verifyCode: sig.verify_code ?? undefined,
+      at: receiptDateTime(sig.signed_at),
+      note: sig.note ?? undefined,
+      acceptedTerms: sig.accepted_terms,
+    },
+  }
+}
+
 export function approvalReceiptHtml(r: ReceiptInput): string {
   const approved = r.signature.decision === 'approved'
 

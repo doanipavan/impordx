@@ -195,4 +195,15 @@ together came to under 2 credits in a month.
   `splitMaterialCodes` / `mergeMaterialCodes` in `src/lib/utils.ts` are the
   only sanctioned way in and out. Edit Card had inputs for them that silently
   dropped what you typed until `2026-08-24`.
+- **Deleting a card deletes the client's signature with it.**
+  `approval_requests.card_id` and `approval_signatures.request_id` are both
+  `ON DELETE CASCADE`, so removing a card silently destroys the approval that
+  card's client signed — the name, the CPF, the IP, the timestamp and the hash
+  of what was on screen. It has already happened once: card `SMP-2026-10103`
+  was deleted on 30 Sep 2026 and took Ana Caroline Verardi's approval of the
+  same afternoon with it, with no warning and nothing left in `activity_logs`.
+  The nightly backup (iCloud, `BACKUP HUB`, 20:00) does include
+  `approval_signatures`, so anything signed before the last run survives; that
+  one did not. Doani was shown the options and chose to leave the rule as it
+  is. Archiving a card, rather than deleting it, keeps the proof.
 - Orphaned images sit in storage from item uploads that failed before `e93dc72`.

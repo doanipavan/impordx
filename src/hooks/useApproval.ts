@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { receiptFromSignature, StoredSignature, StoredFile } from '../lib/approvalReceipt'
 
 /**
  * O link de aprovação do cliente, dos dois lados.
@@ -163,6 +164,7 @@ export interface ClientResponse {
   note: string | null
   signed_at: string
   accepted_terms: boolean
+  verify_code: string | null
 }
 
 /**
@@ -178,13 +180,60 @@ export function useClientResponses(cardId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('approval_signatures')
-        .select('id, decision, signer_name, signer_email, note, signed_at, accepted_terms, request:approval_requests!inner(card_id)')
+        .select('id, decision, signer_name, signer_email, note, signed_at, accepted_terms, verify_code, request:approval_requests!inner(card_id)')
         .eq('request.card_id', cardId)
         .order('signed_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as unknown as ClientResponse[]
     },
     enabled: !!cardId,
+  })
+}
+
+/**
+ * Remonta o comprovante que o cliente recebeu, a partir do que ficou gravado.
+ *
+ * O PDF saía uma vez só, na tela dele, no instante da assinatura — a Redantex
+ * não ficava com cópia e não tinha como pedir de novo. Quando alguém
+ * perguntasse "prove que ele aprovou", a resposta estava no banco e não saía
+ * de lá.
+ *
+ * O documento é remontado do retrato (`snapshot`), não dos dados de hoje: é o
+ * retrato que o hash fecha, e é ele que vale como prova. Se o título do card
+ * mudar amanhã, o comprovante continua dizendo o que estava na tela naquele
+ * dia. A arte vem dos anexos que foram enviados naquele link, em ordem.
+ *
+ * Só a Redantex lê estas tabelas (`current_user_is_redantex()`), então o
+ * fornecedor não alcança nada disto.
+ */
+interface SignatureRow extends StoredSignature {
+  request?: { attachment_ids: string[] }
+}
+
+export function useApprovalReceipt(signatureId: string | undefined) {
+  return useQuery({
+    queryKey: ['approval-receipt', signatureId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('approval_signatures')
+        .select('decision, signer_name, signer_email, signer_document, note, signed_at,'
+          + ' accepted_terms, verify_code, snapshot, request:approval_requests!inner(attachment_ids)')
+        .eq('id', signatureId!)
+        .single()
+      if (error) throw error
+
+      // O tipo gerado não entende a tabela embutida e desiste da linha inteira;
+      // o mesmo desvio que `useClientResponses` já fazia.
+      const sig = data as unknown as SignatureRow
+      const ids = sig.request?.attachment_ids ?? []
+      const { data: files } = ids.length
+        ? await supabase.from('attachments').select('id, filename, file_url').in('id', ids)
+        : { data: [] }
+
+      return receiptFromSignature(sig, ids, (files ?? []) as StoredFile[], publicFileUrl)
+    },
+    enabled: !!signatureId,
+    staleTime: Infinity,
   })
 }
 
