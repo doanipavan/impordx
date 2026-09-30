@@ -11,18 +11,27 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <meta name="theme-color" content="#8b1a1a" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Impo RDX</title>
-
     <!-- What WhatsApp, WeChat and Slack show when the link is pasted. Without
          these they fall back to the bare <title>, which is how the old
-         "deqi-hub" name kept turning up in chats long after it was gone. -->
+         "deqi-hub" name kept turning up in chats long after it was gone.
+
+         The markers are not decoration. A client approval link is served from
+         this same file, and `netlify/edge-functions/approval-preview` swaps
+         everything between them for that client's own name before the HTML
+         leaves the edge. Move a marker and every approval link silently goes
+         back to showing the internal name of the system. -->
+    <!-- og:start -->
+    <title>Impo RDX</title>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Impo RDX" />
     <meta property="og:title" content="Impo RDX" />
     <meta property="og:description" content="Redantex - Impo RDX: quotes, samples and orders in one place." />
     <meta property="og:url" content="https://impordx.netlify.app/" />
-    <meta property="og:image" content="https://impordx.netlify.app/icons/icon-512.png" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://impordx.netlify.app/og/card-hub.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- og:end -->
   </head>
   <body>
     <div id="root"></div>

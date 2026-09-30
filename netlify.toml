@@ -6,6 +6,15 @@
   # browser ever downloads. Exit 0 = skip.
   ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src public index.html package.json package-lock.json vite.config.ts vite.config.js tailwind.config.js postcss.config.js netlify"
 
+# O cartão da prévia, antes do catch-all abaixo. A função já declara este
+# mesmo caminho em `config.path`; a regra existe porque a ordem entre rota de
+# função e regra de redirecionamento é o tipo de detalhe que só aparece em
+# produção, e aqui a ordem é explícita.
+[[redirects]]
+  from = "/preview/approval.png"
+  to = "/.netlify/functions/approval-card"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

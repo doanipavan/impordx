@@ -111,6 +111,25 @@ withheld, on the board and inside the card.
 and `notify_on_status_change`. Both swallow their own failures on purpose: a
 notification must never be the reason a comment or a move fails to save.
 
+**The link preview is written at the edge, and it fails quietly.** One
+`index.html` answers every address and no crawler runs JavaScript, so a client
+approval link used to unfurl in WhatsApp as the internal English name over a
+stretched app icon. `netlify/edge-functions/approval-preview.ts` swaps the tags
+between the `<!-- og:start -->` / `<!-- og:end -->` markers for that client's
+name, and `netlify/functions/approval-card.mts` draws the 1200×630 card from
+the same token. Three things break it without raising anything: **moving or
+minifying away a marker** (every link reverts to the internal name), **a
+`font-family` that does not match the name table inside the .ttf** — resvg
+falls back to whatever else is loaded and renders a perfectly fine card in the
+wrong typeface — and **shipping woff2**, whose decoder panics on some files
+(Cormorant's did). `public/og/` therefore holds TTFs with normalised name
+tables, and the function fetches them, the logo and the wasm from the site's
+own origin rather than trusting where a bundler puts a file at runtime. Both
+pieces fail open: any error serves `/og/card.png` or the page untouched.
+`node scripts/check-og-preview.ts` covers all of it, including the silent
+font fallback; `node scripts/build-og-card.mjs` regenerates the two fixed
+cards, which are committed.
+
 ## Running SQL
 
 ```
