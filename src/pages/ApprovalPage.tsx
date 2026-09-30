@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom'
 import { Loader2, LinkIcon, Clock, Ban } from 'lucide-react'
 import { useApprovalView, publicFileUrl } from '../hooks/useApproval'
 import { ClientApproval, ApprovalPiece, SignedReceipt } from './ClientApproval'
+import { usePortuguesePage } from '../hooks/usePortuguesePage'
 
 /**
  * A porta do link do cliente: carrega pelo token e decide o que mostrar.
@@ -11,6 +12,7 @@ import { ClientApproval, ApprovalPiece, SignedReceipt } from './ClientApproval'
  * arte e a identificação da peça.
  */
 export function ApprovalPage() {
+  usePortuguesePage()
   const { token } = useParams<{ token: string }>()
   const { data, isLoading, error } = useApprovalView(token)
 

@@ -13,7 +13,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { cardSvg, renderCard, CARD_SIZE } from '../netlify/lib/approvalCard.mjs'
-import { copyFor, previewTags, patchHtml } from '../netlify/edge-functions/approval-preview.ts'
+import { copyFor, previewTags, patchHtml, patchLanguage } from '../netlify/edge-functions/approval-preview.ts'
 import type { View } from '../netlify/edge-functions/approval-preview.ts'
 
 let passed = 0
@@ -148,6 +148,30 @@ if (existsSync('dist/index.html')) {
   const built = readFileSync('dist/index.html', 'utf8')
   check('os marcadores sobrevivem ao build',
     built.includes('<!-- og:start -->') && built.includes('<!-- og:end -->'))
+}
+
+// --------------------------------------------------------------- o idioma
+
+// O Chrome leu `lang="en"` com português na tela, chutou espanhol e traduziu:
+// "enviou" virou "inveja" e "aceite" virou "óleo". Numa página de assinatura,
+// o texto exibido tem de ser o texto assinado.
+const pt = patchLanguage(index)
+check('a página do cliente se declara portuguesa', pt.includes('<html lang="pt-BR"'))
+check('o inglês do hub some dessa página', !pt.includes('<html lang="en">'))
+check('o navegador é avisado para não traduzir',
+  pt.includes('translate="no"') && pt.includes('name="google" content="notranslate"'))
+check('o resto da página sobrevive à troca de idioma',
+  pt.includes('<div id="root">') && pt.includes('/src/main.tsx') && pt.includes('<!-- og:start -->'))
+check('idioma e prévia convivem',
+  patchHtml(pt, tags)!.includes('<html lang="pt-BR"'))
+check('o hub continua em inglês', index.includes('<html lang="en">'))
+
+const hook = readFileSync('src/hooks/usePortuguesePage.ts', 'utf8')
+check('a segunda linha de defesa existe no cliente',
+  hook.includes("root.lang = 'pt-BR'") && hook.includes("setAttribute('translate', 'no')"))
+for (const page of ['src/pages/ApprovalPage.tsx', 'src/pages/VerifyPage.tsx']) {
+  check(`${page.split('/').pop()} usa o idioma português`,
+    readFileSync(page, 'utf8').includes('usePortuguesePage()'))
 }
 
 check('o index.html aponta para o cartão do hub', index.includes('/og/card-hub.png'))

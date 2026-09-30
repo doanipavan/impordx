@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ShieldCheck, ShieldX, Search, Loader2 } from 'lucide-react'
 import { useVerifySignature } from '../hooks/useApproval'
+import { usePortuguesePage } from '../hooks/usePortuguesePage'
 import { cn } from '../lib/utils'
 
 /**
@@ -15,6 +16,7 @@ import { cn } from '../lib/utils'
  * preço, nem e-mail inteiro.
  */
 export function VerifyPage() {
+  usePortuguesePage()
   const { code: fromUrl } = useParams<{ code?: string }>()
   const [typed, setTyped] = useState(fromUrl ?? '')
   const [asked, setAsked] = useState(fromUrl ?? '')

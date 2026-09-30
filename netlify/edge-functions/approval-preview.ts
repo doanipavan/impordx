@@ -113,40 +113,65 @@ export function patchHtml(html: string, tags: string): string | null {
   return html.replace(marked, `<!-- og:start -->\n    ${tags}\n    <!-- og:end -->`)
 }
 
+/**
+ * Diz ao navegador que estas páginas são portuguesas e não devem ser traduzidas.
+ *
+ * O `index.html` declara `lang="en"`, porque o hub é em inglês. Estas duas
+ * páginas não são: o Chrome viu inglês declarado, leu português na tela,
+ * chutou espanhol e traduziu espanhol->português por cima. "enviou" virou
+ * "inveja" e "aceite" virou "óleo" — aceite é azeite em espanhol. Apareceu no
+ * computador de uma cliente.
+ *
+ * Numa página qualquer seria feio. Aqui é a página onde alguém assina um termo:
+ * o retrato que vira hash guarda o texto em português, e um navegador que
+ * reescreve as palavras faz a pessoa assinar o que não leu. Por isso vai
+ * `translate="no"` junto — o texto assinado tem de ser o texto exibido.
+ */
+export function patchLanguage(html: string): string {
+  return html
+    .replace(/<html[^>]*>/, '<html lang="pt-BR" translate="no">')
+    .replace(/<head>/, '<head>\n    <meta name="google" content="notranslate" />')
+}
+
 export default async (request: Request, context: Context) => {
   const response = await context.next()
 
+  if (!(response.headers.get('content-type') ?? '').includes('text/html')) return response
+
+  // Ler o corpo gasta a resposta original: a partir daqui devolver `response`
+  // seria devolver uma resposta sem corpo. Tudo que sai é resposta nova, e o
+  // HTML original fica guardado para o caso de qualquer passo falhar.
+  let original: string
   try {
-    if (!(response.headers.get('content-type') ?? '').includes('text/html')) return response
+    original = await response.text()
+  } catch {
+    return response
+  }
 
-    const token = new URL(request.url).pathname.split('/').filter(Boolean)[1]
-    if (!token) return response
+  // O tamanho muda: manter o content-length antigo entrega uma página cortada.
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  headers.delete('content-encoding')
 
-    const view = await lookup(token)
-    if (!view) return response
+  try {
+    const segments = new URL(request.url).pathname.split('/').filter(Boolean)
+    let html = patchLanguage(original)
 
-    const copy = copyFor(view)
-    if (!copy) return response
+    // A prévia só existe para um link de aprovação que o banco reconheça. O
+    // idioma vale para as duas páginas, inclusive a de conferência.
+    if (segments[0] === 'aprovar' && segments[1]) {
+      const view = await lookup(segments[1])
+      const copy = view ? copyFor(view) : null
+      if (copy) html = patchHtml(html, previewTags(copy, request.url, segments[1])) ?? html
+    }
 
-    // Ler o corpo gasta a resposta original, então o que sai daqui é sempre
-    // uma resposta nova — com as etiquetas trocadas, ou com o HTML como veio
-    // caso o marcador não esteja mais lá.
-    const html = await response.text()
-    const patched = patchHtml(html, previewTags(copy, request.url, token))
-
-    // O HTML mudou de tamanho: manter o content-length antigo entrega uma
-    // página cortada. O runtime recalcula quando o cabeçalho não vem.
-    const headers = new Headers(response.headers)
-    headers.delete('content-length')
-    headers.delete('content-encoding')
-
-    return new Response(patched ?? html, { status: response.status, headers })
+    return new Response(html, { status: response.status, headers })
   } catch (error) {
     // Falhou a consulta, estourou o tempo, veio HTML diferente do esperado:
     // o cliente recebe a página como sempre recebeu, só sem a prévia bonita.
     console.error('approval-preview', error)
-    return response
+    return new Response(original, { status: response.status, headers })
   }
 }
 
-export const config: Config = { path: '/aprovar/*' }
+export const config: Config = { path: ['/aprovar/*', '/verificar', '/verificar/*'] }
