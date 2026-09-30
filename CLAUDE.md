@@ -130,6 +130,21 @@ pieces fail open: any error serves `/og/card.png` or the page untouched.
 font fallback; `node scripts/build-og-card.mjs` regenerates the two fixed
 cards, which are committed.
 
+**The client's pages are Portuguese inside an English document, and Chrome
+noticed.** `index.html` declares `lang="en"` because the interface is English,
+but `/aprovar/*` and `/verificar*` are written for a Brazilian client. Chrome
+saw English declared, read Portuguese on screen, guessed **Spanish** and
+translated Spanish→Portuguese over it: "enviou" came out "inveja" and "aceite"
+came out "óleo" — *aceite* is cooking oil in Spanish. It reached a client's
+screen. On a page where someone signs a term this is not cosmetic: the
+snapshot that becomes the hash is built from the constants, not the DOM, so
+the record stayed honest, but the person was reading something else. The same
+edge function now sets `lang="pt-BR"`, `translate="no"` and the notranslate
+meta for both paths, and `usePortuguesePage` repeats it from inside the app
+and undoes it on unmount so the hub stays English. Any new page written in
+Portuguese needs both, and neither is visible until a browser with a
+Portuguese locale opens it.
+
 ## Running SQL
 
 ```
