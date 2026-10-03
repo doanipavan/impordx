@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip, Package } from 'lucide-react'
+import { Plus, Trash2, ShoppingCart, Check, X, BookOpen, Download, Paperclip, Package, User } from 'lucide-react'
 import { useCardItems, useAddCardItem, useUpdateCardItem, useDeleteCardItem, CardItem } from '../../hooks/useCardItems'
 import { usePromoteToOrder, usePromoteToSample } from '../../hooks/useCards'
 import { useToast } from '../ui/toast'
@@ -7,6 +7,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { cn, formatFileSize, errorText, COLLECTION_SIZES } from '../../lib/utils'
 import { Card, BoardType } from '../../types'
+import { Destination, DESTINATIONS, DESTINATION_LABEL, DESTINATION_CHIP } from '../../lib/itemDestination'
 import { CatalogPicker } from './CatalogPicker'
 import { ExportRFQ } from './ExportRFQ'
 import { CatalogItem, CATALOG } from '../../lib/catalog'
@@ -77,6 +78,9 @@ const EMPTY_ITEM = {
   unit_price_input: '',
   sale_price_input: '',
   notes: '',
+  // Client marcado de saída: é a esmagadora maioria, e estoque é a exceção
+  // que vale um clique. Nenhum item novo nasce sem destino por esquecimento.
+  destination: 'client' as Destination,
 }
 
 type NewItem = typeof EMPTY_ITEM
@@ -108,6 +112,9 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
   // The sale price is the sell side of the margin. DEQI must never see it —
   // hidden here, though the row itself is still readable through the API.
   const showSale = user?.role !== 'viewer'
+  // Para onde a peça vai é assunto da Redantex: o fornecedor produz igual nos
+  // dois casos, e saber que um pedido é da linha própria não ajuda a fábrica.
+  const showDestination = user?.role !== 'viewer'
 
   const { data: items = [], isLoading } = useCardItems(card.id)
   const addItem = useAddCardItem()
@@ -255,6 +262,16 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
     }
   }
 
+  // Um clique troca o destino. Abrir o item inteiro para mudar um campo de
+  // dois valores é o tipo de atrito que faz ninguém classificar nada.
+  async function setDestination(item: CardItem, destination: Destination) {
+    try {
+      await updateItem.mutateAsync({ id: item.id, cardId: card.id, destination })
+    } catch (err) {
+      toast(errorText(err) ?? 'Could not change where this item goes', 'error')
+    }
+  }
+
   async function handleDelete(id: string) {
     try {
       await deleteItem.mutateAsync({ id, cardId: card.id })
@@ -347,7 +364,8 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
             <thead className="bg-muted/50">
               <tr>
                 {['Internal', 'ERP (DEV)', 'Description', 'Size', 'Qty', 'Unit $',
-                  ...(showSale ? ['Sale R$'] : []), ''].map(h => (
+                  ...(showSale ? ['Sale R$'] : []),
+                  ...(showDestination ? ['For'] : []), ''].map(h => (
                   <th key={h} className="px-2 py-2 text-left text-[10px] font-semibold text-muted-foreground uppercase">{h}</th>
                 ))}
               </tr>
@@ -381,6 +399,12 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                           <Input type="text" inputMode="decimal" className="h-6 text-xs px-1"
                             value={editSale}
                             onChange={e => setEditSale(e.target.value)} />
+                        </td>
+                      )}
+                      {showDestination && (
+                        <td className="px-2 py-1">
+                          <DestinationChip value={item.destination}
+                            onChange={readonly ? undefined : d => setDestination(item, d)} />
                         </td>
                       )}
                       <td className="px-1 py-1">
@@ -420,6 +444,12 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                           {formatBrl(item.sale_price_brl)}
                         </td>
                       )}
+                      {showDestination && (
+                        <td className="px-2 py-1.5">
+                          <DestinationChip value={item.destination}
+                            onChange={readonly ? undefined : d => setDestination(item, d)} />
+                        </td>
+                      )}
                       <td className="px-2 py-1.5">
                         {!readonly && (
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -451,6 +481,7 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
                       {totalSale > 0 ? `R$ ${totalSale.toFixed(2).replace('.', ',')}` : '—'}
                     </td>
                   )}
+                  {showDestination && <td />}
                   <td />
                 </tr>
               )}
@@ -566,6 +597,31 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
               <Input className="h-7 text-xs" value={newItem.notes} onChange={e => setNewItem(v => ({ ...v, notes: e.target.value }))} />
             </div>
           </div>
+
+          {/* Ao lado do preço, não escondido num "avançado": é a pergunta que
+              decide se a peça vira estoque da Redantex ou vai para um cliente,
+              e ela precisa ser respondida antes de o item existir. */}
+          {showDestination && (
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] font-semibold text-foreground">Goes to</label>
+                <div className="flex h-7 rounded-md border border-input bg-background overflow-hidden">
+                  {DESTINATIONS.map(d => (
+                    <button key={d} type="button"
+                      onClick={() => setNewItem(v => ({ ...v, destination: d }))}
+                      className={cn('flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold',
+                        'border-l border-input first:border-l-0 transition-colors',
+                        newItem.destination === d
+                          ? d === 'stock' ? 'bg-indigo-600 text-white' : 'bg-foreground text-background'
+                          : 'text-muted-foreground hover:bg-accent')}>
+                      {d === 'stock' ? <Package className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                      {DESTINATION_LABEL[d]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button size="sm" onClick={handleAdd} loading={addItem.isPending || uploadingFile}>
               {uploadingFile ? 'Uploading...' : 'Add item'}
@@ -605,5 +661,32 @@ export function LineItemsTable({ card, readonly }: LineItemsTableProps) {
       {showCatalog && <CatalogPicker onSelect={handleCatalogSelect} onClose={() => setShowCatalog(false)} />}
       {showExport && <ExportRFQ card={card} items={items} onClose={() => setShowExport(false)} />}
     </div>
+  )
+}
+
+/**
+ * Para onde o produto vai, em uma etiqueta que também é o botão de trocar.
+ *
+ * Sem destino ela aparece tracejada e escrita "Set": um item que ninguém
+ * classificou não é um item de cliente, e preencher a lacuna sozinho seria
+ * inventar a resposta. Cotações e amostras ficam assim até alguém escolher.
+ */
+function DestinationChip({ value, onChange }: {
+  value?: Destination | null
+  onChange?: (d: Destination) => void
+}) {
+  const next: Destination = value === 'client' ? 'stock' : 'client'
+  const Icon = value === 'stock' ? Package : User
+
+  return (
+    <button type="button" disabled={!onChange} onClick={() => onChange?.(next)}
+      title={onChange ? `Click to mark as ${DESTINATION_LABEL[next]}` : undefined}
+      className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded border',
+        'text-[10px] font-semibold whitespace-nowrap',
+        value ? DESTINATION_CHIP[value] : 'border-dashed border-border text-muted-foreground',
+        onChange && 'hover:ring-1 hover:ring-ring cursor-pointer')}>
+      <Icon className="h-2.5 w-2.5" />
+      {value ? DESTINATION_LABEL[value] : 'Set'}
+    </button>
   )
 }

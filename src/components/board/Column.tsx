@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react'
 import { Card, CardStatus, BoardType, statusLabel } from '../../types'
 import { KanbanCard } from './KanbanCard'
 import { cn } from '../../lib/utils'
+import { DestinationSummary } from '../../lib/itemDestination'
 
 const STATUS_STYLES: Partial<Record<CardStatus, string>> = {
   Requested: 'border-t-slate-400',
@@ -28,11 +29,13 @@ interface ColumnProps {
   /** Whose name a supplier-specific column carries. See statusLabel. */
   supplierName?: string | null
   onCardClick: (card: Card) => void
+  /** Destino dos itens por card. Ausente na visão do fornecedor. */
+  destinations?: Map<string, DestinationSummary>
   /** Ausente quando quem olha não pode criar card. */
   onAddCard?: () => void
 }
 
-export function Column({ status, cards, supplierName, onCardClick, onAddCard }: ColumnProps) {
+export function Column({ status, cards, supplierName, onCardClick, onAddCard, destinations }: ColumnProps) {
   const label = statusLabel(status, supplierName)
   const { setNodeRef, isOver } = useDroppable({ id: status })
 
@@ -73,6 +76,7 @@ export function Column({ status, cards, supplierName, onCardClick, onAddCard }: 
               key={card.id}
               card={card}
               onClick={() => onCardClick(card)}
+              destination={destinations?.get(card.id)}
             />
           ))}
 

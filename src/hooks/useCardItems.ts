@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { salePrice } from '../lib/utils'
+import { Destination } from '../lib/itemDestination'
 
 export interface CardItem {
   id: string
@@ -19,6 +20,9 @@ export interface CardItem {
   // simply returns nothing to flatten.
   sale_price_brl?: number
   erp_code?: string        // the item's code in DEV, Redantex's ERP
+  // Para onde este produto vai: o estoque da Redantex ou um cliente. Nulo
+  // quer dizer que ninguém escolheu — ver src/lib/itemDestination.ts.
+  destination?: Destination | null
   file_url?: string
   file_name?: string
   notes?: string

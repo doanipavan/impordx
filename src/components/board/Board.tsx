@@ -13,6 +13,7 @@ import {
 import { BoardType, Card, CardStatus, BOARD_COLUMNS, visibleColumns } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
 import { useCards, useMoveCard } from '../../hooks/useCards'
+import { useBoardDestinations } from '../../hooks/useItemDestinations'
 import { useSupplierFilter, matchesSupplier, useSuppliers } from '../../hooks/useSupplierFilter'
 import { useToast } from '../ui/toast'
 import { errorText } from '../../lib/utils'
@@ -63,6 +64,12 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
   // The supplier never sees Redantex's own intake columns, so a card is
   // simply absent from their board until it reaches a stage that is theirs.
   const columns = visibleColumns(board, user?.role === 'viewer')
+
+  // Só em Orders e só para a Redantex: nas cotações e amostras nenhum item tem
+  // destino ainda, então a consulta não teria o que mostrar.
+  const wantsDestinations = board === 'orders' && user?.role !== 'viewer'
+  const { data: destinations } = useBoardDestinations(
+    wantsDestinations ? cards.map(c => c.id) : [], wantsDestinations)
   // Criar card é da Redantex. A regra sempre foi essa no banco (031), mas o
   // botão era mostrado a todos — e um fornecedor que clica nele recebe uma
   // recusa que não explica nada. Um botão que nunca pode funcionar é pior do
@@ -138,6 +145,7 @@ export function Board({ board, autoOpenCard, onAutoOpenClear }: BoardProps) {
               supplierName={columnSupplierName}
               onCardClick={(c) => setOpenCardId(c.id)}
               onAddCard={canCreate ? () => setCreating(status) : undefined}
+              destinations={destinations}
             />
           ))}
 

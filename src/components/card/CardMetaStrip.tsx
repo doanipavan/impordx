@@ -1,10 +1,13 @@
-import { Eye, CheckCircle2, MessageSquareWarning } from 'lucide-react'
+import { Eye, CheckCircle2, MessageSquareWarning, Package, User } from 'lucide-react'
 import { Card } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { useCardViews } from '../../hooks/useCardViews'
 import { useAttachments } from '../../hooks/useAttachments'
 import { useClientResponses } from '../../hooks/useApproval'
+import { useCardItems } from '../../hooks/useCardItems'
+import { useAuth } from '../../hooks/useAuth'
+import { destinationSummary, DESTINATION_LABEL, DESTINATION_CHIP } from '../../lib/itemDestination'
 import { cn, formatDate, formatDateTime, cardAge, isOverdue, dueDateFor } from '../../lib/utils'
 import { salespersonLabel } from '../../types'
 
@@ -32,9 +35,17 @@ function Sep() {
 }
 
 export function CardMetaStrip({ card }: { card: Card }) {
+  const { user } = useAuth()
   const { data: views = [] } = useCardViews(card.id)
+  const { data: items = [] } = useCardItems(card.id)
   const { data: attachments = [] } = useAttachments(card.id)
   const { data: responses = [] } = useClientResponses(card.id)
+
+  // Para onde a peça vai é assunto da Redantex: a fábrica produz igual nos
+  // dois casos. O resumo mora em itemDestination para a faixa, a tabela e o
+  // quadro contarem a mesma história.
+  const dest = destinationSummary(items)
+  const showDestination = user?.role !== 'viewer' && (dest.stock > 0 || dest.client > 0)
 
   const age = cardAge(card.created_at, card.shipped_at)
   const overdue = isOverdue(dueDateFor(card))
@@ -86,6 +97,37 @@ export function CardMetaStrip({ card }: { card: Card }) {
               <span className="font-normal">· {card.client_approved_by}</span>
             )}
           </span>
+          <Sep />
+        </>
+      )}
+
+      {showDestination && (
+        <>
+          <Field label="Goes to"
+            title={dest.mixed
+              ? `${dest.client} for clients, ${dest.stock} for stock`
+              : `Every item goes to ${dest.only === 'stock' ? 'Redantex stock' : 'the client'}`}>
+            {dest.only ? (
+              <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold',
+                'px-1.5 py-0.5 rounded border', DESTINATION_CHIP[dest.only])}>
+                {dest.only === 'stock' ? <Package className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                {DESTINATION_LABEL[dest.only]}
+              </span>
+            ) : (
+              /* Misto é a única informação que não dá para adivinhar olhando
+                 o pedido, então é a única que vem com números. */
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold
+                               px-2 py-0.5 rounded border border-dashed border-border bg-card">
+                <span className="inline-flex items-center gap-1 text-slate-600">
+                  <User className="h-3 w-3" />{dest.client} client
+                </span>
+                <span className="text-muted-foreground/50">·</span>
+                <span className="inline-flex items-center gap-1 text-indigo-700">
+                  <Package className="h-3 w-3" />{dest.stock} stock
+                </span>
+              </span>
+            )}
+          </Field>
           <Sep />
         </>
       )}

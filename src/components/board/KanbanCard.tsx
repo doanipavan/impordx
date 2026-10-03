@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock, CalendarClock } from 'lucide-react'
+import { MessageSquare, Paperclip, AlertCircle, Calendar, Clock, CalendarClock, Package, User } from 'lucide-react'
+import { DestinationSummary, DESTINATION_LABEL, DESTINATION_CHIP } from '../../lib/itemDestination'
 import { Card, PRIORITY_COLORS, STATUS_COLORS, salespersonLabel, statusLabel, isPlacedOnward } from '../../types'
 import { Avatar } from '../ui/avatar'
 import { Badge } from '../ui/badge'
@@ -11,6 +12,8 @@ interface KanbanCardProps {
   card: Card
   onClick: () => void
   isDragging?: boolean
+  /** Resumo dos destinos dos itens. Ausente quando quem olha é o fornecedor. */
+  destination?: DestinationSummary
 }
 
 const PRIORITY_FLAGS: Record<string, string> = {
@@ -20,7 +23,7 @@ const PRIORITY_FLAGS: Record<string, string> = {
   low: '',
 }
 
-export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
+export function KanbanCard({ card, onClick, isDragging, destination }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortDragging } = useSortable({
     id: card.id,
   })
@@ -130,6 +133,34 @@ export function KanbanCard({ card, onClick, isDragging }: KanbanCardProps) {
           )}
           {card.client_name && (
             <span className="text-xs text-muted-foreground truncate">{card.client_name}</span>
+          )}
+        </div>
+      )}
+
+      {/* Só aparece quando há estoque envolvido. Um pedido inteiro de cliente
+          é o normal, e carimbar o normal em trinta e quatro cards vira ruído:
+          a etiqueta existe para encontrar a exceção, não para descrever a regra. */}
+      {destination?.hasStock && (
+        <div className="flex items-center gap-1.5 mb-2">
+          {destination.only === 'stock' ? (
+            <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold',
+              'px-1.5 py-0 rounded border', DESTINATION_CHIP.stock)}>
+              <Package className="h-2.5 w-2.5" />
+              {DESTINATION_LABEL.stock}
+            </span>
+          ) : (
+            <>
+              <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold',
+                'px-1.5 py-0 rounded border', DESTINATION_CHIP.client)}>
+                <User className="h-2.5 w-2.5" />
+                {destination.client} client
+              </span>
+              <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold',
+                'px-1.5 py-0 rounded border', DESTINATION_CHIP.stock)}>
+                <Package className="h-2.5 w-2.5" />
+                {destination.stock} stock
+              </span>
+            </>
           )}
         </div>
       )}
