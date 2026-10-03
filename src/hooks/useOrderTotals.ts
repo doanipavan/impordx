@@ -21,7 +21,7 @@ export function useOrderItemRows(cardIds: string[], enabled: boolean) {
       if (cardIds.length === 0) return [] as OrderItemRow[]
       const { data, error } = await supabase
         .from('card_items')
-        .select('card_id, quantity, unit_price_usd, pricing:card_item_pricing(sale_price_brl)')
+        .select('card_id, quantity, unit_price_usd, destination, pricing:card_item_pricing(sale_price_brl)')
         .in('card_id', cardIds)
       if (error) throw error
       return (data ?? []) as unknown as OrderItemRow[]

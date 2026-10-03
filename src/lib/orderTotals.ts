@@ -1,5 +1,6 @@
 import { salePrice, orderSchedule } from './utils'
 import { BoardType, Card, CardStatus, isPlacedOnward } from '../types'
+import { Destination } from './itemDestination'
 
 // Aqui não entra nada que fale com o Supabase: são números de dinheiro, e
 // eles precisam poder ser conferidos por um teste que roda no terminal.
@@ -23,6 +24,16 @@ export interface OrderTotal {
   items: number
   itemsWithPurchase: number
   itemsWithSale: number
+  /**
+   * A parte que vai para a linha própria da Redantex, não para um cliente.
+   *
+   * Só a parte de estoque é somada à parte. O resto não é "cliente": itens que
+   * ninguém classificou ainda existem (cotações e amostras nasceram assim na
+   * migração 050), e chamá-los de cliente inventaria uma resposta. Quem lê a
+   * tela vê o total e vê quanto dele é estoque — a diferença fica diferença.
+   */
+  piecesStock: number
+  purchaseUsdStock: number
 }
 
 export interface BoardTotals {
@@ -40,6 +51,7 @@ function empty(): OrderTotal {
   return {
     orders: 0, pieces: 0, purchaseUsd: 0, saleBrl: 0,
     items: 0, itemsWithPurchase: 0, itemsWithSale: 0,
+    piecesStock: 0, purchaseUsdStock: 0,
   }
 }
 
@@ -48,6 +60,8 @@ export interface OrderItemRow {
   quantity: number | null
   unit_price_usd: number | null
   pricing: unknown
+  /** Estoque da Redantex ou cliente. Nulo enquanto ninguém escolheu. */
+  destination?: Destination | null
 }
 
 export type Bucket = 'won' | 'open' | 'lost'
@@ -104,6 +118,10 @@ export function boardTotals(
     b.items += 1
     b.pieces += qty
     if (unit != null && unit > 0) { b.itemsWithPurchase += 1; b.purchaseUsd += qty * unit }
+    if (row.destination === 'stock') {
+      b.piecesStock += qty
+      if (unit != null && unit > 0) b.purchaseUsdStock += qty * unit
+    }
     if (sale != null && sale > 0) { b.itemsWithSale += 1; b.saleBrl += qty * sale }
   }
 
@@ -115,6 +133,8 @@ export function boardTotals(
     items: a.items + c.items,
     itemsWithPurchase: a.itemsWithPurchase + c.itemsWithPurchase,
     itemsWithSale: a.itemsWithSale + c.itemsWithSale,
+    piecesStock: a.piecesStock + c.piecesStock,
+    purchaseUsdStock: a.purchaseUsdStock + c.purchaseUsdStock,
   })
 
   return { ...buckets, total: add(buckets.won, buckets.open) }
@@ -211,6 +231,10 @@ export function arrivalsByMonth(
     t.items += 1
     t.pieces += qty
     if (unit != null && unit > 0) { t.itemsWithPurchase += 1; t.purchaseUsd += qty * unit }
+    if (row.destination === 'stock') {
+      t.piecesStock += qty
+      if (unit != null && unit > 0) t.purchaseUsdStock += qty * unit
+    }
     if (sale != null && sale > 0) { t.itemsWithSale += 1; t.saleBrl += qty * sale }
   }
 
@@ -222,6 +246,8 @@ export function arrivalsByMonth(
     items: a.items + c.items,
     itemsWithPurchase: a.itemsWithPurchase + c.itemsWithPurchase,
     itemsWithSale: a.itemsWithSale + c.itemsWithSale,
+    piecesStock: a.piecesStock + c.piecesStock,
+    purchaseUsdStock: a.purchaseUsdStock + c.purchaseUsdStock,
   })
 
   const keys = [...byMonth.keys()].sort()

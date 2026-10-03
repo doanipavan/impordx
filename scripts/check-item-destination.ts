@@ -9,6 +9,8 @@
  * tela afirmar algo que ninguém respondeu.
  */
 import { destinationSummary, DESTINATION_LABEL, DESTINATIONS } from '../src/lib/itemDestination'
+import { boardTotals, arrivalsByMonth, OrderItemRow } from '../src/lib/orderTotals'
+import { Card } from '../src/types'
 
 let passed = 0
 const failures: string[] = []
@@ -71,6 +73,63 @@ check('os rótulos são os dois que o banco aceita',
 check('Client vem primeiro na tela', DESTINATIONS[0] === 'client')
 check('os rótulos são em inglês como o resto da interface',
   DESTINATION_LABEL.client === 'Client' && DESTINATION_LABEL.stock === 'Stock')
+
+// ---------------------------------------------------- a parte de estoque
+
+// A conta que o painel de chegadas mostra: do total que chega, quanto é da
+// linha própria. Só o estoque é somado à parte — o que ninguém classificou
+// não vira cliente por conveniência, e a diferença fica diferença.
+const row = (card_id: string, quantity: number, unit: number,
+  destination: 'stock' | 'client' | null): OrderItemRow =>
+  ({ card_id, quantity, unit_price_usd: unit, pricing: null, destination })
+
+// A data é relativa a hoje de propósito. Uma data fixa sai do horizonte de
+// seis meses do painel sozinha, com o tempo passando, e o teste começa a
+// passar sem medir nada — ou a falhar sem ninguém ter mexido no código.
+// Dia de calendário puro: `calendarDay` recusa um instante com hora.
+const approvedAt = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+
+const order = (id: string): Card => ({
+  id, board: 'orders', status: 'Placed', title: id,
+  // O plano são 120 dias a partir da aprovação da amostra: a chegada cai
+  // cinco meses à frente, dentro da janela que o painel desenha.
+  sample_approved_at: approvedAt,
+  created_at: approvedAt,
+} as unknown as Card)
+
+const cards = [order('a'), order('b')]
+const rows = [
+  row('a', 100, 2, 'client'),
+  row('a', 50, 4, 'stock'),
+  row('b', 200, 1, null),
+]
+
+const bt = boardTotals('orders', cards, rows, 'all')
+check('o total continua somando tudo',
+  bt.total.pieces === 350 && bt.total.purchaseUsd === 600, `${bt.total.pieces}/${bt.total.purchaseUsd}`)
+check('só o estoque entra na parte de estoque',
+  bt.total.piecesStock === 50 && bt.total.purchaseUsdStock === 200,
+  `${bt.total.piecesStock}/${bt.total.purchaseUsdStock}`)
+check('o não classificado não vira estoque', bt.total.piecesStock !== 250)
+check('a parte nunca passa do todo',
+  bt.total.purchaseUsdStock <= bt.total.purchaseUsd && bt.total.piecesStock <= bt.total.pieces)
+check('sem nenhum item de estoque, a parte é zero',
+  boardTotals('orders', cards, [row('a', 10, 5, 'client')], 'all').total.purchaseUsdStock === 0)
+
+// O painel de chegadas tem o seu próprio acumulador, linha por linha igual ao
+// de cima. Dois acumuladores é como um deles fica para trás numa mudança.
+const arr = arrivalsByMonth(cards, rows, 'all', 6)
+check('as chegadas também somam tudo',
+  arr.total.pieces === 350 && arr.total.purchaseUsd === 600,
+  `${arr.total.pieces}/${arr.total.purchaseUsd}`)
+check('as chegadas separam a parte de estoque',
+  arr.total.piecesStock === 50 && arr.total.purchaseUsdStock === 200,
+  `${arr.total.piecesStock}/${arr.total.purchaseUsdStock}`)
+check('os dois acumuladores concordam',
+  arr.total.purchaseUsdStock === bt.total.purchaseUsdStock)
+check('a soma dos meses bate com o total',
+  arr.months.reduce((n, m) => n + m.total.purchaseUsdStock, 0)
+    + (arr.later?.purchaseUsdStock ?? 0) === arr.total.purchaseUsdStock)
 
 // ------------------------------------------------------------------- fim
 

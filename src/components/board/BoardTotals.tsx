@@ -5,6 +5,7 @@ import { useSupplierFilter } from '../../hooks/useSupplierFilter'
 import { useOrderItemRows } from '../../hooks/useOrderTotals'
 import { boardTotals, arrivalsByMonth, OrderTotal } from '../../lib/orderTotals'
 import { BoardType } from '../../types'
+import { Package } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 // Both sides of the trade in one place. The purchase price is what the supplier
@@ -165,6 +166,46 @@ export function ArrivalsPanel({ arrivals }: { arrivals: ReturnType<typeof arriva
               <Figure value={brl(total.saleBrl)} covered={total.itemsWithSale} of={total.items} />
             </td>
           </tr>
+          {/* Só existe quando existe estoque. Uma linha "of which stock"
+              marcando zero em todo mês é uma pergunta que a tela faz e
+              responde sozinha, mês após mês, ocupando espaço. */}
+          {total.purchaseUsdStock > 0 && (
+            <>
+              <tr>
+                <td colSpan={cols.length + 2}
+                  className="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
+                  of which stock
+                </td>
+              </tr>
+              <tr>
+                <td className="px-3 py-1.5 font-semibold text-indigo-700 whitespace-nowrap">
+                  <Package className="h-3 w-3 inline-block mr-1 -mt-0.5" />
+                  Stock
+                  <span className="block text-[9px] font-normal text-muted-foreground/80 leading-tight">
+                    Redantex's own line
+                  </span>
+                </td>
+                {cols.map(c => (
+                  <td key={c.label} className={cn(cell, 'font-semibold',
+                    c.total.purchaseUsdStock > 0 ? 'text-indigo-700' : 'text-muted-foreground/50')}>
+                    {c.total.purchaseUsdStock > 0 ? usd(c.total.purchaseUsdStock) : '—'}
+                    {c.total.purchaseUsdStock > 0 && (
+                      <span className="block text-[9px] font-normal leading-tight text-muted-foreground">
+                        {count(c.total.piecesStock)} pieces
+                      </span>
+                    )}
+                  </td>
+                ))}
+                <td className={cn(cell, 'font-semibold text-indigo-700 border-l border-border')}>
+                  {usd(total.purchaseUsdStock)}
+                  <span className="block text-[9px] font-normal leading-tight text-muted-foreground">
+                    {count(total.piecesStock)} pieces
+                  </span>
+                </td>
+              </tr>
+            </>
+          )}
+
           {withoutClock > 0 && (
             <tr className="border-t border-border/60">
               <td colSpan={cols.length + 2} className="px-3 py-1.5 text-[10px] text-amber-600">
