@@ -72,6 +72,11 @@ export function TimelineReport() {
   const collections = useMemo(
     () => Array.from(new Set(rows.map(r => r.card.collection).filter((c): c is string => !!c))).sort(),
     [rows])
+  const purchaseOrders = useMemo(
+    () => Array.from(new Set(rows
+      .map(r => (r.card as unknown as { purchase_order?: string }).purchase_order)
+      .filter((p): p is string => !!p))).sort(),
+    [rows])
   const salespeople = useMemo(
     () => Array.from(new Set(rows.map(r => salespersonLabel(r.card)).filter((c): c is string => !!c))).sort(),
     [rows])
@@ -113,7 +118,7 @@ export function TimelineReport() {
       const ids = matched.map(r => r.card.id)
       const { data, error } = await supabase
         .from('card_items')
-        .select('card_id, erp_code, reference_code, description, size, quantity,'
+        .select('card_id, erp_code, reference_code, description, size, quantity, notes, file_name,'
           + ' unit_price_usd, destination, sort_order, pricing:card_item_pricing(sale_price_brl)')
         .in('card_id', ids)
       if (error) throw error
@@ -132,6 +137,8 @@ export function TimelineReport() {
         sale_price_brl: salePrice(i.pricing) ?? null,
         destination: i.destination as ExportItem['destination'],
         sort_order: i.sort_order as number | null,
+        notes: i.notes as string | null,
+        file_name: i.file_name as string | null,
       }))
 
       const stamp = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
@@ -292,14 +299,24 @@ export function TimelineReport() {
             )}
           </div>
 
-          {collections.length > 1 && (
-            <Field label="Collection">
-              <Select value={filter.collection} onChange={e => set('collection', e.target.value)}>
-                <option value="">All collections</option>
-                {collections.map(c => <option key={c} value={c}>{c}</option>)}
-              </Select>
-            </Field>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {collections.length > 1 && (
+              <Field label="Collection">
+                <Select value={filter.collection} onChange={e => set('collection', e.target.value)}>
+                  <option value="">All collections</option>
+                  {collections.map(c => <option key={c} value={c}>{c}</option>)}
+                </Select>
+              </Field>
+            )}
+            {purchaseOrders.length > 1 && (
+              <Field label="Purchase order">
+                <Select value={filter.purchaseOrder} onChange={e => set('purchaseOrder', e.target.value)}>
+                  <option value="">All POs</option>
+                  {purchaseOrders.map(p => <option key={p} value={p}>{p}</option>)}
+                </Select>
+              </Field>
+            )}
+          </div>
 
           <Check checked={filter.attentionOnly} onChange={() => set('attentionOnly', !filter.attentionOnly)}
             label="Only orders needing attention"

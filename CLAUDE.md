@@ -189,12 +189,14 @@ together came to under 2 credits in a month.
   signed URLs, but anyone holding a file path reads it unauthenticated and the
   link never expires. Paths are UUIDs, so this is obscurity, not access
   control. Same family as `value_brl`.
-- **Material codes have no columns.** `outside_material_code` /
-  `inside_material_code` are in the zod schemas and the TypeScript, and do not
-  exist in `cards`. They are stored as labelled lines inside `description`;
-  `splitMaterialCodes` / `mergeMaterialCodes` in `src/lib/utils.ts` are the
-  only sanctioned way in and out. Edit Card had inputs for them that silently
-  dropped what you typed until `2026-08-24`.
+- ~~Material codes have no columns.~~ **Closed, and this entry was wrong for
+  a while.** `outside_material_code` / `inside_material_code` are real columns
+  on `cards`, filled on 32 and 26 of the 34 open orders; `splitMaterialCodes` /
+  `mergeMaterialCodes` are gone and no `description` still carries the labelled
+  lines. Checked 4 Oct 2026, while widening the timeline export — reading the
+  description, as this file said to, would have returned nothing. The lesson is
+  the one at the top: **probe the real schema**, including when this file is
+  the thing telling you otherwise.
 - **Deleting a card deletes the client's signature with it.**
   `approval_requests.card_id` and `approval_signatures.request_id` are both
   `ON DELETE CASCADE`, so removing a card silently destroys the approval that

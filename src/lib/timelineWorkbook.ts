@@ -28,29 +28,70 @@ export interface ExportItem {
   sale_price_brl?: number | null
   destination?: Destination | null
   sort_order?: number | null
+  notes?: string | null
+  file_name?: string | null
 }
 
+/**
+ * Tudo que o card guarda, porque é no Excel que o Doani vai filtrar.
+ *
+ * Ficaram de fora as nove colunas vazias nos trinta e quatro pedidos e nos
+ * noventa e oito itens: `size` e `logo_positions` do card, `logo_colour` e
+ * `logo_technique` (os campos de antes de o logo virar externo e interno),
+ * `value_usd` — quem carrega o valor do card é o BRL —, `tags`, e no item
+ * `collection`, `outside_color` e `inside_color`. Uma coluna vazia em toda
+ * linha não é dado, é ruído; entram no dia em que alguém preencher.
+ */
 export const ORDERS_HEADERS = [
-  'Order', 'Client', 'Supplier', 'Status', 'Collection', 'Salesperson', 'PI number',
-  'Goes to', 'Items', 'Pieces', 'Purchase USD', 'Sale BRL',
-  'Anchor', 'Anchor from', 'Planned ready', 'Supplier date', 'Ready', 'Arrival',
-  'Arrived on', 'Days left', 'Late', `Past day ${ORDER_LEG_DAYS}`, 'Days past',
+  // Identificação
+  'Order', 'Ref root', 'Title', 'Status', 'Priority', 'Client', 'Collection', 'Supplier',
+  // Pessoas
+  'Salesperson', 'Project manager', 'Client approved by',
+  // Documentos
+  'Purchase order', 'Sales order', 'PI number', 'Supplier ref', 'Card reference',
+  // Quantidade e dinheiro
+  'Goes to', 'Items', 'Pieces', 'Purchase USD', 'Sale BRL', 'Card value BRL', 'Card quantity',
+  // Especificação
+  'Outside material', 'Outside code', 'Inside material', 'Inside code',
+  'Outside logo', 'Outside logo text', 'Outside logo colour',
+  'Inside logo', 'Inside logo text', 'Inside logo colour', 'Notes',
+  // O relógio
+  'Anchor', 'Anchor from', 'Planned ready', 'Supplier date', 'Promised date',
+  'Date changed on', 'Change reason', 'Ready', 'Arrival', 'Shipped on', 'Arrived on',
+  'Deadline', 'Days left', 'Late', `Past day ${ORDER_LEG_DAYS}`, 'Days past',
+  'In status since', 'Client approved on',
+  // Registro
+  'Created on', 'Last updated',
 ] as const
 
 export const ITEMS_HEADERS = [
   'Order', 'Client', 'Status', 'ERP (DEV)', 'Reference', 'Description', 'Size',
   'Goes to', 'Qty', 'Unit USD', 'Line total USD', 'Sale BRL', 'Line total BRL',
+  'Item notes', 'Attached file',
 ] as const
 
-/** Colunas que o fornecedor não leva: a venda é a margem, e Arrived é o trânsito. */
-const HIDDEN_FROM_SUPPLIER = new Set(['Sale BRL', 'Line total BRL', 'Arrived on'])
+/**
+ * Colunas que o fornecedor não leva.
+ *
+ * A venda é a margem. `Arrived on` revela o tempo de trânsito que a perna de
+ * embarque esconde dele — a mesma razão pela qual a coluna Arrived não existe
+ * no quadro dele. E o valor do card em reais é a venda outra vez, por outro
+ * caminho: é exatamente o `value_brl` que a interface esconde.
+ */
+const HIDDEN_FROM_SUPPLIER = new Set([
+  'Sale BRL', 'Line total BRL', 'Arrived on', 'Card value BRL',
+])
 
 export function headersFor(headers: readonly string[], deqiOnly: boolean): string[] {
   return headers.filter(h => !(deqiOnly && HIDDEN_FROM_SUPPLIER.has(h)))
 }
 
 /** Toda coluna de data, para o formato de célula ser aplicado a ela. */
-export const DATE_HEADERS = ['Anchor', 'Planned ready', 'Supplier date', 'Ready', 'Arrival', 'Arrived on']
+export const DATE_HEADERS = [
+  'Anchor', 'Planned ready', 'Supplier date', 'Promised date', 'Date changed on',
+  'Ready', 'Arrival', 'Shipped on', 'Arrived on', 'Deadline',
+  'In status since', 'Client approved on', 'Created on', 'Last updated',
+]
 
 /**
  * O dia de calendário como o Excel conta: dias desde 30/12/1899.
@@ -74,6 +115,32 @@ export function excelDay(d: Date): number {
 }
 
 const day = (d: Date | null): number | null => d ? excelDay(d) : null
+
+/**
+ * O dia de um carimbo de hora, lido em São Paulo.
+ *
+ * `created_at` e companhia são instantes, não dias de calendário. Um card
+ * criado às 22h de terça é 01h de quarta em UTC, e a planilha diria quarta.
+ * O hub inteiro conta os horários por São Paulo (`formatDateTime`), e a
+ * exportação não pode ser o lugar onde essa regra muda.
+ */
+export function stampDay(value: string | null | undefined): number | null {
+  if (!value) return null
+  const at = new Date(value)
+  if (Number.isNaN(at.getTime())) return null
+  const [y, m, d] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(at).split('-').map(Number)
+  return excelDay(new Date(Date.UTC(y, m - 1, d)))
+}
+
+/** Uma data simples do banco ('2026-10-28'), sem hora e sem fuso para errar. */
+export function plainDay(value: string | null | undefined): number | null {
+  if (!value) return null
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  return excelDay(new Date(Date.UTC(y, m - 1, d)))
+}
 
 type Cell = string | number | null
 export type SheetRow = Record<string, Cell>
@@ -114,34 +181,77 @@ export function ordersSheet(rows: Row[], items: ExportItem[], deqiOnly: boolean)
       ? Math.round((row.delivery.getTime() - row.plannedReady.getTime()) / 86_400_000)
       : null
 
+    // `select('*')` traz toda coluna de `cards`, e a interface TypeScript não
+    // lista todas — o banco é a fonte, não o tipo. Daí a leitura solta aqui.
+    const f = c as unknown as Record<string, string | number | null | undefined>
+
     const full: SheetRow = {
       Order: c.ref_number ?? '',
-      Client: c.client_name ?? '',
-      Supplier: supplierNameOf(c) ?? '',
+      'Ref root': (f.ref_root as string) ?? '',
+      Title: c.title ?? '',
       Status: c.status ?? '',
+      Priority: (f.priority as string) ?? '',
+      Client: c.client_name ?? '',
       Collection: c.collection ?? '',
+      Supplier: supplierNameOf(c) ?? '',
+
       Salesperson: salespersonLabel(c) ?? '',
+      'Project manager': c.project_manager?.full_name ?? '',
+      'Client approved by': (f.client_approved_by as string) ?? '',
+
+      'Purchase order': (f.purchase_order as string) ?? '',
+      'Sales order': (f.sales_order as string) ?? '',
       'PI number': c.pi_number ?? '',
+      'Supplier ref': (f.supplier_ref as string) ?? '',
+      'Card reference': (f.reference_code as string) ?? '',
+
       'Goes to': goesToLabel(mine),
       Items: mine.length,
       Pieces: pieces,
       'Purchase USD': usd > 0 ? money(usd) : null,
       'Sale BRL': brl > 0 ? money(brl) : null,
+      'Card value BRL': f.value_brl == null ? null : Number(f.value_brl),
+      'Card quantity': f.quantity == null ? null : Number(f.quantity),
+
+      'Outside material': (f.outside_material as string) ?? '',
+      // A coluna existe e está preenchida em 32 dos 34 pedidos. Houve um tempo
+      // em que o código morava dentro da descrição; não mora mais.
+      'Outside code': (f.outside_material_code as string) ?? '',
+      'Inside material': (f.inside_material as string) ?? '',
+      'Inside code': (f.inside_material_code as string) ?? '',
+      'Outside logo': (f.logo_technique_outside as string) ?? '',
+      'Outside logo text': (f.logo_text_outside as string) ?? '',
+      'Outside logo colour': (f.logo_color_outside as string) ?? '',
+      'Inside logo': (f.logo_technique_inside as string) ?? '',
+      'Inside logo text': (f.logo_text_inside as string) ?? '',
+      'Inside logo colour': (f.logo_color_inside as string) ?? '',
+      Notes: (f.description as string) ?? '',
+
       // De onde o relógio partiu, e por qual carimbo — sem isso ninguém
       // consegue refazer a conta de 120 dias na própria planilha.
       Anchor: day(row.confirmed),
       'Anchor from': row.sampleStart ? 'Sample approved' : 'Proforma',
       'Planned ready': day(row.plannedReady),
       'Supplier date': day(row.delivery),
+      'Promised date': plainDay(f.delivery_date_promised as string),
+      'Date changed on': stampDay(f.delivery_date_changed_at as string),
+      'Change reason': (f.delivery_date_change_reason as string) ?? '',
       Ready: day(row.handover),
       Arrival: day(row.arrival),
+      'Shipped on': stampDay(f.shipped_at as string),
       'Arrived on': day(row.arrivedAt),
+      Deadline: stampDay(f.deadline as string),
       'Days left': row.arrived ? null : (deqiOnly ? row.deqiLeft : row.totalLeft),
       Late: row.arrived
         ? (logisticsOutcome(c)?.onTarget === false ? 'Arrived late' : 'No')
         : ((deqiOnly ? row.deqiLeft : row.totalLeft) < 0 ? 'Yes' : 'No'),
       [`Past day ${ORDER_LEG_DAYS}`]: row.missedPromise ? 'Yes' : 'No',
       'Days past': past,
+      'In status since': stampDay(f.status_since as string),
+      'Client approved on': stampDay(f.client_approved_at as string),
+
+      'Created on': stampDay(f.created_at as string),
+      'Last updated': stampDay(f.updated_at as string),
     }
 
     return pick(full, headersFor(ORDERS_HEADERS, deqiOnly))
@@ -166,7 +276,7 @@ export function itemsSheet(rows: Row[], items: ExportItem[], deqiOnly: boolean):
       out.push(pick({
         ...base, 'ERP (DEV)': '', Reference: '', Description: '(no items)', Size: '',
         'Goes to': '', Qty: null, 'Unit USD': null, 'Line total USD': null,
-        'Sale BRL': null, 'Line total BRL': null,
+        'Sale BRL': null, 'Line total BRL': null, 'Item notes': '', 'Attached file': '',
       }, headersFor(ITEMS_HEADERS, deqiOnly)))
       continue
     }
@@ -187,6 +297,8 @@ export function itemsSheet(rows: Row[], items: ExportItem[], deqiOnly: boolean):
         'Line total USD': unit == null ? null : money(qty * unit),
         'Sale BRL': sale,
         'Line total BRL': sale == null ? null : money(qty * sale),
+        'Item notes': i.notes ?? '',
+        'Attached file': i.file_name ?? '',
       }, headersFor(ITEMS_HEADERS, deqiOnly)))
     }
   }
@@ -215,6 +327,7 @@ export function filtersSheet(
     ['Supplier', deqiOnly ? (supplierName ?? '') : (f.supplier === 'all' ? 'All suppliers' : supplierName ?? '')],
     ['Client', f.client || 'All clients'],
     ['Collection', f.collection || 'All collections'],
+    ['Purchase order', f.purchaseOrder || 'All purchase orders'],
     ['Salesperson', f.salesperson || 'Everyone'],
     ['Stage', stages],
     [deqiOnly ? 'Ready from' : 'Landing from', f.monthFrom || 'Any month'],

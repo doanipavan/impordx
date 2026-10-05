@@ -70,13 +70,15 @@ export interface ReportFilter {
   salesperson: string
   /** '' = todas. */
   collection: string
+  /** '' = todos. Todo pedido tem o seu, e quase nenhum se repete. */
+  purchaseOrder: string
   sections: { chart: boolean; table: boolean }
 }
 
 export const DEFAULT_FILTER: ReportFilter = {
   supplier: 'all', client: '', stages: STAGE_GROUPS.map(g => g.id),
   monthFrom: '', monthTo: '', attentionOnly: false,
-  destination: 'all', salesperson: '', collection: '',
+  destination: 'all', salesperson: '', collection: '', purchaseOrder: '',
   sections: { chart: true, table: true },
 }
 
@@ -111,6 +113,10 @@ export function applyReportFilter(
     if (f.supplier !== 'all' && row.card.supplier_id !== f.supplier) return false
     if (f.client && (row.card.client_name ?? '') !== f.client) return false
     if (f.collection && (row.card.collection ?? '') !== f.collection) return false
+    if (f.purchaseOrder
+      && ((row.card as unknown as { purchase_order?: string }).purchase_order ?? '') !== f.purchaseOrder) {
+      return false
+    }
     if (f.salesperson && (salespersonLabel(row.card) ?? '') !== f.salesperson) return false
     if (!statuses.has(row.card.status as OrderStatus)) return false
     if (f.destination !== 'all' && destinations) {
@@ -144,6 +150,7 @@ export function describeFilter(f: ReportFilter, supplierName: string | undefined
   else if (f.monthFrom) parts.push(`${what} from ${monthLabel(f.monthFrom)}`)
   else if (f.monthTo) parts.push(`${what} until ${monthLabel(f.monthTo)}`)
   if (f.collection) parts.push(f.collection)
+  if (f.purchaseOrder) parts.push(`PO ${f.purchaseOrder}`)
   if (f.salesperson) parts.push(f.salesperson)
   if (f.destination === 'stock') parts.push('With stock items')
   else if (f.destination === 'client') parts.push('Client only')
