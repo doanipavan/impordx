@@ -1,14 +1,21 @@
 import { useMemo, useState } from 'react'
-import { FileText } from 'lucide-react'
+import { FileText, Download } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useSupplierFilter, useSuppliers } from '../../hooks/useSupplierFilter'
+import { useBoardDestinations } from '../../hooks/useItemDestinations'
+import { supabase } from '../../lib/supabase'
 import { Row, buildRow, sortRows, todayInSaoPaulo } from '../../lib/orderRows'
 import {
   ReportFilter, DEFAULT_FILTER, STAGE_GROUPS, StageGroup,
   applyReportFilter, describeFilter, monthLabel, rowMonth, timelineReportHtml,
 } from '../../lib/timelineReport'
-import { cn } from '../../lib/utils'
+import {
+  ordersSheet, itemsSheet, filtersSheet, headersFor, workbookFileName,
+  ORDERS_HEADERS, ITEMS_HEADERS, FILTERS_HEADERS, DATE_HEADERS, ExportItem, SheetRow,
+} from '../../lib/timelineWorkbook'
+import { cn, salePrice } from '../../lib/utils'
+import { salespersonLabel } from '../../types'
 import { Button } from '../ui/button'
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog'
 import { Select } from '../ui/select'
@@ -45,6 +52,7 @@ export function TimelineReport() {
 
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [busyXls, setBusyXls] = useState(false)
   const [filter, setFilter] = useState<ReportFilter>(DEFAULT_FILTER)
 
   const today = useMemo(() => todayInSaoPaulo(), [])
@@ -61,8 +69,24 @@ export function TimelineReport() {
   const months = useMemo(
     () => Array.from(new Set(rows.map(r => rowMonth(r, deqiOnly)))).sort(),
     [rows, deqiOnly])
+  const collections = useMemo(
+    () => Array.from(new Set(rows.map(r => r.card.collection).filter((c): c is string => !!c))).sort(),
+    [rows])
+  const salespeople = useMemo(
+    () => Array.from(new Set(rows.map(r => salespersonLabel(r.card)).filter((c): c is string => !!c))).sort(),
+    [rows])
 
-  const matched = useMemo(() => applyReportFilter(rows, filter, deqiOnly), [rows, filter, deqiOnly])
+  // Para onde vão os itens de cada pedido, numa consulta só. Carregado quando
+  // a caixa abre — é o que o filtro de destino e a coluna "Goes to" precisam.
+  const { data: destinations } = useBoardDestinations(
+    open && !deqiOnly ? rows.map(r => r.card.id) : [], open && !deqiOnly)
+
+  const matched = useMemo(
+    () => applyReportFilter(rows, filter, deqiOnly, destinations),
+    [rows, filter, deqiOnly, destinations])
+
+  // Um só, para o PDF e a planilha nunca nomearem fornecedores diferentes.
+  const supplierName = suppliers.find(s => s.id === filter.supplier)?.short_name
 
   function openDialog() {
     // Abre com o filtro de fornecedor que já está ligado na tela: é o que a
@@ -75,12 +99,93 @@ export function TimelineReport() {
   const toggleStage = (id: StageGroup) =>
     set('stages', filter.stages.includes(id) ? filter.stages.filter(s => s !== id) : [...filter.stages, id])
 
+  /**
+   * A planilha, com os mesmos filtros que o PDF.
+   *
+   * Os itens só são buscados aqui, no clique: a caixa de filtros não precisa
+   * deles para contar os pedidos, e carregar o detalhe de noventa e oito itens
+   * toda vez que alguém abre a aba Timeline seria pagar pela exportação que
+   * ninguém pediu.
+   */
+  async function exportExcel() {
+    setBusyXls(true)
+    try {
+      const ids = matched.map(r => r.card.id)
+      const { data, error } = await supabase
+        .from('card_items')
+        .select('card_id, erp_code, reference_code, description, size, quantity,'
+          + ' unit_price_usd, destination, sort_order, pricing:card_item_pricing(sale_price_brl)')
+        .in('card_id', ids)
+      if (error) throw error
+
+      const items: ExportItem[] = ((data ?? []) as unknown as Array<Record<string, unknown>>).map(i => ({
+        card_id: i.card_id as string,
+        erp_code: i.erp_code as string | null,
+        reference_code: i.reference_code as string | null,
+        description: i.description as string | null,
+        size: i.size as string | null,
+        quantity: i.quantity as number | null,
+        unit_price_usd: i.unit_price_usd as number | null,
+        // O preço de venda mora atrás da própria política (migração 025): a
+        // consulta do fornecedor devolve nada para achatar, e é assim que a
+        // margem não sai na planilha dele nem por engano.
+        sale_price_brl: salePrice(i.pricing) ?? null,
+        destination: i.destination as ExportItem['destination'],
+        sort_order: i.sort_order as number | null,
+      }))
+
+      const stamp = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+      const generatedAt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      }).format(new Date()) + ' BRT'
+
+      const XLSX = await import('xlsx')
+      const wb = XLSX.utils.book_new()
+
+      const sheet = (data: SheetRow[], headers: string[], wide: Record<string, number> = {}) => {
+        // Sem `cellDates`: as datas já vêm como número de série, calculado só
+        // com os campos UTC. Deixar a biblioteca converter um Date usa o fuso
+        // da máquina e tira um dia de toda data em São Paulo.
+        const ws = XLSX.utils.json_to_sheet(data, { header: headers })
+        ws['!cols'] = headers.map(h => ({ wch: wide[h] ?? Math.max(11, h.length + 2) }))
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+        // Sem o formato, uma data vira o número de série do Excel na tela.
+        for (const ref of Object.keys(ws)) {
+          if (ref.startsWith('!')) continue
+          const col = headers[XLSX.utils.decode_cell(ref).c]
+          if (DATE_HEADERS.includes(col)) (ws[ref] as { z?: string }).z = 'dd/mm/yyyy'
+        }
+        return ws
+      }
+
+      const orderHeaders = headersFor(ORDERS_HEADERS, deqiOnly)
+      const itemHeaders = headersFor(ITEMS_HEADERS, deqiOnly)
+      XLSX.utils.book_append_sheet(wb,
+        sheet(ordersSheet(matched, items, deqiOnly), orderHeaders, { Client: 26 }), 'Orders')
+      XLSX.utils.book_append_sheet(wb,
+        sheet(itemsSheet(matched, items, deqiOnly), itemHeaders, { Description: 34, Client: 26 }), 'Items')
+      XLSX.utils.book_append_sheet(wb,
+        sheet(filtersSheet(filter, supplierName, { matched: matched.length, total: rows.length },
+          generatedAt, deqiOnly), [...FILTERS_HEADERS], { Filter: 22, Value: 34 }), 'Filters')
+
+      XLSX.writeFile(wb, workbookFileName(stamp))
+      toast(`${matched.length} order(s) exported`, 'success')
+      setOpen(false)
+    } catch (err) {
+      console.error('Timeline export failed:', err)
+      const detail = (err as { message?: string })?.message
+      toast(detail ? `Export failed: ${detail}` : 'Export failed', 'error')
+    } finally {
+      setBusyXls(false)
+    }
+  }
+
   async function generate() {
     setBusy(true)
     // Aberta antes do await, senão o navegador não credita o clique e bloqueia.
     const win = window.open('', '_blank')
     const logo = await inlineLogo()
-    const supplierName = suppliers.find(s => s.id === filter.supplier)?.short_name
     const generatedAt = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'America/Sao_Paulo', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     }).format(new Date()) + ' BRT'
@@ -164,11 +269,43 @@ export function TimelineReport() {
             </Field>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Para onde a peça vai é assunto da Redantex: o fornecedor não
+                tem o campo na tela e não tem o filtro aqui. */}
+            {!deqiOnly && (
+              <Field label="Goes to">
+                <Select value={filter.destination}
+                  onChange={e => set('destination', e.target.value as ReportFilter['destination'])}>
+                  <option value="all">Client and stock</option>
+                  <option value="stock">With stock items</option>
+                  <option value="client">Client only</option>
+                </Select>
+              </Field>
+            )}
+            {salespeople.length > 1 && (
+              <Field label="Salesperson">
+                <Select value={filter.salesperson} onChange={e => set('salesperson', e.target.value)}>
+                  <option value="">Everyone</option>
+                  {salespeople.map(p => <option key={p} value={p}>{p}</option>)}
+                </Select>
+              </Field>
+            )}
+          </div>
+
+          {collections.length > 1 && (
+            <Field label="Collection">
+              <Select value={filter.collection} onChange={e => set('collection', e.target.value)}>
+                <option value="">All collections</option>
+                {collections.map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </Field>
+          )}
+
           <Check checked={filter.attentionOnly} onChange={() => set('attentionOnly', !filter.attentionOnly)}
             label="Only orders needing attention"
             hint="Overdue, or a supplier date past the planned day 60" />
 
-          <Field label="Include">
+          <Field label="Include · PDF only">
             <div className="flex gap-5">
               <Check checked={filter.sections.chart} label="Chart"
                 onChange={() => set('sections', { ...filter.sections, chart: !filter.sections.chart })} />
@@ -188,6 +325,11 @@ export function TimelineReport() {
           <Button onClick={generate} loading={busy} disabled={nothingToPrint}>
             <FileText className="h-4 w-4 mr-1.5" />
             Generate PDF
+          </Button>
+          <Button onClick={exportExcel} loading={busyXls} disabled={busy || matched.length === 0}
+            className="bg-green-700 hover:bg-green-800 text-white">
+            <Download className="h-4 w-4 mr-1.5" />
+            Export Excel
           </Button>
         </DialogFooter>
       </Dialog>

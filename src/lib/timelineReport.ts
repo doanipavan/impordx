@@ -1,6 +1,7 @@
 import { ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, logisticsOutcome, supplierNameOf, orderSchedule } from './utils'
 import { Row, timeWindow, shortRef, shortDate } from './orderRows'
-import { OrderStatus } from '../types'
+import { OrderStatus, salespersonLabel } from '../types'
+import { DestinationSummary } from './itemDestination'
 
 /**
  * O relatório da timeline, em HTML pronto para imprimir (Cmd+P → PDF).
@@ -56,12 +57,26 @@ export interface ReportFilter {
   monthTo: string
   /** Só quem precisa de atenção: atrasado, ou fornecedor além do dia 60. */
   attentionOnly: boolean
+  /**
+   * Por onde os produtos do pedido saem.
+   *
+   * 'stock' pega quem tem **algum** item de estoque, inclusive o pedido misto:
+   * a pergunta real é "onde a linha própria está metida", e um pedido misto
+   * está. 'client' pega só o pedido inteiramente de cliente — senão os dois
+   * filtros devolveriam o mesmo pedido e nenhum dos dois significaria nada.
+   */
+  destination: 'all' | 'stock' | 'client'
+  /** '' = todos. Compara com o rótulo do vendedor, que é o que a tela mostra. */
+  salesperson: string
+  /** '' = todas. */
+  collection: string
   sections: { chart: boolean; table: boolean }
 }
 
 export const DEFAULT_FILTER: ReportFilter = {
   supplier: 'all', client: '', stages: STAGE_GROUPS.map(g => g.id),
   monthFrom: '', monthTo: '', attentionOnly: false,
+  destination: 'all', salesperson: '', collection: '',
   sections: { chart: true, table: true },
 }
 
@@ -78,12 +93,31 @@ export function needsAttention(row: Row, deqiOnly: boolean): boolean {
   return left < 0 || row.missedPromise
 }
 
-export function applyReportFilter(rows: Row[], f: ReportFilter, deqiOnly: boolean): Row[] {
+/**
+ * O destino do pedido, por fora: o resumo dos itens dele.
+ *
+ * Vem de fora porque a linha da timeline só conhece o card — os itens são uma
+ * consulta à parte, e nem toda tela que filtra precisa carregá-los. Sem o mapa
+ * o filtro de destino simplesmente não restringe nada, em vez de esvaziar a
+ * lista em silêncio.
+ */
+export type DestinationMap = Map<string, DestinationSummary>
+
+export function applyReportFilter(
+  rows: Row[], f: ReportFilter, deqiOnly: boolean, destinations?: DestinationMap,
+): Row[] {
   const statuses = new Set(STAGE_GROUPS.filter(g => f.stages.includes(g.id)).flatMap(g => g.statuses))
   return rows.filter(row => {
     if (f.supplier !== 'all' && row.card.supplier_id !== f.supplier) return false
     if (f.client && (row.card.client_name ?? '') !== f.client) return false
+    if (f.collection && (row.card.collection ?? '') !== f.collection) return false
+    if (f.salesperson && (salespersonLabel(row.card) ?? '') !== f.salesperson) return false
     if (!statuses.has(row.card.status as OrderStatus)) return false
+    if (f.destination !== 'all' && destinations) {
+      const d = destinations.get(row.card.id)
+      if (f.destination === 'stock' && !d?.hasStock) return false
+      if (f.destination === 'client' && d?.only !== 'client') return false
+    }
     const m = rowMonth(row, deqiOnly)
     if (f.monthFrom && m < f.monthFrom) return false
     if (f.monthTo && m > f.monthTo) return false
@@ -109,6 +143,10 @@ export function describeFilter(f: ReportFilter, supplierName: string | undefined
   else if (f.monthFrom && f.monthTo) parts.push(`${what} ${monthLabel(f.monthFrom)} – ${monthLabel(f.monthTo)}`)
   else if (f.monthFrom) parts.push(`${what} from ${monthLabel(f.monthFrom)}`)
   else if (f.monthTo) parts.push(`${what} until ${monthLabel(f.monthTo)}`)
+  if (f.collection) parts.push(f.collection)
+  if (f.salesperson) parts.push(f.salesperson)
+  if (f.destination === 'stock') parts.push('With stock items')
+  else if (f.destination === 'client') parts.push('Client only')
   if (f.attentionOnly) parts.push('Needing attention')
   return parts.join(' · ')
 }
