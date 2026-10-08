@@ -29,6 +29,10 @@ import { clientEmail, cardToEmailInput } from '../lib/clientEmail.mjs'
 
 const BATCH = 25
 const MAX_ATTEMPTS = 3
+// Aviso velho é ruído. Se a fila ficou parada — pelo freio puxado, por uma
+// função quebrada, por um fim de semana — não se despeja na caixa do cliente
+// uma pilha de novidades de três dias atrás quando as coisas voltam.
+const STALE_DAYS = 3
 
 function required(name: string): string {
   const value = process.env[name]
@@ -57,6 +61,7 @@ interface OutboxRow {
   to_email: string
   kind: string
   attempts: number
+  created_at: string
 }
 
 /** Erro que não adianta tentar de novo: o mundo mudou, não a rede. */
@@ -97,6 +102,11 @@ async function patchRow(id: string, patch: Record<string, unknown>, onlyIfPendin
 
 async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
   if (!row.card_id) throw new Settled('o card foi apagado antes de o email sair')
+
+  const idade = (Date.now() - new Date(row.created_at).getTime()) / 86_400_000
+  if (idade > STALE_DAYS) {
+    throw new Settled(`ficou ${Math.floor(idade)} dias na fila e perdeu a validade`)
+  }
 
   const card = await loadCard(row.card_id)
   if (!card) throw new Settled('o card não existe mais')
@@ -170,10 +180,27 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
   return 'sent'
 }
 
+/** O freio de emergência. Lido a cada execução, para virar sem deploy. */
+async function enabled(): Promise<boolean> {
+  const res = await db('app_flags?key=eq.client_emails&select=enabled')
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`)
+  const row = (await res.json())?.[0]
+  // Linha sumida é interruptor quebrado, e interruptor quebrado fica
+  // desligado: o custo de não mandar é um aviso atrasado; o de mandar sem
+  // poder é um email que não devia ter saído.
+  return row?.enabled === true
+}
+
 export default async () => {
+  if (!await enabled()) {
+    return new Response(JSON.stringify({ paused: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const res = await db(
     `email_outbox?status=eq.pending&attempts=lt.${MAX_ATTEMPTS}&order=created_at.asc&limit=${BATCH}` +
-    '&select=id,card_id,client_name,to_email,kind,attempts')
+    '&select=id,card_id,client_name,to_email,kind,attempts,created_at')
   if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`)
 
   const rows: OutboxRow[] = await res.json()

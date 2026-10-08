@@ -43,7 +43,22 @@ interface Pending {
   to_email: string
 }
 
+/** O mesmo freio da função que envia: parado é parado dos dois lados. */
+async function enabled(): Promise<boolean> {
+  const res = await db('app_flags?key=eq.client_emails&select=enabled')
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`)
+  return (await res.json())?.[0]?.enabled === true
+}
+
 export default async () => {
+  // Com o freio puxado nem se enfileira: lembrete acumulado vira enxurrada
+  // quando alguém solta o freio.
+  if (!await enabled()) {
+    return new Response(JSON.stringify({ paused: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const res = await db('rpc/orders_needing_reminder', {
     method: 'POST',
     body: JSON.stringify({ dias: DIAS }),
