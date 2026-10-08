@@ -1,0 +1,327 @@
+/**
+ * Os emails que o cliente recebe.
+ *
+ * Um por mudança de etapa — Placed, In Production, Ready to Ship, Collected,
+ * Shipped, Arrived — e um lembrete quando o pedido fica quinze dias sem
+ * notícia. As três etapas do começo (PI Requested, PI In Preparation, PI
+ * Approved) não aparecem aqui de propósito: são a Redantex acertando a
+ * proforma com a fábrica, o cliente não tem o que fazer com elas, e cada uma
+ * mostraria que a fábrica ainda não confirmou.
+ *
+ * Três regras de conteúdo, dadas pelo Doani e travadas por teste:
+ *
+ *   1. **Nenhum valor.** Os itens carregam o preço de compra em dólar — o
+ *      custo da Redantex com a DEQI. Esta função não recebe preço nenhum como
+ *      argumento, justamente para que não haja um a vazar.
+ *   2. **Medida e quantidade, só.** A descrição do item é recado para a
+ *      fábrica ("add clip for ring"), não nome de produto. Uma versão
+ *      anterior tentava traduzi-la e errava a peça.
+ *   3. **Português, e dito ao navegador.** `lang="pt-BR"` com `translate=no`:
+ *      é a armadilha que já pegou a página de aprovação, quando o Chrome leu
+ *      português dentro de documento inglês, chutou espanhol e escreveu
+ *      "óleo" onde era "aceite".
+ *
+ * A timeline é uma tabela com bolinhas e uma barra — nada de SVG, nada de
+ * imagem, nada de flexbox, que é o que sobrevive no Gmail e no Outlook.
+ */
+
+/**
+ * A meta de logística da Redantex: quantos dias a mercadoria leva do dia em
+ * que o fornecedor a dá por pronta até pousar no Brasil.
+ *
+ * O número de verdade mora em `LOGISTICS_TARGET_DAYS`, em src/lib/utils.ts,
+ * que é o que o Gantt e o painel de chegadas leem. Aqui ele é repetido porque
+ * uma função do Netlify não importa TypeScript do app — e `check-client-email`
+ * compara os dois a cada execução, para a cópia não envelhecer sozinha. Já
+ * aconteceu de duas telas guardarem cada uma o seu "+120" e dois pedidos
+ * sumirem do gráfico.
+ */
+export const DEFAULT_LOGISTICS_DAYS = 50
+
+const BRAND = '#8b1a1a'
+const INK = '#1a1d23'
+const MUTED = '#6b727d'
+const FAINT = '#9aa1ab'
+const LINE = '#eceef1'
+const DONE = '#15803d'
+const WAIT = '#cdd2d9'
+
+/** Dia em português, a partir de um `YYYY-MM-DD` puro. Sem fuso, sem instante. */
+export function longDay(plain) {
+  if (!plain) return null
+  const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  return `${d} de ${meses[m - 1]} de ${y}`
+}
+
+/** A forma curta que cabe embaixo de uma bolinha. */
+export function shortDay(plain) {
+  if (!plain) return null
+  const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+    'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  return `${d} ${meses[m - 1]}`
+}
+
+/** Soma dias a um dia do calendário, sem passar por instante nenhum. */
+export function addDays(plain, days) {
+  const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
+  const t = Date.UTC(y, m - 1, d) + days * 86_400_000
+  return new Date(t).toISOString().slice(0, 10)
+}
+
+/**
+ * A medida, como o cliente a lê.
+ *
+ * O email lista só medida e quantidade. Quando existir um campo de nome
+ * comercial por item, ele entra aqui; até lá, a medida basta para o cliente
+ * reconhecer o que pediu, e não corre o risco de nomear a peça errada.
+ */
+export function itemSize({ size }) {
+  return String(size ?? '').trim() || 'Item'
+}
+
+const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+const nf = (n) => Number(n ?? 0).toLocaleString('pt-BR')
+
+/**
+ * Uma coluna da timeline. `state` é 'done' | 'now' | 'wait'.
+ *
+ * O rótulo chega como lista de linhas, não como texto com `<br>` dentro: tudo
+ * que vem de fora passa por `esc`, e um rótulo que carregasse marcação sairia
+ * escapado na cara do cliente — foi o que aconteceu na primeira versão.
+ */
+function step({ lines, day, state }, width) {
+  const dot = state === 'done' ? DONE : state === 'now' ? BRAND : WAIT
+  const strong = state === 'wait' ? '400' : '600'
+  const color = state === 'wait' ? FAINT : INK
+  const label = (Array.isArray(lines) ? lines : [lines]).map(esc).join('<br>')
+  return `
+    <td width="${width}%" align="center" valign="top" style="padding:0 2px">
+      <div style="width:9px;height:9px;border-radius:50%;background:${dot};margin:0 auto 7px"></div>
+      <div style="font-size:11px;line-height:1.25;font-weight:${strong};color:${color}">${label}</div>
+      <div style="font-size:10px;color:${state === 'wait' ? FAINT : MUTED};margin-top:2px">${esc(day ?? '—')}</div>
+    </td>`
+}
+
+export function timeline(steps) {
+  const width = Math.floor(100 / steps.length)
+  const done = steps.filter(s => s.state === 'done').length
+  const pct = Math.min(100, Math.round(((done + 0.5) / steps.length) * 100))
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 0">
+      <tr><td style="padding:0 0 10px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+               style="border-collapse:separate;border-radius:99px;overflow:hidden">
+          <tr>
+            <td width="${pct}%" height="4" style="background:${DONE};font-size:0;line-height:0">&nbsp;</td>
+            <td height="4" style="background:${WAIT};font-size:0;line-height:0">&nbsp;</td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr>${steps.map(s => step(s, width)).join('')}</tr>
+        </table>
+      </td></tr>
+    </table>`
+}
+
+/**
+ * Onde cada etapa cai na régua de cinco casas.
+ *
+ * A quarta casa muda de nome conforme o momento: enquanto a mercadoria está
+ * na fábrica ela se chama "Pronto para embarque"; depois que sai, "Embarcado".
+ * Mesma posição, palavra verdadeira — cinco colunas é o que cabe no Gmail do
+ * celular sem as palavras quebrarem em três linhas.
+ */
+export const STAGE_INDEX = {
+  'Placed': 1,
+  'In Production': 2,
+  'Ready to Ship': 3,
+  'Collected': 3,
+  'Shipped': 3,
+  'Arrived': 4,
+}
+
+export function stageSteps(stage, dates) {
+  const saiu = stage === 'Collected' || stage === 'Shipped' || stage === 'Arrived'
+  const now = STAGE_INDEX[stage] ?? 1
+  const base = [
+    { lines: ['Amostra', 'aprovada'], day: shortDay(dates.sampleApprovedOn) },
+    { lines: ['Pedido', 'confirmado'], day: shortDay(dates.placedOn) },
+    { lines: ['Em', 'produção'], day: shortDay(dates.productionOn) },
+    {
+      lines: saiu ? ['Embarcado'] : ['Pronto para', 'embarque'],
+      day: shortDay(saiu ? dates.shippedOn ?? dates.readyOn : dates.readyOn),
+    },
+    { lines: ['Chegada', 'ao Brasil'], day: shortDay(dates.arrivedOn ?? dates.arrival) },
+  ]
+  return base.map((s, i) => ({
+    ...s,
+    state: i < now ? 'done' : i === now ? 'now' : 'wait',
+    day: s.day ?? (i > now ? 'previsto' : '—'),
+  }))
+}
+
+/** A manchete e a frase de abertura de cada etapa. */
+const STAGE_COPY = {
+  'Placed': {
+    title: 'Seu pedido foi confirmado na fábrica',
+    lead: 'Sua produção foi confirmada e já entrou na fila da fábrica. São estes os itens:',
+  },
+  'In Production': {
+    title: 'Seu pedido entrou em produção',
+    lead: 'A fábrica começou a produzir o seu pedido. São estes os itens:',
+  },
+  'Ready to Ship': {
+    title: 'Seu pedido está pronto',
+    lead: 'A produção terminou e a mercadoria aguarda embarque. São estes os itens:',
+  },
+  'Collected': {
+    title: 'Sua mercadoria foi coletada',
+    lead: 'O transportador retirou a mercadoria da fábrica. São estes os itens:',
+  },
+  'Shipped': {
+    title: 'Sua mercadoria embarcou',
+    lead: 'Sua mercadoria saiu da fábrica e está a caminho do Brasil. São estes os itens:',
+  },
+  'Arrived': {
+    title: 'Sua mercadoria chegou ao Brasil',
+    lead: 'Sua mercadoria desembarcou e segue para a liberação. São estes os itens:',
+  },
+  'reminder': {
+    title: 'Como está seu pedido',
+    lead: 'Um retrato de onde seu pedido está hoje. São estes os itens:',
+  },
+}
+
+export const STAGES = Object.keys(STAGE_COPY).filter(k => k !== 'reminder')
+
+/**
+ * O email de uma etapa, ou o lembrete.
+ *
+ * @param {object} o
+ * @param {string} o.stage   uma das etapas, ou 'reminder'
+ * @param {string} o.client  nome do cliente, como ele se reconhece
+ * @param {Array}  o.items   { size, quantity } — nada além disso sai
+ * @param {string} o.sampleApprovedOn  YYYY-MM-DD
+ * @param {string} o.placedOn
+ * @param {string} o.productionOn
+ * @param {string} o.readyOn   o dia que o fornecedor prometeu
+ * @param {string} o.shippedOn
+ * @param {string} o.arrivedOn
+ * @param {number} o.logisticsDays  a meta de logística da Redantex
+ * @param {string} o.salesperson    quem responde por este pedido
+ * @param {string} o.today          YYYY-MM-DD, a data do email
+ */
+export function clientEmail(o) {
+  const stage = o.stage ?? 'Placed'
+  const copy = STAGE_COPY[stage] ?? STAGE_COPY.Placed
+  const chegou = stage === 'Arrived'
+
+  const items = (o.items ?? []).map(i => ({
+    size: itemSize(i),
+    quantity: Number(i.quantity ?? 0),
+  }))
+  const pieces = items.reduce((s, i) => s + i.quantity, 0)
+  const arrival = o.arrivedOn ?? (o.readyOn ? addDays(o.readyOn, o.logisticsDays ?? DEFAULT_LOGISTICS_DAYS) : null)
+
+  const steps = stageSteps(stage === 'reminder' ? (o.currentStage ?? 'Placed') : stage,
+    { ...o, arrival })
+
+  const head = `
+    <tr>
+      <td style="padding:0 0 4px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:${FAINT}">Medida</td>
+      <td style="padding:0 0 4px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:${FAINT};text-align:right">Peças</td>
+    </tr>`
+
+  const rows = items.map(i => `
+    <tr>
+      <td style="padding:7px 0;border-bottom:1px solid ${LINE};font-size:13px;color:${INK}">${esc(i.size)}</td>
+      <td style="padding:7px 0;border-bottom:1px solid ${LINE};font-size:13px;text-align:right;font-weight:600;color:${INK};white-space:nowrap">${nf(i.quantity)}</td>
+    </tr>`).join('')
+
+  const dateLabel = chegou ? 'Chegada ao Brasil' : 'Previsão de chegada no Brasil'
+  const dateHint = chegou
+    ? 'Nossa equipe entrará em contato sobre a entrega.'
+    : stage === 'Shipped' || stage === 'Collected'
+      ? 'Avisaremos você quando a mercadoria chegar.'
+      : 'Avisaremos você a cada passo.'
+
+  const subject = chegou
+    ? 'Sua mercadoria chegou ao Brasil'
+    : `${copy.title} — chegada prevista para ${longDay(arrival) ?? 'em breve'}`
+
+  const html = `<!doctype html>
+<html lang="pt-BR" translate="no"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="google" content="notranslate" />
+<title>${esc(subject)}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f5f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e6ea;border-radius:10px">
+
+        <tr><td style="padding:26px 28px 20px;border-bottom:1px solid ${LINE}">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:${BRAND}">Redantex</div>
+          <div style="font-size:20px;font-weight:650;color:${INK};margin-top:5px">${esc(copy.title)}</div>
+          <div style="font-size:13px;color:${MUTED};margin-top:2px">${esc(longDay(o.today) ?? '')}</div>
+        </td></tr>
+
+        <tr><td style="padding:22px 28px 0">
+          <p style="margin:0;font-size:14px;line-height:1.6;color:${INK}">Olá, ${esc(o.client)}.</p>
+          <p style="margin:10px 0 0;font-size:14px;line-height:1.6;color:${INK}">${esc(copy.lead)}</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">
+            ${head}${rows}
+            <tr>
+              <td style="padding:8px 0 0;font-size:13px;font-weight:700;color:${INK}">Total</td>
+              <td style="padding:8px 0 0;font-size:13px;font-weight:700;text-align:right;color:${INK};white-space:nowrap">${nf(pieces)} peças</td>
+            </tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:24px 28px 0">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTED}">Onde seu pedido está</div>
+          ${timeline(steps)}
+        </td></tr>
+
+        <tr><td style="padding:24px 28px 4px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTED}">${esc(dateLabel)}</div>
+          <div style="font-size:26px;font-weight:700;color:${INK};margin-top:3px">${esc(longDay(arrival) ?? 'a confirmar')}</div>
+          <div style="font-size:12px;color:${FAINT};margin-top:2px">${esc(dateHint)}</div>
+        </td></tr>
+
+        <tr><td style="padding:22px 28px 26px">
+          <div style="border-top:1px solid ${LINE};padding-top:14px;font-size:12px;color:${FAINT};line-height:1.5">
+            Qualquer dúvida, responda este email — ele vai direto para ${esc(o.salesperson ?? 'seu contato')}, na Redantex.
+          </div>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+
+  const text = [
+    `Olá, ${o.client}.`,
+    '',
+    copy.lead,
+    ...items.map(i => `  ${i.size} — ${nf(i.quantity)} peças`),
+    `  Total: ${nf(pieces)} peças`,
+    '',
+    `${dateLabel}: ${longDay(arrival) ?? 'a confirmar'}`,
+    dateHint,
+    '',
+    `Qualquer dúvida, responda este email — ele vai direto para ${o.salesperson ?? 'seu contato'}, na Redantex.`,
+  ].join('\n')
+
+  return { subject, html, text, pieces, arrival }
+}
