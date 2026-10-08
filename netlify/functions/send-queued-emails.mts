@@ -98,7 +98,11 @@ async function send(row: OutboxRow): Promise<void> {
   const card = await loadCard(row.card_id)
   if (!card) throw new Error('card no longer exists')
 
-  const stage = row.kind.startsWith('stage:') ? row.kind.slice('stage:'.length) : 'reminder'
+  // `stage:Placed` vira `Placed`; os avulsos — reminder, date-change,
+  // date-confirmed, sample-approved — valem por si. A primeira versão
+  // mandava tudo que não fosse `stage:` para 'reminder', e o aviso de
+  // mudança de data teria saído com o texto do lembrete.
+  const stage = row.kind.startsWith('stage:') ? row.kind.slice('stage:'.length) : row.kind
 
   const items = (card.card_items ?? [])
     .slice()

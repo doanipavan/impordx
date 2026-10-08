@@ -38,6 +38,14 @@
  */
 export const DEFAULT_LOGISTICS_DAYS = 50
 
+/**
+ * O plano inteiro, da aprovação da amostra até pousar no Brasil: duas pernas
+ * de `ORDER_LEG_DAYS`, 60 para a fábrica e 60 para a viagem. Vale enquanto o
+ * fornecedor não deu data — e é a promessa que a Redantex já faz ao cliente,
+ * então pode ser dita a ele. Mesma cópia vigiada por teste que os 50.
+ */
+export const DEFAULT_PLAN_DAYS = 120
+
 const BRAND = '#8b1a1a'
 const INK = '#1a1d23'
 const MUTED = '#6b727d'
@@ -202,6 +210,9 @@ export function timeline(steps) {
  * celular sem as palavras quebrarem em três linhas.
  */
 export const STAGE_INDEX = {
+  // A amostra é a casa zero: não é etapa do quadro de Orders, é o que vem
+  // antes dele.
+  'sample-approved': 0,
   'Placed': 1,
   'In Production': 2,
   'Ready to Ship': 3,
@@ -269,6 +280,22 @@ const STAGE_COPY = {
   // escrito pela DEQI é a palavra da fábrica, e quem responde pelo prazo
   // diante do cliente é a Redantex. O vendedor, em cópia, tem a história
   // inteira no hub.
+  // A amostra aprovada é o primeiro momento em que há o que contar: o relógio
+  // dos 120 dias começa ali. Ainda não há data da fábrica, então a previsão
+  // sai do plano — mais grossa, e honesta, porque é a promessa que já foi
+  // feita.
+  'sample-approved': {
+    title: 'Sua amostra foi aprovada',
+    lead: 'A amostra foi aprovada e seu pedido segue para a produção. São estes os itens:',
+  },
+  // O dia em que a fábrica finalmente diz quando fica pronto. Sem este email
+  // o cliente ficaria com a estimativa do plano para sempre, sem saber que
+  // ela virou data de verdade.
+  'date-confirmed': {
+    title: 'A fábrica confirmou o prazo do seu pedido',
+    lead: 'A fábrica confirmou quando seu pedido fica pronto, e a previsão de chegada está mais firme. '
+      + 'São estes os itens:',
+  },
   'date-change': {
     title: 'Nova previsão de chegada do seu pedido',
     lead: 'A fábrica reprogramou a finalização do seu pedido, e a previsão de chegada mudou. '
@@ -276,7 +303,7 @@ const STAGE_COPY = {
   },
 }
 
-const AVULSOS = ['reminder', 'date-change']
+const AVULSOS = ['reminder', 'date-change', 'date-confirmed']
 export const STAGES = Object.keys(STAGE_COPY).filter(k => !AVULSOS.includes(k))
 
 /**
@@ -306,7 +333,12 @@ export function clientEmail(o) {
     quantity: Number(i.quantity ?? 0),
   }))
   const pieces = items.reduce((s, i) => s + i.quantity, 0)
-  const arrival = o.arrivedOn ?? (o.readyOn ? addDays(o.readyOn, o.logisticsDays ?? DEFAULT_LOGISTICS_DAYS) : null)
+  // Chegou > data da fábrica + logística > plano de 120 dias desde a amostra.
+  // Cada degrau é mais firme que o de baixo, e o cliente sobe conforme o
+  // pedido anda.
+  const arrival = o.arrivedOn
+    ?? (o.readyOn ? addDays(o.readyOn, o.logisticsDays ?? DEFAULT_LOGISTICS_DAYS) : null)
+    ?? (o.sampleApprovedOn ? addDays(o.sampleApprovedOn, o.planDays ?? DEFAULT_PLAN_DAYS) : null)
 
   const steps = stageSteps(AVULSOS.includes(stage) ? (o.currentStage ?? 'Placed') : stage,
     { ...o, arrival })

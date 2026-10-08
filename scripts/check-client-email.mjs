@@ -17,7 +17,7 @@
  */
 import {
   clientEmail, itemSize, longDay, shortDay, vagueDay, monthShort, decendio, janela,
-  addDays, timeline, STAGES, stageSteps,
+  addDays, timeline, STAGES, stageSteps, DEFAULT_PLAN_DAYS,
   DEFAULT_LOGISTICS_DAYS,
 } from '../netlify/lib/clientEmail.mjs'
 
@@ -210,6 +210,40 @@ check('a chegada cumprida tem dia exato',
   clientEmail({ ...FIXTURE, stage: 'Arrived', arrivedOn: '2027-01-12', today: '2027-01-12' })
     .html.includes('12 de janeiro de 2027'))
 
+// ------------------------------------------- as duas pontas da história
+// A amostra aprovada é a casa zero, e ali ainda não há data da fábrica: a
+// previsão sai do plano de 120 dias, que é a promessa que a Redantex já faz.
+const amostra = clientEmail({
+  stage: 'sample-approved', client: 'OURO DO BRASIL', salesperson: 'Patrick',
+  sampleApprovedOn: '2026-10-07', today: '2026-10-07',
+  items: [{ size: '7 x 8 x 3,2 cm', quantity: 1200 }],
+})
+eq('a amostra acende a primeira casa', stageSteps('sample-approved', {}).findIndex(s => s.state === 'now'), 0)
+check('e a previsão vem do plano de 120 dias',
+  amostra.html.includes('entre 1 e 10 de fevereiro de 2027'))
+check('o email da amostra tem manchete própria', amostra.subject.startsWith('Sua amostra foi aprovada'))
+eq('a previsão do plano é a amostra mais 120', addDays('2026-10-07', DEFAULT_PLAN_DAYS), '2027-02-04')
+
+// Quando a fábrica informa a data, a previsão fica mais firme — e neste caso
+// melhora: 4 de fevereiro pelo plano, 14 de janeiro pela data real.
+const firme = clientEmail({
+  stage: 'date-confirmed', currentStage: 'Placed', client: 'OURO DO BRASIL',
+  salesperson: 'Patrick', sampleApprovedOn: '2026-10-07', placedOn: '2026-10-08',
+  readyOn: '2026-11-25', today: '2026-10-14',
+  items: [{ size: '7 x 8 x 3,2 cm', quantity: 1200 }],
+})
+check('a data da fábrica manda mais que o plano',
+  firme.html.includes('entre 11 e 20 de janeiro de 2027'))
+check('o email da data confirmada tem manchete própria',
+  firme.subject.startsWith('A fábrica confirmou o prazo'))
+
+// Cada tipo rende o seu texto, e nenhum cai no do lembrete — foi o bug que
+// mandava tudo que não começasse com "stage:" para 'reminder'.
+const titulos = new Set(['sample-approved', 'date-confirmed', 'date-change', 'reminder'].map(k =>
+  clientEmail({ ...FIXTURE, stage: k, currentStage: 'Placed', today: '2026-10-08' })
+    .html.match(/font-weight:650[^>]*>([^<]+)</)?.[1]))
+eq('quatro avisos avulsos, quatro manchetes diferentes', titulos.size, 4)
+
 // ------------------------------------------------- a cópia dos 50 dias
 // A meta de logística mora em src/lib/utils.ts, que é o que o Gantt e o
 // painel de chegadas leem. Aqui ela está repetida porque uma função do
@@ -220,6 +254,8 @@ import { readFileSync } from 'node:fs'
 const utils = readFileSync(new URL('../src/lib/utils.ts', import.meta.url), 'utf8')
 const naFonte = Number(utils.match(/LOGISTICS_TARGET_DAYS\s*=\s*(\d+)/)?.[1])
 eq('a meta de logística bate com src/lib/utils.ts', DEFAULT_LOGISTICS_DAYS, naFonte)
+const pernaNaFonte = Number(utils.match(/ORDER_LEG_DAYS\s*=\s*(\d+)/)?.[1])
+eq('e o plano é o dobro da perna', DEFAULT_PLAN_DAYS, pernaNaFonte * 2)
 
 // ----------------------------------------------------------------------
 console.log(`\n${pass} verificações passaram`)
