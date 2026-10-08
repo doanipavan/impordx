@@ -55,6 +55,9 @@ export interface Card {
   project_manager_id?: string
   project_manager?: User
   client_name?: string
+  // Aponta para `clients`, onde mora o email. O nome continua aqui porque é
+  // o que a tela e os relatórios sempre leram. Migração 051.
+  client_id?: string
   collection?: string
   size?: string
   quantity?: number

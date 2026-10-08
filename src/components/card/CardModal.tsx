@@ -14,6 +14,7 @@ import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { ActivityLog } from './ActivityLog'
 import { LineItemsTable } from './LineItemsTable'
 import { OrderFulfilment } from './OrderFulfilment'
+import { ClientContact } from './ClientContact'
 import { PiPanel } from './PiPanel'
 import { EditCardModal } from './EditCardModal'
 import { CardMetaStrip } from './CardMetaStrip'
@@ -339,6 +340,9 @@ export function CardModal({ card, board, onClose }: CardModalProps) {
                 </div>
 
                 <Separator />
+
+                {/* Para quem este pedido vai, e por onde avisá-lo. */}
+                <ClientContact card={card} />
 
                 {/* Description */}
                 {card.description && (
