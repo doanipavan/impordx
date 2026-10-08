@@ -16,8 +16,8 @@
  *     é recado para a fábrica.
  */
 import {
-  clientEmail, itemSize, longDay, shortDay, vagueDay, monthShort, decendio, janela,
-  addDays, timeline, STAGES, stageSteps, DEFAULT_PLAN_DAYS,
+  clientEmail, itemSize, longDay, shortDay, monthShort, decendio,
+  addDays, timeline, STAGES, stageSteps, DEFAULT_PLAN_DAYS, cardToEmailInput,
   DEFAULT_LOGISTICS_DAYS,
 } from '../netlify/lib/clientEmail.mjs'
 
@@ -170,12 +170,6 @@ check('o lembrete não leva preço', !/\$/.test(lembrete.html.replace(/<[^>]+>/g
 // ---------------------------------------------- a previsão é imprecisa
 // "14 de janeiro" soa como compromisso de entrega; não é. Entre a fábrica e
 // a porta do cliente há embarque, navio e alfândega.
-eq('início do mês', vagueDay('2027-01-05'), 'início de janeiro de 2027')
-eq('meados do mês', vagueDay('2027-01-14'), 'meados de janeiro de 2027')
-eq('final do mês', vagueDay('2027-01-28'), 'final de janeiro de 2027')
-eq('o dia 10 ainda é início', vagueDay('2027-01-10'), 'início de janeiro de 2027')
-eq('o dia 11 já é meados', vagueDay('2027-01-11'), 'meados de janeiro de 2027')
-eq('o dia 21 já é final', vagueDay('2027-01-21'), 'final de janeiro de 2027')
 eq('mês curto na coluna', monthShort('2027-01-14'), 'jan 2027')
 
 const previsto = clientEmail({ ...FIXTURE, stage: 'Placed', today: '2026-10-08' })
@@ -192,8 +186,6 @@ eq('segundo decêndio', decendio('2027-01-14').faixa, '11 a 20 de janeiro')
 eq('terceiro decêndio de janeiro vai até 31', decendio('2027-01-28').faixa, '21 a 31 de janeiro')
 eq('e o de fevereiro, até 28', decendio('2027-02-25').faixa, '21 a 28 de fevereiro')
 eq('fevereiro bissexto vai até 29', decendio('2028-02-25').faixa, '21 a 29 de fevereiro')
-eq('a janela atravessa o mês sem tropeçar', janela('2027-01-05', 10),
-  'entre 26 de dezembro e 15 de janeiro de 2027')
 
 // O que já aconteceu continua tendo dia: fato não é previsão.
 const regua = stageSteps('In Production', {
@@ -209,6 +201,77 @@ eq('e a chegada também', regua[4].day, 'jan 2027')
 check('a chegada cumprida tem dia exato',
   clientEmail({ ...FIXTURE, stage: 'Arrived', arrivedOn: '2027-01-12', today: '2027-01-12' })
     .html.includes('12 de janeiro de 2027'))
+
+// --------------------------------------------- nenhuma frase mal formada
+// Duas frases foram concatenadas em várias linhas e sobrou espaço no fim,
+// que virou espaço dobrado no meio do texto que o cliente lê.
+for (const k of [...STAGES, 'reminder', 'date-change', 'sample-approved', 'date-confirmed']) {
+  const m = clientEmail({ ...FIXTURE, stage: k, currentStage: 'Placed', today: '2026-10-08' })
+  check(`${k}: sem espaço dobrado no texto`, !/[^\n] {2,}[^\n ]/.test(m.text))
+  check(`${k}: sem espaço antes de pontuação`, !/\s+[.,;:]/.test(m.text))
+  check(`${k}: o assunto não tem espaço dobrado`, !/ {2,}/.test(m.subject))
+  check(`${k}: o assunto cabe na lista do celular`, m.subject.length <= 90)
+}
+
+// ------------------------------------------------------- card sem itens
+// Existe pelo menos um card de amostra sem itens cadastrados. "São estes os
+// itens:" seguido de nada, com "Total: 0 peças", não se manda a cliente.
+const vazio = clientEmail({ ...FIXTURE, stage: 'sample-approved', items: [], today: '2026-10-07' })
+check('sem itens, não anuncia lista', !vazio.html.includes('São estes os itens'))
+check('sem itens, não mostra total', !/Total/.test(vazio.html))
+check('sem itens, não mostra zero peças', !/0 peças/.test(vazio.html))
+check('mas o resto do email continua inteiro',
+  vazio.html.includes('Olá') && vazio.html.includes('Previsão de chegada'))
+check('e o texto puro também', !vazio.text.includes('Total:') && vazio.text.includes('Olá'))
+
+const comItens = clientEmail({ ...FIXTURE, stage: 'Placed', today: '2026-10-08' })
+check('com itens, a lista é anunciada', comItens.html.includes('São estes os itens'))
+
+// -------------------------------------------- dia não é instante
+// Quatro colunas de `cards` são `date` e duas são `timestamptz`. Ler um
+// `date` como instante o transforma em meia-noite UTC e, em São Paulo, no
+// DIA ANTERIOR — 8 de outubro vira 7. Esta função errava exatamente isso
+// em `order_confirmed_at` e `arrived_at`, e a data errada iria no email.
+const CARD = {
+  status: 'In Production',
+  sample_approved_at: '2026-10-07',        // date
+  order_confirmed_at: '2026-10-08',        // date
+  delivery_date: '2026-11-25',             // date
+  arrived_at: '2027-01-14',                // date
+  status_since: '2026-10-20T14:30:00+00:00',   // timestamptz
+  shipped_at: '2026-12-02T23:40:00+00:00',     // timestamptz — 20:40 em SP
+  salesperson: { full_name: 'Patrick Santing', email: 'p@x.com', role: 'member' },
+  card_items: [
+    { size: '7 x 8 cm', quantity: 1200, sort_order: 2 },
+    { size: '4 x 5 cm', quantity: 600, sort_order: 1 },
+  ],
+}
+const vindo = cardToEmailInput(CARD, { stage: 'In Production', client: 'X', today: '2026-10-20' })
+eq('amostra: dia, sem escorregar', vindo.sampleApprovedOn, '2026-10-07')
+eq('pedido confirmado: dia, sem escorregar', vindo.placedOn, '2026-10-08')
+eq('pronto: dia, sem escorregar', vindo.readyOn, '2026-11-25')
+eq('chegada: dia, sem escorregar', vindo.arrivedOn, '2027-01-14')
+eq('instante vira o dia de São Paulo', vindo.productionOn, '2026-10-20')
+eq('e um instante tarde da noite também', vindo.shippedOn, '2026-12-02')
+eq('os itens saem na ordem do card', vindo.items.map(i => i.quantity).join(), '600,1200')
+eq('o vendedor é tratado pelo primeiro nome', vindo.salesperson, 'Patrick')
+
+// A casa da produção só mostra data enquanto o card está nela: `status_since`
+// é reescrito na etapa seguinte e mostraria a data de outra coisa.
+eq('fora de produção, a casa não inventa data',
+  cardToEmailInput({ ...CARD, status: 'Shipped' }, {}).productionOn, undefined)
+
+// A mesma leitura em qualquer máquina: o fuso do servidor não entra na conta.
+const antes = process.env.TZ
+for (const tz of ['Asia/Shanghai', 'Pacific/Auckland', 'UTC']) {
+  process.env.TZ = tz
+  const outro = cardToEmailInput(CARD, {})
+  check(`em ${tz}: o dia do card não muda`,
+    outro.placedOn === '2026-10-08' && outro.arrivedOn === '2027-01-14')
+}
+process.env.TZ = antes
+
+eq('card vazio não quebra', cardToEmailInput(null, { stage: 'Placed' }).items.length, 0)
 
 // ------------------------------------------- as duas pontas da história
 // A amostra aprovada é a casa zero, e ali ainda não há data da fábrica: a

@@ -76,23 +76,6 @@ const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
 /**
- * A data como se fala de uma importação.
- *
- * "14 de janeiro de 2027" soa como compromisso de entrega; não é. O que o
- * hub sabe é a data que a fábrica prometeu mais a meta de logística, e entre
- * as duas pontas há embarque, navio e alfândega. Dizer "meados de janeiro"
- * é mais honesto — e tem um efeito prático: um atraso de três dias deixa de
- * exigir um email novo, porque a frase continua verdadeira.
- */
-export function vagueDay(plain) {
-  if (!plain) return null
-  const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
-  if (!y || !m || !d) return null
-  const terco = d <= 10 ? 'início' : d <= 20 ? 'meados' : 'final'
-  return `${terco} de ${MESES[m - 1]} de ${y}`
-}
-
-/**
  * O decêndio em que a data cai: 1 a 10, 11 a 20, 21 ao fim do mês.
  *
  * Dez dias é a granularidade honesta de uma importação — é mais ou menos a
@@ -109,20 +92,6 @@ export function decendio(plain) {
   return { n, de, ate, mes: MESES[m - 1], ano: y,
     texto: `${n}º decêndio de ${MESES[m - 1]} de ${y}`,
     faixa: `${de} a ${ate} de ${MESES[m - 1]}` }
-}
-
-/**
- * A janela de mais ou menos N dias em volta da previsão, dita por extenso.
- * Atravessa o mês sem tropeçar: "entre 28 de dezembro e 17 de janeiro".
- */
-export function janela(plain, dias = 10) {
-  if (!plain) return null
-  const de = addDays(plain, -dias)
-  const ate = addDays(plain, dias)
-  const [, m1, d1] = de.split('-').map(Number)
-  const [y2, m2, d2] = ate.split('-').map(Number)
-  if (m1 === m2) return `entre ${d1} e ${d2} de ${MESES[m2 - 1]} de ${y2}`
-  return `entre ${d1} de ${MESES[m1 - 1]} e ${d2} de ${MESES[m2 - 1]} de ${y2}`
 }
 
 /** Mês e ano, do tamanho de uma coluna da régua. */
@@ -250,31 +219,31 @@ export function stageSteps(stage, dates) {
 const STAGE_COPY = {
   'Placed': {
     title: 'Seu pedido foi confirmado na fábrica',
-    lead: 'Sua produção foi confirmada e já entrou na fila da fábrica. São estes os itens:',
+    lead: 'Sua produção foi confirmada e já entrou na fila da fábrica.',
   },
   'In Production': {
     title: 'Seu pedido entrou em produção',
-    lead: 'A fábrica começou a produzir o seu pedido. São estes os itens:',
+    lead: 'A fábrica começou a produzir o seu pedido.',
   },
   'Ready to Ship': {
     title: 'Seu pedido está pronto',
-    lead: 'A produção terminou e a mercadoria aguarda embarque. São estes os itens:',
+    lead: 'A produção terminou e a mercadoria aguarda embarque.',
   },
   'Collected': {
     title: 'Sua mercadoria foi coletada',
-    lead: 'O transportador retirou a mercadoria da fábrica. São estes os itens:',
+    lead: 'O transportador retirou a mercadoria da fábrica.',
   },
   'Shipped': {
     title: 'Sua mercadoria embarcou',
-    lead: 'Sua mercadoria saiu da fábrica e está a caminho do Brasil. São estes os itens:',
+    lead: 'Sua mercadoria saiu da fábrica e está a caminho do Brasil.',
   },
   'Arrived': {
     title: 'Sua mercadoria chegou ao Brasil',
-    lead: 'Sua mercadoria desembarcou e segue para a liberação. São estes os itens:',
+    lead: 'Sua mercadoria desembarcou e segue para a liberação.',
   },
   'reminder': {
     title: 'Como está seu pedido',
-    lead: 'Um retrato de onde seu pedido está hoje. São estes os itens:',
+    lead: 'Um retrato de onde seu pedido está hoje.',
   },
   // A fábrica remarcou. O cliente recebe a data nova e nada mais: o motivo
   // escrito pela DEQI é a palavra da fábrica, e quem responde pelo prazo
@@ -286,20 +255,18 @@ const STAGE_COPY = {
   // feita.
   'sample-approved': {
     title: 'Sua amostra foi aprovada',
-    lead: 'A amostra foi aprovada e seu pedido segue para a produção. São estes os itens:',
+    lead: 'A amostra foi aprovada e seu pedido segue para a produção.',
   },
   // O dia em que a fábrica finalmente diz quando fica pronto. Sem este email
   // o cliente ficaria com a estimativa do plano para sempre, sem saber que
   // ela virou data de verdade.
   'date-confirmed': {
     title: 'A fábrica confirmou o prazo do seu pedido',
-    lead: 'A fábrica confirmou quando seu pedido fica pronto, e a previsão de chegada está mais firme. '
-      + 'São estes os itens:',
+    lead: 'A fábrica confirmou quando seu pedido fica pronto, e a previsão de chegada está mais firme.'
   },
   'date-change': {
     title: 'Nova previsão de chegada do seu pedido',
-    lead: 'A fábrica reprogramou a finalização do seu pedido, e a previsão de chegada mudou. '
-      + 'São estes os itens:',
+    lead: 'A fábrica reprogramou a finalização do seu pedido, e a previsão de chegada mudou.'
   },
 }
 
@@ -366,6 +333,14 @@ export function clientEmail(o) {
   const previsao = dec ? `entre ${dec.de} e ${dec.ate} de ${dec.mes} de ${dec.ano}` : null
   const shownDate = chegou ? longDay(arrival) : previsao
 
+  // Sem itens cadastrados não se anuncia uma lista que não vem: existe pelo
+  // menos um card de amostra sem itens, e "São estes os itens:" seguido de
+  // nada, com "Total: 0 peças", é o tipo de email que não se manda a cliente.
+  // O `.trim()` não é zelo gratuito: estas frases já foram concatenadas em
+  // várias linhas e sobrou espaço no fim de duas, que virou espaço dobrado
+  // no meio da frase do cliente.
+  const lead = items.length ? `${copy.lead.trim()} São estes os itens:` : copy.lead.trim()
+
   const dateLabel = chegou ? 'Chegada ao Brasil' : 'Previsão de chegada no Brasil'
   const dateHint = chegou
     ? 'Nossa equipe entrará em contato sobre a entrega.'
@@ -397,14 +372,15 @@ export function clientEmail(o) {
 
         <tr><td style="padding:22px 28px 0">
           <p style="margin:0;font-size:14px;line-height:1.6;color:${INK}">Olá, ${esc(o.client)}.</p>
-          <p style="margin:10px 0 0;font-size:14px;line-height:1.6;color:${INK}">${esc(copy.lead)}</p>
+          <p style="margin:10px 0 0;font-size:14px;line-height:1.6;color:${INK}">${esc(lead)}</p>
+          ${items.length === 0 ? '' : `
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">
             ${head}${rows}
             <tr>
               <td style="padding:8px 0 0;font-size:13px;font-weight:700;color:${INK}">Total</td>
               <td style="padding:8px 0 0;font-size:13px;font-weight:700;text-align:right;color:${INK};white-space:nowrap">${nf(pieces)} peças</td>
             </tr>
-          </table>
+          </table>`}
         </td></tr>
 
         <tr><td style="padding:24px 28px 0">
@@ -432,9 +408,11 @@ export function clientEmail(o) {
   const text = [
     `Olá, ${o.client}.`,
     '',
-    copy.lead,
-    ...items.map(i => `  ${i.size} — ${nf(i.quantity)} peças`),
-    `  Total: ${nf(pieces)} peças`,
+    lead,
+    ...(items.length ? [
+      ...items.map(i => `  ${i.size} — ${nf(i.quantity)} peças`),
+      `  Total: ${nf(pieces)} peças`,
+    ] : []),
     '',
     `${dateLabel}: ${shownDate ?? 'a confirmar'}`,
     dateHint,
@@ -443,4 +421,54 @@ export function clientEmail(o) {
   ].join('\n')
 
   return { subject, html, text, pieces, arrival }
+}
+
+/**
+ * Traduz uma linha de `cards` para o que o email precisa.
+ *
+ * Mora aqui, e não dentro da função do Netlify, por um motivo só: é onde se
+ * decide qual coluna é **dia** e qual é **instante**, e errar isso põe a data
+ * errada na frente do cliente. Já aconteceu nesta mesma função, antes de
+ * alguém conferir os tipos:
+ *
+ *   `date`        sample_approved_at · order_confirmed_at · delivery_date · arrived_at
+ *   `timestamptz` status_since · shipped_at
+ *
+ * Um `date` lido como instante vira meia-noite UTC e, em São Paulo, **o dia
+ * anterior** — 8 de outubro vira 7. É a mesma armadilha que o CLAUDE.md
+ * descreve nos prazos, e a razão de `plainDay` e `stampDay` existirem
+ * separados em vez de uma função esperta que adivinha.
+ */
+export function cardToEmailInput(card, { stage, client, today, logisticsDays, planDays } = {}) {
+  const plain = (v) => (v ? String(v).slice(0, 10) : undefined)
+  const stamp = (v) => (v
+    ? new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(v))
+    : undefined)
+
+  const items = (card?.card_items ?? [])
+    .slice()
+    .sort((a, b) => (a?.sort_order ?? 0) - (b?.sort_order ?? 0))
+    .map(i => ({ size: i?.size, quantity: i?.quantity }))
+
+  return {
+    stage,
+    currentStage: card?.status,
+    client,
+    salesperson: card?.salesperson?.full_name?.split(' ')?.[0],
+    items,
+    sampleApprovedOn: plain(card?.sample_approved_at),
+    placedOn: plain(card?.order_confirmed_at),
+    // Só sabemos quando a produção começou enquanto o card está nela:
+    // `status_since` é reescrito na etapa seguinte. Depois disso a casa fica
+    // sem data, em vez de mostrar a data de outra etapa.
+    productionOn: card?.status === 'In Production' ? stamp(card?.status_since) : undefined,
+    readyOn: plain(card?.delivery_date),
+    shippedOn: stamp(card?.shipped_at),
+    arrivedOn: plain(card?.arrived_at),
+    today,
+    ...(logisticsDays != null ? { logisticsDays } : {}),
+    ...(planDays != null ? { planDays } : {}),
+  }
 }
