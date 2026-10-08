@@ -125,7 +125,13 @@ async function send(row: OutboxRow): Promise<void> {
   })
 
   const from = process.env.CLIENT_FROM || required('SUMMARY_FROM')
-  const replyTo = card.salesperson?.email
+  // O vendedor entra em cópia, não numa mensagem separada: ele vê exatamente
+  // o que o cliente leu, com as mesmas palavras e a mesma data — e o cliente
+  // vê que o contato dele está junto. Em cópia aberta, de propósito: o
+  // Reply-To já revela o endereço, e esconder quem está na conversa com um
+  // cliente é o tipo de esperteza que estraga a confiança.
+  const salesEmail = card.salesperson?.email
+  const replyTo = salesEmail
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -136,6 +142,7 @@ async function send(row: OutboxRow): Promise<void> {
     body: JSON.stringify({
       from,
       to: [row.to_email],
+      ...(salesEmail ? { cc: [salesEmail] } : {}),
       // A promessa do rodapé — "responda este email e ele vai direto para
       // Patrick" — só é verdade por causa desta linha.
       ...(replyTo ? { reply_to: replyTo } : {}),

@@ -51,9 +51,7 @@ export function longDay(plain) {
   if (!plain) return null
   const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
   if (!y || !m || !d) return null
-  const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
-  return `${d} de ${meses[m - 1]} de ${y}`
+  return `${d} de ${MESES[m - 1]} de ${y}`
 }
 
 /** A forma curta que cabe embaixo de uma bolinha. */
@@ -64,6 +62,69 @@ export function shortDay(plain) {
   const meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
     'jul', 'ago', 'set', 'out', 'nov', 'dez']
   return `${d} ${meses[m - 1]}`
+}
+
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+
+/**
+ * A data como se fala de uma importação.
+ *
+ * "14 de janeiro de 2027" soa como compromisso de entrega; não é. O que o
+ * hub sabe é a data que a fábrica prometeu mais a meta de logística, e entre
+ * as duas pontas há embarque, navio e alfândega. Dizer "meados de janeiro"
+ * é mais honesto — e tem um efeito prático: um atraso de três dias deixa de
+ * exigir um email novo, porque a frase continua verdadeira.
+ */
+export function vagueDay(plain) {
+  if (!plain) return null
+  const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const terco = d <= 10 ? 'início' : d <= 20 ? 'meados' : 'final'
+  return `${terco} de ${MESES[m - 1]} de ${y}`
+}
+
+/**
+ * O decêndio em que a data cai: 1 a 10, 11 a 20, 21 ao fim do mês.
+ *
+ * Dez dias é a granularidade honesta de uma importação — é mais ou menos a
+ * folga que um embarque e uma liberação alfandegária comem sem avisar.
+ */
+export function decendio(plain) {
+  if (!plain) return null
+  const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return null
+  const n = d <= 10 ? 1 : d <= 20 ? 2 : 3
+  const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const de = n === 1 ? 1 : n === 2 ? 11 : 21
+  const ate = n === 1 ? 10 : n === 2 ? 20 : ultimo
+  return { n, de, ate, mes: MESES[m - 1], ano: y,
+    texto: `${n}º decêndio de ${MESES[m - 1]} de ${y}`,
+    faixa: `${de} a ${ate} de ${MESES[m - 1]}` }
+}
+
+/**
+ * A janela de mais ou menos N dias em volta da previsão, dita por extenso.
+ * Atravessa o mês sem tropeçar: "entre 28 de dezembro e 17 de janeiro".
+ */
+export function janela(plain, dias = 10) {
+  if (!plain) return null
+  const de = addDays(plain, -dias)
+  const ate = addDays(plain, dias)
+  const [, m1, d1] = de.split('-').map(Number)
+  const [y2, m2, d2] = ate.split('-').map(Number)
+  if (m1 === m2) return `entre ${d1} e ${d2} de ${MESES[m2 - 1]} de ${y2}`
+  return `entre ${d1} de ${MESES[m1 - 1]} e ${d2} de ${MESES[m2 - 1]} de ${y2}`
+}
+
+/** Mês e ano, do tamanho de uma coluna da régua. */
+export function monthShort(plain) {
+  if (!plain) return null
+  const [y, m] = String(plain).slice(0, 10).split('-').map(Number)
+  if (!y || !m) return null
+  const curto = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+    'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  return `${curto[m - 1]} ${y}`
 }
 
 /** Soma dias a um dia do calendário, sem passar por instante nenhum. */
@@ -152,21 +213,26 @@ export const STAGE_INDEX = {
 export function stageSteps(stage, dates) {
   const saiu = stage === 'Collected' || stage === 'Shipped' || stage === 'Arrived'
   const now = STAGE_INDEX[stage] ?? 1
+  const quarto = saiu ? dates.shippedOn ?? dates.readyOn : dates.readyOn
+  const ultimo = dates.arrivedOn ?? dates.arrival
   const base = [
-    { lines: ['Amostra', 'aprovada'], day: shortDay(dates.sampleApprovedOn) },
-    { lines: ['Pedido', 'confirmado'], day: shortDay(dates.placedOn) },
-    { lines: ['Em', 'produção'], day: shortDay(dates.productionOn) },
+    { lines: ['Amostra', 'aprovada'], day: shortDay(dates.sampleApprovedOn), month: monthShort(dates.sampleApprovedOn) },
+    { lines: ['Pedido', 'confirmado'], day: shortDay(dates.placedOn), month: monthShort(dates.placedOn) },
+    { lines: ['Em', 'produção'], day: shortDay(dates.productionOn), month: monthShort(dates.productionOn) },
     {
       lines: saiu ? ['Embarcado'] : ['Pronto para', 'embarque'],
-      day: shortDay(saiu ? dates.shippedOn ?? dates.readyOn : dates.readyOn),
+      day: shortDay(quarto), month: monthShort(quarto),
     },
-    { lines: ['Chegada', 'ao Brasil'], day: shortDay(dates.arrivedOn ?? dates.arrival) },
+    { lines: ['Chegada', 'ao Brasil'], day: shortDay(ultimo), month: monthShort(ultimo) },
   ]
-  return base.map((s, i) => ({
-    ...s,
-    state: i < now ? 'done' : i === now ? 'now' : 'wait',
-    day: s.day ?? (i > now ? 'previsto' : '—'),
-  }))
+  // O que já aconteceu tem dia; o que ainda não aconteceu tem mês. É a
+  // mesma honestidade da manchete: numa importação, dia futuro é chute com
+  // cara de compromisso.
+  return base.map((s, i) => {
+    const state = i < now ? 'done' : i === now ? 'now' : 'wait'
+    const day = state === 'wait' ? (s.month ?? null) : (s.day ?? null)
+    return { lines: s.lines, state, day: day ?? (state === 'wait' ? 'previsto' : '—') }
+  })
 }
 
 /** A manchete e a frase de abertura de cada etapa. */
@@ -199,9 +265,19 @@ const STAGE_COPY = {
     title: 'Como está seu pedido',
     lead: 'Um retrato de onde seu pedido está hoje. São estes os itens:',
   },
+  // A fábrica remarcou. O cliente recebe a data nova e nada mais: o motivo
+  // escrito pela DEQI é a palavra da fábrica, e quem responde pelo prazo
+  // diante do cliente é a Redantex. O vendedor, em cópia, tem a história
+  // inteira no hub.
+  'date-change': {
+    title: 'Nova previsão de chegada do seu pedido',
+    lead: 'A fábrica reprogramou a finalização do seu pedido, e a previsão de chegada mudou. '
+      + 'São estes os itens:',
+  },
 }
 
-export const STAGES = Object.keys(STAGE_COPY).filter(k => k !== 'reminder')
+const AVULSOS = ['reminder', 'date-change']
+export const STAGES = Object.keys(STAGE_COPY).filter(k => !AVULSOS.includes(k))
 
 /**
  * O email de uma etapa, ou o lembrete.
@@ -232,7 +308,7 @@ export function clientEmail(o) {
   const pieces = items.reduce((s, i) => s + i.quantity, 0)
   const arrival = o.arrivedOn ?? (o.readyOn ? addDays(o.readyOn, o.logisticsDays ?? DEFAULT_LOGISTICS_DAYS) : null)
 
-  const steps = stageSteps(stage === 'reminder' ? (o.currentStage ?? 'Placed') : stage,
+  const steps = stageSteps(AVULSOS.includes(stage) ? (o.currentStage ?? 'Placed') : stage,
     { ...o, arrival })
 
   const head = `
@@ -247,16 +323,27 @@ export function clientEmail(o) {
       <td style="padding:7px 0;border-bottom:1px solid ${LINE};font-size:13px;text-align:right;font-weight:600;color:${INK};white-space:nowrap">${nf(i.quantity)}</td>
     </tr>`).join('')
 
+  // O que já aconteceu tem dia. A previsão tem terço de mês, e vem com a
+  // ressalva: é importação, e entre a fábrica e a porta do cliente há
+  // embarque, navio e alfândega.
+  // A previsão é dita como o vendedor diria: a faixa de dez dias em que a
+  // mercadoria deve chegar, e a margem assumida em voz alta. Dia exato soa
+  // como compromisso de entrega, e entre a fábrica e a porta do cliente há
+  // embarque, navio e alfândega.
+  const dec = arrival ? decendio(arrival) : null
+  const previsao = dec ? `entre ${dec.de} e ${dec.ate} de ${dec.mes} de ${dec.ano}` : null
+  const shownDate = chegou ? longDay(arrival) : previsao
+
   const dateLabel = chegou ? 'Chegada ao Brasil' : 'Previsão de chegada no Brasil'
   const dateHint = chegou
     ? 'Nossa equipe entrará em contato sobre a entrega.'
-    : stage === 'Shipped' || stage === 'Collected'
-      ? 'Avisaremos você quando a mercadoria chegar.'
-      : 'Avisaremos você a cada passo.'
+    : 'Trabalhamos com uma margem de cerca de dez dias, para mais ou para menos. '
+      + 'É uma importação: o prazo depende do embarque e da liberação alfandegária, '
+      + 'e acompanhamos cada passo com você.'
 
   const subject = chegou
     ? 'Sua mercadoria chegou ao Brasil'
-    : `${copy.title} — chegada prevista para ${longDay(arrival) ?? 'em breve'}`
+    : `${copy.title} — chegada ${shownDate ?? 'a confirmar'}`
 
   const html = `<!doctype html>
 <html lang="pt-BR" translate="no"><head>
@@ -295,7 +382,7 @@ export function clientEmail(o) {
 
         <tr><td style="padding:24px 28px 4px">
           <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${MUTED}">${esc(dateLabel)}</div>
-          <div style="font-size:26px;font-weight:700;color:${INK};margin-top:3px">${esc(longDay(arrival) ?? 'a confirmar')}</div>
+          <div style="font-size:26px;font-weight:700;color:${INK};margin-top:3px">${esc(shownDate ?? 'a confirmar')}</div>
           <div style="font-size:12px;color:${FAINT};margin-top:2px">${esc(dateHint)}</div>
         </td></tr>
 
@@ -317,7 +404,7 @@ export function clientEmail(o) {
     ...items.map(i => `  ${i.size} — ${nf(i.quantity)} peças`),
     `  Total: ${nf(pieces)} peças`,
     '',
-    `${dateLabel}: ${longDay(arrival) ?? 'a confirmar'}`,
+    `${dateLabel}: ${shownDate ?? 'a confirmar'}`,
     dateHint,
     '',
     `Qualquer dúvida, responda este email — ele vai direto para ${o.salesperson ?? 'seu contato'}, na Redantex.`,
