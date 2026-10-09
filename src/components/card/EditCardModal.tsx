@@ -12,6 +12,7 @@ import { Select } from '../ui/select'
 import { Label } from '../ui/label'
 import { collectionsFor, supplierNameOf, LOGO_TECHNIQUES, OUTSIDE_MATERIALS, INSIDE_MATERIALS } from '../../lib/utils'
 import { useRedantexUsers } from '../../hooks/useUsers'
+import { useActiveSalespeople } from '../../hooks/useSalespeople'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
@@ -19,8 +20,7 @@ const schema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
   client_name: z.string().optional(),
   collection: z.string().optional(),
-  salesperson_id: z.string().optional(),
-  salesperson_name: z.string().optional(),
+  salesperson_ref_id: z.string().min(1, 'Pick the salesperson'),
   project_manager_id: z.string().min(1, 'Pick who runs it'),
   quantity: z.number().positive().optional().or(z.literal('')),
   deadline: z.string().optional(),
@@ -40,10 +40,8 @@ const schema = z.object({
   supplier_ref: z.string().optional(),
 })
 
-// Either a linked account or a typed name — the field is required, the
-// shape it takes is not.
-.refine(v => (v.salesperson_id?.trim() || v.salesperson_name?.trim()),
-  { message: 'Name the salesperson', path: ['salesperson_id'] })
+// The salesperson comes from the register now (056), so the field is a
+// plain required pick — no free text to fork a name into three spellings.
 
 type FormValues = z.infer<typeof schema>
 
@@ -55,6 +53,7 @@ interface EditCardModalProps {
 
 export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
   const { data: staff = [] } = useRedantexUsers()
+  const { data: salespeople = [] } = useActiveSalespeople()
   const updateCard = useUpdateCard()
   const toast = useToast()
   const columns = BOARD_COLUMNS[board]
@@ -67,8 +66,7 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       priority: card.priority as Priority,
       client_name: card.client_name ?? '',
       collection: card.collection ?? '',
-      salesperson_id: card.salesperson_id ?? '',
-      salesperson_name: card.salesperson_name ?? '',
+      salesperson_ref_id: card.salesperson_ref_id ?? '',
       project_manager_id: card.project_manager_id ?? '',
       quantity: card.quantity ?? '',
       deadline: card.deadline ? card.deadline.substring(0, 10) : '',
@@ -89,8 +87,8 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
     },
   })
 
-  // Picking a listed account hides the free-text box, so only one is ever sent.
-  const watchedSalesperson = watch('salesperson_id')
+  const watchedSalesperson = watch('salesperson_ref_id')
+  const soldBy = salespeople.find(s => s.id === watchedSalesperson)
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -101,8 +99,10 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         priority: values.priority as Priority,
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
-        salesperson_id: values.salesperson_id || undefined,
-        salesperson_name: values.salesperson_id ? undefined : (values.salesperson_name?.trim() || undefined),
+        salesperson_ref_id: values.salesperson_ref_id,
+        // O nome acompanha porque é ele que o quadro lê; `salespeople` é
+        // tabela da Redantex e a consulta do fornecedor não pode embuti-la.
+        salesperson_name: soldBy?.name,
         project_manager_id: values.project_manager_id,
         quantity: values.quantity ? Number(values.quantity) : undefined,
         deadline: values.deadline || undefined,
@@ -180,18 +180,17 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="salesperson_id">Salesperson *</Label>
-              <Select id="salesperson_id" {...register('salesperson_id')}>
-                <option value="">— Someone else —</option>
-                {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              <Label htmlFor="salesperson_ref_id">Salesperson *</Label>
+              {/* The register, not the hub accounts: most of the twenty-five
+                  have no login. Typing was how one person became three. */}
+              <Select id="salesperson_ref_id" {...register('salesperson_ref_id')}>
+                <option value="">— Select —</option>
+                {salespeople.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
-              {/* Reps and outside sales have no account, so the name can just
-                  be typed when they are not in the list. */}
+              {errors.salesperson_ref_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_ref_id.message}</p>}
               {!watchedSalesperson && (
-                <Input className="mt-1.5" placeholder="Type the salesperson's name"
-                  {...register('salesperson_name')} />
+                <p className="text-[11px] text-muted-foreground mt-1">Not listed? Add them in Settings.</p>
               )}
-              {errors.salesperson_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_id.message}</p>}
             </div>
             <div>
               <Label htmlFor="project_manager_id">Project manager *</Label>

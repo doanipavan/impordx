@@ -3,11 +3,11 @@ import { Upload, FileSpreadsheet, Loader2, AlertTriangle, Info, CheckCircle2 } f
 import { BoardType, BOARD_COLUMNS, CardStatus, Priority } from '../../types'
 import { useCreateCard } from '../../hooks/useCards'
 import { useRedantexUsers } from '../../hooks/useUsers'
+import { useActiveSalespeople } from '../../hooks/useSalespeople'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
 import { Select } from '../ui/select'
 import { Dialog, DialogBody, DialogFooter } from '../ui/dialog'
 import { parseCardWorkbook, toCardFields, templateRows, ParsedSheet } from '../../lib/cardSheet'
@@ -36,13 +36,13 @@ function ImportDialog({ board, onClose }: { board: BoardType; onClose: () => voi
   const [reading, setReading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [salespersonId, setSalespersonId] = useState('')
-  const [salespersonName, setSalespersonName] = useState('')
   const [projectManagerId, setProjectManagerId] = useState('')
   const [dragging, setDragging] = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
   const createCard = useCreateCard()
   const { data: people = [] } = useRedantexUsers()
+  const { data: salespeople = [] } = useActiveSalespeople()
   const { user } = useAuth()
   const toast = useToast()
 
@@ -82,7 +82,7 @@ function ImportDialog({ board, onClose }: { board: BoardType; onClose: () => voi
   async function handleCreate() {
     if (!parsed || parsed.errors.length > 0) return
     if (!projectManagerId) { toast('Pick who runs this card', 'error'); return }
-    if (!salespersonId && !salespersonName.trim()) { toast('Name the salesperson', 'error'); return }
+    if (!salespersonId) { toast('Pick the salesperson', 'error'); return }
 
     setCreating(true)
     try {
@@ -90,8 +90,8 @@ function ImportDialog({ board, onClose }: { board: BoardType; onClose: () => voi
         board,
         status: BOARD_COLUMNS[board][0] as CardStatus,
         priority: 'medium' as Priority,
-        salesperson_id: salespersonId || undefined,
-        salesperson_name: salespersonId ? undefined : salespersonName.trim(),
+        salesperson_ref_id: salespersonId,
+        salesperson_name: salespeople.find(s => s.id === salespersonId)?.name,
         project_manager_id: projectManagerId,
         ...toCardFields(parsed),
       } as never)
@@ -246,13 +246,9 @@ function ImportDialog({ board, onClose }: { board: BoardType; onClose: () => voi
                       Salesperson
                     </label>
                     <Select value={salespersonId} onChange={e => setSalespersonId(e.target.value)}>
-                      <option value="">Someone not listed…</option>
-                      {people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                      <option value="">— Select —</option>
+                      {salespeople.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select>
-                    {!salespersonId && (
-                      <Input className="mt-1.5" placeholder="Type the name"
-                        value={salespersonName} onChange={e => setSalespersonName(e.target.value)} />
-                    )}
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">

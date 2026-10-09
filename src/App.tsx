@@ -12,6 +12,7 @@ import { TimelinePage } from './pages/TimelinePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ArchivePage } from './pages/ArchivePage'
 import { FinancePage } from './pages/FinancePage'
+import { SalesPage } from './pages/SalesPage'
 import { TeamPage } from './pages/TeamPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Loader2 } from 'lucide-react'
@@ -58,6 +59,7 @@ function AppRoutes() {
       <Route path="/orders/:ref" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><TimelinePage /></ProtectedRoute>} />
       <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
+      <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/archive" element={<ProtectedRoute><ArchivePage /></ProtectedRoute>} />
       <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />

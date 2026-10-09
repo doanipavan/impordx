@@ -176,6 +176,27 @@ function nextMonth(key: string): string {
 }
 
 /**
+ * Do primeiro ao último mês, sem pular os vazios do meio.
+ *
+ * Num fluxo de caixa um mês sem chegada é informação: esconder faria dois
+ * meses distantes parecerem consecutivos. O painel de arrivals e o painel de
+ * vendas desenham a mesma faixa de meses, então a conta mora aqui — duas
+ * cópias discordariam no dia em que alguém mexesse numa delas.
+ */
+export function contiguousMonths(keys: string[], limit = Infinity): string[] {
+  if (keys.length === 0) return []
+  const sorted = [...keys].sort()
+  const last = sorted[sorted.length - 1]
+  const out: string[] = []
+  let key = sorted[0]
+  while (key <= last && out.length < limit) {
+    out.push(key)
+    key = nextMonth(key)
+  }
+  return out
+}
+
+/**
  * O valor que chega ao Brasil, mês a mês.
  *
  * O mês vem de `orderSchedule`, a mesma régua que o Gantt desenha: a data do
@@ -257,17 +278,16 @@ export function arrivalsByMonth(
 
   // Do primeiro ao último, contíguo, até o horizonte. O que sobra vai para
   // "later" — somado, não escondido.
-  const months: ArrivalMonth[] = []
-  let key = keys[0]
-  const last = keys[keys.length - 1]
-  while (key <= last && months.length < horizon) {
-    months.push({ key, label: monthLabel(key), total: byMonth.get(key) ?? empty() })
-    key = nextMonth(key)
-  }
+  const span = contiguousMonths(keys, horizon)
+  const months: ArrivalMonth[] = span.map(key => ({
+    key, label: monthLabel(key), total: byMonth.get(key) ?? empty(),
+  }))
 
+  // O primeiro mês fora do horizonte: tudo dele para frente é "later".
+  const corte = span.length ? nextMonth(span[span.length - 1]) : keys[0]
   let later: OrderTotal | null = null
   for (const k of keys) {
-    if (k >= key) later = add(later ?? empty(), byMonth.get(k)!)
+    if (k >= corte) later = add(later ?? empty(), byMonth.get(k)!)
   }
 
   let total = empty()

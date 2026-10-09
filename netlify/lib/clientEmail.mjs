@@ -420,7 +420,16 @@ export function clientEmail(o) {
     `Qualquer dúvida, responda este email — ele vai direto para ${o.salesperson ?? 'seu contato'}, na Redantex.`,
   ].join('\n')
 
-  return { subject, html, text, pieces, arrival }
+  // Uma linha do que este aviso informou, para a fila gravar no envio. O
+  // painel de vendas mostra isto ao lado da data em que o email saiu; se
+  // fosse recalculado na hora de exibir, mostraria a previsão de hoje em cima
+  // de uma mensagem de outubro, e o vendedor leria que o cliente soube de uma
+  // coisa que ninguém lhe disse.
+  const resumo = chegou
+    ? `Chegada confirmada em ${longDay(arrival)}`
+    : previsao ? `Previsão informada: ${previsao}` : 'Previsão a confirmar'
+
+  return { subject, html, text, pieces, arrival, resumo }
 }
 
 /**
@@ -456,7 +465,9 @@ export function cardToEmailInput(card, { stage, client, today, logisticsDays, pl
     stage,
     currentStage: card?.status,
     client,
-    salesperson: card?.salesperson?.full_name?.split(' ')?.[0],
+    // O cadastro de vendedores (056) manda; o login é a escada atrás, para os
+    // cards que ninguém reabriu desde então.
+    salesperson: (card?.sold_by?.name ?? card?.salesperson?.full_name)?.split(' ')?.[0],
     items,
     sampleApprovedOn: plain(card?.sample_approved_at),
     placedOn: plain(card?.order_confirmed_at),

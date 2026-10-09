@@ -3,6 +3,7 @@ import { useEmailSwitch, useSetEmailSwitch, useOutboxCounts } from '../hooks/use
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../components/ui/toast'
 import { Button } from '../components/ui/button'
+import { Salespeople } from '../components/settings/Salespeople'
 import { formatDateTime } from '../lib/utils'
 
 /**
@@ -111,6 +112,8 @@ export function SettingsPage() {
           The switch takes effect on the next run, at most fifteen minutes away. It does not
           touch the daily pipeline summary, which goes to Redantex only.
         </p>
+
+        <Salespeople />
       </div>
     </div>
   )

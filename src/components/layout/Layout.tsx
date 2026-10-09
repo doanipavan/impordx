@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Package, ShoppingCart, ChartGantt, Bell, Archive,
-  Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search, Wallet
+  Users, Settings, ChevronLeft, ChevronRight, LogOut, Menu, Search, Wallet, TrendingUp
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Clocks } from './Clocks'
@@ -27,6 +27,9 @@ const NAV = [
 // O financeiro é da Redantex. A regra que vale está no banco (migração 035);
 // isto só evita oferecer uma tela que não responderia.
 const REDANTEX_NAV = [
+  // A carteira comercial, por mês de chegada. Fora do alcance do fornecedor:
+  // cada linha traz o valor de venda ao cliente.
+  { to: '/sales', icon: TrendingUp, label: 'Sales' },
   { to: '/finance', icon: Wallet, label: 'Finance' },
 ]
 

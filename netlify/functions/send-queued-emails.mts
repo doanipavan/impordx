@@ -78,6 +78,7 @@ const CARD_FIELDS = [
   'ref_number', 'status', 'archived',
   'sample_approved_at', 'order_confirmed_at', 'status_since',
   'delivery_date', 'shipped_at', 'arrived_at',
+  'sold_by:salespeople!cards_salesperson_ref_id_fkey(name,email)',
   'salesperson:users!cards_salesperson_id_fkey(full_name,email,role)',
   'client:clients(name,email)',
   'card_items(size,quantity,sort_order)',
@@ -134,6 +135,8 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
     sent_at: new Date().toISOString(),
     attempts: (row.attempts ?? 0) + 1,
     subject: mail.subject,
+    // Gravado agora, com o email. Previsão muda; o que foi dito, não.
+    summary: mail.resumo,
     error: null,
   }, true)
   if (claimed.length === 0) return 'skipped'
@@ -141,8 +144,13 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
   const from = process.env.CLIENT_FROM || required('SUMMARY_FROM')
   // Cópia só para quem é da Redantex. O fornecedor nunca entra num email de
   // cliente — veria o endereço dele e a relação comercial inteira.
+  //
+  // O cadastro de vendedores (056) não precisa de verificação de papel: só a
+  // Redantex escreve nele, e nenhuma conta da DEQI tem linha lá. O login
+  // continua atrás, com a verificação que já tinha, para os cards antigos.
   const sales = card.salesperson
-  const salesEmail = sales?.role === 'admin' || sales?.role === 'member' ? sales.email : null
+  const salesEmail = String(card.sold_by?.email ?? '').trim()
+    || (sales?.role === 'admin' || sales?.role === 'member' ? sales.email : null)
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

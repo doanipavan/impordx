@@ -49,6 +49,14 @@ export interface Card {
   deadline?: string
   // Two owners on the Redantex side: who sold it, and who is accountable for
   // it moving. Both are required when a card is created.
+  // A real column since long before this interface mentioned it — the boards
+  // and the archive page have always filtered on it in SQL.
+  archived?: boolean
+  // Points at `salespeople`, the register of the twenty-five people who sell.
+  // The two fields below it are the ladder behind: a hub login, or a name
+  // somebody typed before the register existed. Migration 056.
+  salesperson_ref_id?: string
+  sold_by?: Salesperson
   salesperson_id?: string
   salesperson?: User
   salesperson_name?: string  // typed, when the salesperson has no account
@@ -180,9 +188,30 @@ export interface ActivityLog {
   created_at: string
 }
 
-// A salesperson is either a linked account or a typed name, never both.
-export function salespersonLabel(card: Pick<Card, 'salesperson' | 'salesperson_name'>): string | null {
-  return card.salesperson?.full_name ?? (card.salesperson_name?.trim() || null)
+// Somebody who sells for Redantex. `user_id` is set only for the few who also
+// have a hub login; the rest exist here and nowhere else. Migration 056.
+export interface Salesperson {
+  id: string
+  name: string
+  email?: string | null
+  user_id?: string | null
+  active: boolean
+}
+
+/**
+ * One name for the salesperson, from the first source that has one.
+ *
+ * The register comes first: `JULIA`, `Júlia` and `Julia` were the same person
+ * in three rows of every report until it existed, and anything that groups by
+ * this string — the sales panel, the timeline filter, the spreadsheet — would
+ * keep splitting her in three if it read the typed name first.
+ */
+export function salespersonLabel(
+  card: Pick<Card, 'sold_by' | 'salesperson' | 'salesperson_name'>,
+): string | null {
+  return card.sold_by?.name
+    ?? card.salesperson?.full_name
+    ?? (card.salesperson_name?.trim() || null)
 }
 
 export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {

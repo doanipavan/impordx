@@ -7,6 +7,7 @@ import { BoardType, CardStatus, BOARD_COLUMNS, BOARD_LABELS, Priority } from '..
 import { useCreateCard } from '../../hooks/useCards'
 import { useUploadAttachment } from '../../hooks/useAttachments'
 import { useRedantexUsers } from '../../hooks/useUsers'
+import { useActiveSalespeople } from '../../hooks/useSalespeople'
 import { useToast } from '../ui/toast'
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
@@ -22,8 +23,7 @@ import { KindPicker } from '../attachments/KindPicker'
 
 const schema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
-  salesperson_id: z.string().optional(),
-  salesperson_name: z.string().optional(),
+  salesperson_ref_id: z.string().min(1, 'Pick the salesperson'),
   project_manager_id: z.string().min(1, 'Pick who runs it'),
   status: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent'] as const),
@@ -48,10 +48,8 @@ const schema = z.object({
   supplier_ref: z.string().optional(),
 })
 
-// Either a linked account or a typed name — the field is required, the
-// shape it takes is not.
-.refine(v => (v.salesperson_id?.trim() || v.salesperson_name?.trim()),
-  { message: 'Name the salesperson', path: ['salesperson_id'] })
+// The salesperson comes from the register now (056), so the field is a
+// plain required pick — no free text to fork a name into three spellings.
 
 type FormValues = z.infer<typeof schema>
 
@@ -71,6 +69,7 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
   const createCard = useCreateCard()
   const uploadAttachment = useUploadAttachment()
   const { data: staff = [] } = useRedantexUsers()
+  const { data: salespeople = [] } = useActiveSalespeople()
   const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Cada arquivo com a categoria dele; o card não é criado enquanto faltar uma.
@@ -89,8 +88,8 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
     defaultValues: { status: initialStatus, priority: 'medium' },
   })
 
-  // Picking a listed account hides the free-text box, so only one is ever sent.
-  const watchedSalesperson = watch('salesperson_id')
+  const watchedSalesperson = watch('salesperson_ref_id')
+  const soldBy = salespeople.find(s => s.id === watchedSalesperson)
 
   const chosenSupplierId = watch('supplier_id')
   const chosenSupplier = suppliers.find(s => s.id === chosenSupplierId)?.short_name
@@ -140,8 +139,11 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
         status: values.status as CardStatus,
         title: values.title,
         priority: values.priority as Priority,
-        salesperson_id: values.salesperson_id || undefined,
-        salesperson_name: values.salesperson_id ? undefined : (values.salesperson_name?.trim() || undefined),
+        salesperson_ref_id: values.salesperson_ref_id,
+        // O nome vai junto porque é ele que o quadro lê — `salespeople` é
+        // tabela da Redantex e a consulta do fornecedor não pode embuti-la.
+        // O gatilho da 058 mantém esta cópia em dia.
+        salesperson_name: soldBy?.name,
         project_manager_id: values.project_manager_id,
         client_name: values.client_name || undefined,
         supplier_id: values.supplier_id || undefined,
@@ -209,18 +211,17 @@ export function CreateCardModal({ board, initialStatus, onClose }: CreateCardMod
           {/* Owners — required, so a card can never arrive without one. */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="salesperson_id">Salesperson *</Label>
-              <Select id="salesperson_id" {...register('salesperson_id')}>
-                <option value="">— Someone else —</option>
-                {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              <Label htmlFor="salesperson_ref_id">Salesperson *</Label>
+              {/* The register, not the hub accounts: most of the twenty-five
+                  have no login. Typing was how one person became three. */}
+              <Select id="salesperson_ref_id" {...register('salesperson_ref_id')}>
+                <option value="">— Select —</option>
+                {salespeople.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
-              {/* Reps and outside sales have no account, so the name can just
-                  be typed when they are not in the list. */}
+              {errors.salesperson_ref_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_ref_id.message}</p>}
               {!watchedSalesperson && (
-                <Input className="mt-1.5" placeholder="Type the salesperson's name"
-                  {...register('salesperson_name')} />
+                <p className="text-[11px] text-muted-foreground mt-1">Not listed? Add them in Settings.</p>
               )}
-              {errors.salesperson_id && <p className="text-xs text-destructive mt-1">{errors.salesperson_id.message}</p>}
             </div>
             <div>
               <Label htmlFor="project_manager_id">Project manager *</Label>
