@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Loader2, X, AlertTriangle, Mail } from 'lucide-react'
+import { Loader2, X, AlertTriangle, Mail, Rows3, Columns3 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useSalesOrders, useCardNotices, SalesCard } from '../hooks/useSalesPanel'
 import {
   salesRows, salesMonths, salespeopleIn, monthName, forecastBand,
-  shortDay, longDay, brl, pecas,
+  shortDay, longDay, brl, pecas, SalesMonth,
 } from '../lib/salesPanel'
 import { orderSchedule } from '../lib/utils'
 import { cn } from '../lib/utils'
@@ -40,11 +40,40 @@ function Etapa({ status }: { status: string }) {
   )
 }
 
+/**
+ * Linhas ou colunas, e a escolha fica.
+ *
+ * Os dois desenhos servem a perguntas diferentes: em linhas se lê um mês
+ * inteiro de cima a baixo, em colunas se comparam os meses de lado. Hoje
+ * dezembro tem 28 pedidos e os vizinhos têm 2, 1 e 5 — a coluna mostra a
+ * parede, a linha mostra o que tem dentro dela.
+ *
+ * Guardado no navegador porque é preferência de quem olha, não dado do
+ * negócio: ninguém mais precisa saber como você gosta de ver. Se o
+ * `localStorage` estiver bloqueado, a tela abre em linhas e funciona igual.
+ */
+type Vista = 'linhas' | 'colunas'
+const VISTA_KEY = 'rdx.sales.vista'
+
+function vistaGuardada(): Vista {
+  try {
+    return localStorage.getItem(VISTA_KEY) === 'colunas' ? 'colunas' : 'linhas'
+  } catch {
+    return 'linhas'
+  }
+}
+
 export function SalesPage() {
   const { user } = useAuth()
   const { data: cards, isLoading } = useSalesOrders()
   const [quem, setQuem] = useState<string | null>(null)
   const [aberto, setAberto] = useState<SalesCard | null>(null)
+  const [vista, setVista] = useState<Vista>(vistaGuardada)
+
+  function escolher(v: Vista) {
+    setVista(v)
+    try { localStorage.setItem(VISTA_KEY, v) } catch { /* aba privada, e tudo bem */ }
+  }
 
   const todas = useMemo(() => salesRows((cards ?? []) as SalesCard[]), [cards])
   const vendedores = useMemo(() => salespeopleIn(todas), [todas])
@@ -68,7 +97,8 @@ export function SalesPage() {
 
   return (
     <div className="h-full overflow-y-auto" lang="pt-BR" translate="no">
-      <div className="max-w-6xl mx-auto px-6 py-7">
+      <div className={cn('mx-auto px-6 py-7',
+        vista === 'colunas' ? 'max-w-[1600px]' : 'max-w-6xl')}>
 
         <div className="flex items-end justify-between gap-5 border-b border-border pb-4">
           <div>
@@ -85,11 +115,26 @@ export function SalesPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 mt-4 mb-5">
-          <Filtro on={!quem} onClick={() => setQuem(null)}>Todos os vendedores</Filtro>
-          {vendedores.map((v) => (
-            <Filtro key={v} on={quem === v} onClick={() => setQuem(v)}>{v}</Filtro>
-          ))}
+        <div className="flex items-start justify-between gap-4 mt-4 mb-5">
+          <div className="flex flex-wrap gap-1.5">
+            <Filtro on={!quem} onClick={() => setQuem(null)}>Todos os vendedores</Filtro>
+            {vendedores.map((v) => (
+              <Filtro key={v} on={quem === v} onClick={() => setQuem(v)}>{v}</Filtro>
+            ))}
+          </div>
+
+          {/* Linhas ou colunas. Dois botões, não um que alterna: quem olha vê
+              em qual dos dois está sem ter que clicar para descobrir. */}
+          <div className="flex shrink-0 rounded-lg border border-border overflow-hidden">
+            <Vistao on={vista === 'linhas'} onClick={() => escolher('linhas')}
+              titulo="Um mês embaixo do outro">
+              <Rows3 className="h-3.5 w-3.5" /> Linhas
+            </Vistao>
+            <Vistao on={vista === 'colunas'} onClick={() => escolher('colunas')}
+              titulo="Um mês ao lado do outro">
+              <Columns3 className="h-3.5 w-3.5" /> Colunas
+            </Vistao>
+          </div>
         </div>
 
         {isLoading && (
@@ -104,48 +149,9 @@ export function SalesPage() {
           </p>
         )}
 
-        {meses.map((mes) => (
-          <div key={mes.key} className="rounded-xl border border-border bg-card mb-3 overflow-hidden">
-            <div className="flex items-baseline justify-between px-4 py-2.5 border-b border-border bg-muted/30">
-              <p className="text-[13px] font-semibold">{monthName(mes.key)}</p>
-              <p className="text-sm font-semibold tabular-nums">
-                {mes.rows.length ? brl(mes.total) : '—'}
-                <span className="text-[11px] text-muted-foreground font-normal ml-1">
-                  · {mes.rows.length} pedido{mes.rows.length === 1 ? '' : 's'}
-                </span>
-              </p>
-            </div>
-
-            {mes.rows.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground text-center py-4">Nada chegando</p>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    <th className="text-left font-medium px-4 py-1.5">Cliente</th>
-                    <th className="text-left font-medium px-4 py-1.5">Valor de venda</th>
-                    <th className="text-left font-medium px-4 py-1.5">Pedido de Compra</th>
-                    <th className="text-left font-medium px-4 py-1.5">Etapa</th>
-                    <th className="text-left font-medium px-4 py-1.5">Vendedor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mes.rows.map((r) => (
-                    <tr key={r.card.id}
-                      onClick={() => setAberto(r.card as SalesCard)}
-                      className="border-t border-border/60 hover:bg-muted/40 cursor-pointer">
-                      <td className="px-4 py-2 text-[12.5px] font-bold">{r.client}</td>
-                      <td className="px-4 py-2 text-[12.5px] tabular-nums">{brl(r.value)}</td>
-                      <td className="px-4 py-2 text-[12.5px] tabular-nums">{r.card.purchase_order ?? '—'}</td>
-                      <td className="px-4 py-2"><Etapa status={r.card.status} /></td>
-                      <td className="px-4 py-2 text-[11.5px] text-muted-foreground">{r.salesperson}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        ))}
+        {vista === 'linhas'
+          ? <EmLinhas meses={meses} onOpen={setAberto} />
+          : <EmColunas meses={meses} onOpen={setAberto} />}
 
         <p className="text-[11px] text-muted-foreground leading-relaxed mt-4">
           O mês é o da chegada ao Brasil, pela mesma regra que o cliente lê no email: a data que a
@@ -156,6 +162,125 @@ export function SalesPage() {
 
       {aberto && <Gaveta card={aberto} onClose={() => setAberto(null)} />}
     </div>
+  )
+}
+
+/** Um mês embaixo do outro: o mês inteiro se lê de uma vez. */
+function EmLinhas({ meses, onOpen }: {
+  meses: SalesMonth[]; onOpen: (c: SalesCard) => void
+}) {
+  return (
+    <>
+      {meses.map((mes) => (
+        <div key={mes.key} className="rounded-xl border border-border bg-card mb-3 overflow-hidden">
+          <CabecalhoMes mes={mes} />
+          {mes.rows.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center py-4">Nada chegando</p>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <th className="text-left font-medium px-4 py-1.5">Cliente</th>
+                  <th className="text-left font-medium px-4 py-1.5">Valor de venda</th>
+                  <th className="text-left font-medium px-4 py-1.5">Pedido de Compra</th>
+                  <th className="text-left font-medium px-4 py-1.5">Etapa</th>
+                  <th className="text-left font-medium px-4 py-1.5">Vendedor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mes.rows.map((r) => (
+                  <tr key={r.card.id} onClick={() => onOpen(r.card as SalesCard)}
+                    className="border-t border-border/60 hover:bg-muted/40 cursor-pointer">
+                    <td className="px-4 py-2 text-[12.5px] font-bold">{r.client}</td>
+                    <td className="px-4 py-2 text-[12.5px] tabular-nums">{brl(r.value)}</td>
+                    <td className="px-4 py-2 text-[12.5px] tabular-nums">{r.card.purchase_order ?? '—'}</td>
+                    <td className="px-4 py-2"><Etapa status={r.card.status} /></td>
+                    <td className="px-4 py-2 text-[11.5px] text-muted-foreground">{r.salesperson}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+    </>
+  )
+}
+
+/**
+ * Um mês ao lado do outro, cada um lido de cima a baixo.
+ *
+ * As colunas têm largura mínima e a faixa rola de lado: com quatro meses cabe
+ * na tela, e com doze continua legível em vez de virar doze tiras finas.
+ */
+function EmColunas({ meses, onOpen }: {
+  meses: SalesMonth[]; onOpen: (c: SalesCard) => void
+}) {
+  return (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex gap-3 items-start" style={{ minWidth: meses.length * 260 }}>
+        {meses.map((mes) => (
+          <div key={mes.key}
+            className="flex-1 min-w-[250px] rounded-xl border border-border bg-card overflow-hidden">
+            <CabecalhoMes mes={mes} empilhado />
+            <div className="p-2 flex flex-col gap-1.5">
+              {mes.rows.length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-4">Nada chegando</p>
+              )}
+              {mes.rows.map((r) => (
+                <button key={r.card.id} onClick={() => onOpen(r.card as SalesCard)}
+                  className="text-left rounded-lg border border-border bg-card px-2.5 py-2
+                    hover:border-muted-foreground/40 transition-colors">
+                  <p className="text-[12.5px] font-bold leading-tight">{r.client}</p>
+                  <p className="text-[13px] tabular-nums mt-1">{brl(r.value)}</p>
+                  <p className="text-[11px] text-muted-foreground tabular-nums">
+                    Pedido de Compra {r.card.purchase_order ?? '—'}
+                  </p>
+                  <div className="flex items-center justify-between gap-2 mt-1.5">
+                    <Etapa status={r.card.status} />
+                    <span className="text-[10px] text-muted-foreground truncate">{r.salesperson}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CabecalhoMes({ mes, empilhado }: { mes: SalesMonth; empilhado?: boolean }) {
+  const total = mes.rows.length ? brl(mes.total) : '—'
+  const quantos = `${mes.rows.length} pedido${mes.rows.length === 1 ? '' : 's'}`
+  return (
+    <div className={cn('px-4 py-2.5 border-b border-border bg-muted/30',
+      empilhado ? '' : 'flex items-baseline justify-between')}>
+      <p className="text-[13px] font-semibold">{monthName(mes.key)}</p>
+      {empilhado ? (
+        <>
+          <p className="text-[15px] font-semibold tabular-nums mt-1">{total}</p>
+          <p className="text-[11px] text-muted-foreground">{quantos}</p>
+        </>
+      ) : (
+        <p className="text-sm font-semibold tabular-nums">
+          {total}
+          <span className="text-[11px] text-muted-foreground font-normal ml-1">· {quantos}</span>
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Vistao({ on, onClick, titulo, children }: {
+  on: boolean; onClick: () => void; titulo: string; children: React.ReactNode
+}) {
+  return (
+    <button onClick={onClick} title={titulo} aria-pressed={on}
+      className={cn('flex items-center gap-1.5 text-xs px-2.5 py-1.5 transition-colors',
+        on ? 'bg-foreground text-background font-semibold' : 'bg-card text-muted-foreground hover:bg-muted')}>
+      {children}
+    </button>
   )
 }
 
