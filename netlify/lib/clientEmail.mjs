@@ -104,6 +104,31 @@ export function monthShort(plain) {
   return `${curto[m - 1]} ${y}`
 }
 
+/**
+ * O dia em que a mercadoria chega ao Brasil.
+ *
+ * Chegou > data da fábrica + logística > plano de 120 dias desde a amostra.
+ * Cada degrau é mais firme que o de baixo, e o pedido sobe a escada conforme
+ * anda.
+ *
+ * Mora aqui, fora do construtor do email, porque o panorama diário agrupa os
+ * pedidos pelo mês desta data. Se ele tivesse a própria conta, um dia diria
+ * "dezembro" enquanto o cliente leria "janeiro" no email — e o CLAUDE.md
+ * conta o que aconteceu na última vez que duas telas calcularam o mesmo prazo
+ * cada uma por sua conta.
+ */
+export function arrivalDay(o) {
+  // `planFrom` é a âncora do plano: a aprovação da amostra, ou — para um
+  // pedido que nunca foi amostra — o dia em que foi confirmado. É campo
+  // separado de `sampleApprovedOn` de propósito: aquele é o que a régua
+  // mostra ao cliente, e escrever a data da confirmação ali faria a casa
+  // "Amostra aprovada" aparecer com dia num pedido que nunca teve amostra.
+  const plano = o.planFrom ?? o.sampleApprovedOn
+  return o.arrivedOn
+    ?? (o.readyOn ? addDays(o.readyOn, o.logisticsDays ?? DEFAULT_LOGISTICS_DAYS) : null)
+    ?? (plano ? addDays(plano, o.planDays ?? DEFAULT_PLAN_DAYS) : null)
+}
+
 /** Soma dias a um dia do calendário, sem passar por instante nenhum. */
 export function addDays(plain, days) {
   const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
@@ -300,12 +325,7 @@ export function clientEmail(o) {
     quantity: Number(i.quantity ?? 0),
   }))
   const pieces = items.reduce((s, i) => s + i.quantity, 0)
-  // Chegou > data da fábrica + logística > plano de 120 dias desde a amostra.
-  // Cada degrau é mais firme que o de baixo, e o cliente sobe conforme o
-  // pedido anda.
-  const arrival = o.arrivedOn
-    ?? (o.readyOn ? addDays(o.readyOn, o.logisticsDays ?? DEFAULT_LOGISTICS_DAYS) : null)
-    ?? (o.sampleApprovedOn ? addDays(o.sampleApprovedOn, o.planDays ?? DEFAULT_PLAN_DAYS) : null)
+  const arrival = arrivalDay(o)
 
   const steps = stageSteps(AVULSOS.includes(stage) ? (o.currentStage ?? 'Placed') : stage,
     { ...o, arrival })
@@ -471,6 +491,11 @@ export function cardToEmailInput(card, { stage, client, today, logisticsDays, pl
     items,
     sampleApprovedOn: plain(card?.sample_approved_at),
     placedOn: plain(card?.order_confirmed_at),
+    // A âncora do plano cai na confirmação quando não houve amostra, como o
+    // `orderSchedule` do hub já fazia. Sem isto, um pedido confirmado sem
+    // amostra dizia "chegada a confirmar" ao cliente enquanto o quadro
+    // mostrava um mês — a mesma pergunta respondida de dois jeitos.
+    planFrom: plain(card?.sample_approved_at) ?? plain(card?.order_confirmed_at),
     // Só sabemos quando a produção começou enquanto o card está nela:
     // `status_since` é reescrito na etapa seguinte. Depois disso a casa fica
     // sem data, em vez de mostrar a data de outra etapa.

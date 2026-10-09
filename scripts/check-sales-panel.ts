@@ -240,6 +240,16 @@ async function main() {
   check('nenhum vendedor duplicado por grafia',
     salespeopleIn(rows).length, new Set(salespeopleIn(rows).map((s) => s.toUpperCase())).size)
 
+  // A trava mais importante deste arquivo: o email diário agrupa os pedidos
+  // por mês de chegada, e o painel também. Se discordarem, o Patrick lê
+  // "dezembro" num lugar e "janeiro" no outro para o mesmo pedido.
+  const { reportRows } = await import('../netlify/lib/dailyReport.mjs')
+  const doEmail = reportRows(cards as never).rows as { cardId: string; mes: string }[]
+  const mesDoPainel = new Map(rows.map((r) => [r.card.id, r.month]))
+  check('o email e o painel contam os mesmos pedidos', doEmail.length, rows.length)
+  check('e põem cada um no mesmo mês',
+    doEmail.filter((r) => mesDoPainel.get(r.cardId) !== r.mes).map((r) => r.cardId), [])
+
   console.log(bad === 0 ? '\nTudo certo.\n' : `\n${bad} falha(s).\n`)
   process.exit(bad === 0 ? 0 : 1)
 }

@@ -1,38 +1,35 @@
 import type { Config } from '@netlify/functions'
+import { dailyReport } from '../lib/dailyReport.mjs'
 
-// Daily pipeline snapshot, emailed to the Redantex team.
-//
-// Runs on Netlify's scheduler rather than a Supabase Edge Function because the
-// Supabase CLI is not authenticated for this project — this deploys with the
-// ordinary git push.
-//
-// Required environment variables (set in Netlify, never in the repo):
-//   SUPABASE_URL                  same project URL the app uses
-//   SUPABASE_SERVICE_ROLE_KEY     reads past RLS; this function has no user session
-//   RESEND_API_KEY                https://resend.com
-//   SUMMARY_FROM                  e.g. "RDX Hub <hub@yourdomain.com>" (verified sender)
-//   SUMMARY_RECIPIENTS            comma-separated addresses
+/**
+ * O panorama diário da Redantex: um kanban de meses, às 8h.
+ *
+ * Três coisas mudaram em 9 out 2026, quando o Patrick passou a receber:
+ *
+ *   **A manchete era US$ 0,00.** Somava `value_usd`, que nunca foi preenchido
+ *   em pedido nenhum — o dinheiro mora em `value_brl`. O maior número do email
+ *   era zero todos os dias.
+ *
+ *   **As etapas tinham envelhecido.** A seção de amostras procurava
+ *   `Under Revision`, e a etapa real é `Under RDX Revision`: dizia "8 total"
+ *   seguido de quatro zeros. O desenho novo não lista etapa por nome, então o
+ *   problema deixou de existir em vez de ser remendado.
+ *
+ *   **Os destinatários moravam numa variável de ambiente**, e variável só vale
+ *   no deploy seguinte: incluir alguém custava quinze créditos e acesso ao
+ *   painel do Netlify. Agora moram em `report_recipients` (059) e viram numa
+ *   tela. A variável fica como rede de segurança para o caso de a tabela estar
+ *   vazia — um relatório que para de chegar em silêncio é pior que um
+ *   relatório com um destinatário a mais.
+ *
+ * Variáveis de ambiente (no Netlify, nunca no repositório):
+ *   SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY · RESEND_API_KEY
+ *   SUMMARY_FROM · SUMMARY_RECIPIENTS (reserva)
+ */
 
-const BOARDS = ['quotes', 'samples', 'orders'] as const
-type Board = typeof BOARDS[number]
-
-const BOARD_COLUMNS: Record<Board, string[]> = {
-  quotes: ['Requested', 'Quoted', 'Confirmed', 'Declined'],
-  samples: ['Requested', 'In Preparation', 'Under Revision', 'Approved'],
-  orders: ['Placed', 'In Production', 'Ready to Ship', 'Shipped'],
-}
-
-const BOARD_LABEL: Record<Board, string> = {
-  quotes: 'Quotes',
-  samples: 'Samples',
-  orders: 'Orders',
-}
-
-interface CardRow {
-  board: Board
-  status: string
-  value_usd: number | null
-}
+// Retrato antigo não serve para comparar nem para consultar; quatro meses é
+// folga suficiente para olhar para trás sem a tabela crescer para sempre.
+const GUARDA_DIAS = 120
 
 function required(name: string): string {
   const value = process.env[name]
@@ -40,149 +37,131 @@ function required(name: string): string {
   return value
 }
 
-async function loadCards(): Promise<CardRow[]> {
+function db(path: string, init: RequestInit = {}) {
   const url = required('SUPABASE_URL')
   const key = required('SUPABASE_SERVICE_ROLE_KEY')
-
-  const response = await fetch(
-    `${url}/rest/v1/cards?select=board,status,value_usd&archived=eq.false`,
-    { headers: { apikey: key, Authorization: `Bearer ${key}` } },
-  )
-  if (!response.ok) {
-    throw new Error(`Supabase returned ${response.status}: ${await response.text()}`)
-  }
-  return response.json()
+  return fetch(`${url}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  })
 }
 
-const money = (n: number) =>
-  '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+async function get(path: string) {
+  const res = await db(path)
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`)
+  return res.json()
+}
 
-function buildEmail(cards: CardRow[], today: string) {
-  const counts = new Map<string, number>()
-  for (const card of cards) counts.set(`${card.board}|${card.status}`, (counts.get(`${card.board}|${card.status}`) ?? 0) + 1)
+/** Hoje em São Paulo, como `YYYY-MM-DD`. */
+function hoje(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+}
 
-  // Value still in play: everything on the orders board that has not shipped.
-  const inProduction = cards
-    .filter(c => c.board === 'orders' && c.status !== 'Shipped')
-    .reduce((sum, c) => sum + (c.value_usd ?? 0), 0)
+const CAMPOS = [
+  'id', 'ref_number', 'status', 'archived', 'client_name', 'value_brl',
+  'salesperson_name', 'sample_approved_at', 'order_confirmed_at',
+  'delivery_date', 'arrived_at',
+  'client:clients(name,email)',
+].join(',')
 
-  const totals: Record<Board, number> = {
-    quotes: cards.filter(c => c.board === 'quotes').length,
-    samples: cards.filter(c => c.board === 'samples').length,
-    orders: cards.filter(c => c.board === 'orders').length,
+async function destinatarios(): Promise<string[]> {
+  const linhas = await get('report_recipients?select=email&active=is.true')
+  const lista = (linhas as { email: string }[])
+    .map((r) => String(r.email ?? '').trim())
+    .filter(Boolean)
+  if (lista.length > 0) return [...new Set(lista)]
+
+  // Tabela vazia: cai na variável antiga em vez de não mandar nada.
+  const reserva = (process.env.SUMMARY_RECIPIENTS ?? '')
+    .split(',').map((s) => s.trim()).filter(Boolean)
+  if (reserva.length === 0) {
+    throw new Error('Nobody to send to: report_recipients is empty and SUMMARY_RECIPIENTS is unset')
   }
+  return [...new Set(reserva)]
+}
 
-  const section = (board: Board) => {
-    const rows = BOARD_COLUMNS[board].map(status => {
-      const n = counts.get(`${board}|${status}`) ?? 0
-      return `
-        <tr>
-          <td style="padding:7px 0;border-bottom:1px solid #eceef1;font-size:14px;color:${n ? '#1a1d23' : '#9aa1ab'}">${status}</td>
-          <td style="padding:7px 0;border-bottom:1px solid #eceef1;font-size:14px;text-align:right;font-weight:${n ? 600 : 400};color:${n ? '#1a1d23' : '#9aa1ab'}">${n}</td>
-        </tr>`
-    }).join('')
-
-    return `
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 26px">
-        <tr>
-          <td style="padding-bottom:6px">
-            <span style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b1a1a">${BOARD_LABEL[board]}</span>
-            <span style="font-size:12px;color:#9aa1ab"> · ${totals[board]} total</span>
-          </td>
-        </tr>
-        <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td></tr>
-      </table>`
-  }
-
-  const html = `<!doctype html>
-<html><body style="margin:0;padding:24px;background:#f5f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e6ea;border-radius:10px">
-        <tr><td style="padding:26px 28px 20px;border-bottom:1px solid #eceef1">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8b1a1a">Redantex · Supplier Hub</div>
-          <div style="font-size:20px;font-weight:650;color:#1a1d23;margin-top:5px">Daily pipeline</div>
-          <div style="font-size:13px;color:#6b727d;margin-top:2px">${today}</div>
-        </td></tr>
-
-        <tr><td style="padding:22px 28px 4px">
-          <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b727d">In production</div>
-          <div style="font-size:30px;font-weight:700;color:#1a1d23;margin-top:3px">${money(inProduction)}</div>
-          <div style="font-size:12px;color:#9aa1ab;margin-top:1px">across ${cards.filter(c => c.board === 'orders' && c.status !== 'Shipped').length} order(s) not yet shipped</div>
-        </td></tr>
-
-        <tr><td style="padding:24px 28px 6px">
-          ${section('orders')}
-          ${section('samples')}
-          ${section('quotes')}
-        </td></tr>
-
-        <tr><td style="padding:6px 28px 26px;border-top:1px solid #eceef1">
-          <div style="font-size:12px;color:#9aa1ab;padding-top:14px">
-            Archived cards are excluded. Sent automatically each morning.
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`
-
-  const text = [
-    `Redantex — Daily pipeline · ${today}`,
-    '',
-    `In production: ${money(inProduction)}`,
-    '',
-    ...BOARDS.flatMap(board => [
-      `${BOARD_LABEL[board]} (${totals[board]})`,
-      ...BOARD_COLUMNS[board].map(s => `  ${s}: ${counts.get(`${board}|${s}`) ?? 0}`),
-      '',
-    ]),
-  ].join('\n')
-
-  return { html, text }
+/**
+ * O retrato mais recente anterior a hoje.
+ *
+ * Anterior a hoje, e não "o último": se esta função rodar duas vezes no mesmo
+ * dia, comparar com o retrato de hoje não acharia mudança nenhuma e o aviso
+ * desapareceria da segunda cópia do email.
+ */
+async function retratoAnterior(dia: string) {
+  const ultimo = await get(
+    `arrival_snapshots?select=taken_on&taken_on=lt.${dia}&order=taken_on.desc&limit=1`)
+  const quando = (ultimo as { taken_on: string }[])[0]?.taken_on
+  if (!quando) return { quando: null, linhas: [] }
+  const linhas = await get(
+    `arrival_snapshots?select=card_id,card_ref,client_name,month,value_brl&taken_on=eq.${quando}`)
+  return { quando, linhas }
 }
 
 export default async () => {
-  const cards = await loadCards()
+  const dia = hoje()
+  const cards = await get(`cards?select=${encodeURIComponent(CAMPOS)}&board=eq.orders&archived=eq.false`)
+  const { quando, linhas } = await retratoAnterior(dia)
 
-  const today = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/Sao_Paulo',
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  }).format(new Date())
+  const { subject, html, text, rows, moves } =
+    dailyReport({ cards, previous: linhas, today: dia })
 
-  const { html, text } = buildEmail(cards, today)
+  const para = await destinatarios()
 
-  const recipients = required('SUMMARY_RECIPIENTS').split(',').map(s => s.trim()).filter(Boolean)
-  if (recipients.length === 0) throw new Error('SUMMARY_RECIPIENTS is empty')
-
-  const response = await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${required('RESEND_API_KEY')}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      from: required('SUMMARY_FROM'),
-      to: recipients,
-      subject: `Redantex — Daily pipeline · ${today}`,
-      html,
-      text,
-    }),
+    body: JSON.stringify({ from: required('SUMMARY_FROM'), to: para, subject, html, text }),
   })
-
-  if (!response.ok) {
-    // Surfacing the provider's reason here is the difference between a fixable
-    // report and a scheduled job that quietly stops arriving.
-    const detail = await response.text()
-    throw new Error(`Resend returned ${response.status}: ${detail}`)
+  if (!res.ok) {
+    // O motivo do provedor é a diferença entre um relatório consertável e um
+    // agendamento que silenciosamente para de chegar.
+    throw new Error(`Resend ${res.status}: ${await res.text()}`)
   }
 
-  return new Response(JSON.stringify({ sent: recipients.length, cards: cards.length }), {
-    headers: { 'Content-Type': 'application/json' },
-  })
+  // O retrato é gravado **depois** do envio: se o email falhar, amanhã ainda
+  // compara com o de ontem e o aviso de mudança de mês não se perde.
+  const retrato = rows.map((r: {
+    cardId: string; ref: string; cliente: string; mes: string; valor: number
+  }) => ({
+    taken_on: dia,
+    card_id: r.cardId,
+    card_ref: r.ref,
+    client_name: r.cliente,
+    month: r.mes,
+    value_brl: r.valor,
+  }))
+
+  if (retrato.length > 0) {
+    // `merge-duplicates` para o caso de uma segunda execução no mesmo dia:
+    // reescreve o retrato em vez de estourar no índice único.
+    const ins = await db('arrival_snapshots?on_conflict=taken_on,card_id', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal,resolution=merge-duplicates' },
+      body: JSON.stringify(retrato),
+    })
+    if (!ins.ok) console.error('Snapshot:', ins.status, await ins.text())
+  }
+
+  const corte = new Date(Date.now() - GUARDA_DIAS * 86_400_000).toISOString().slice(0, 10)
+  await db(`arrival_snapshots?taken_on=lt.${corte}`, { method: 'DELETE' })
+    .catch((err) => console.error('Prune:', err))
+
+  return new Response(JSON.stringify({
+    sent: para.length, orders: rows.length, moves: moves.length, comparedWith: quando,
+  }), { headers: { 'Content-Type': 'application/json' } })
 }
 
-// 11:00 UTC — 08:00 in São Paulo, before the working day starts.
+// 11:00 UTC — 08:00 em São Paulo, antes de o dia começar.
 export const config: Config = {
   schedule: '0 11 * * *',
 }
