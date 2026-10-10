@@ -216,16 +216,22 @@ export const STAGE_INDEX = {
 }
 
 export function stageSteps(stage, dates) {
-  const saiu = stage === 'Collected' || stage === 'Shipped' || stage === 'Arrived'
+  // Coletado não é embarcado, e a manchete deste email diz "foi coletada": a
+  // régua escrever "Embarcado" logo abaixo seria o email se contradizendo na
+  // mesma tela. A casa é a mesma, a palavra é a do momento.
+  const coletado = stage === 'Collected'
+  const saiu = coletado || stage === 'Shipped' || stage === 'Arrived'
   const now = STAGE_INDEX[stage] ?? 1
-  const quarto = saiu ? dates.shippedOn ?? dates.readyOn : dates.readyOn
+  const quarto = coletado
+    ? dates.collectedOn ?? dates.readyOn
+    : saiu ? dates.shippedOn ?? dates.readyOn : dates.readyOn
   const ultimo = dates.arrivedOn ?? dates.arrival
   const base = [
     { lines: ['Amostra', 'aprovada'], day: shortDay(dates.sampleApprovedOn), month: monthShort(dates.sampleApprovedOn) },
     { lines: ['Pedido', 'confirmado'], day: shortDay(dates.placedOn), month: monthShort(dates.placedOn) },
     { lines: ['Em', 'produção'], day: shortDay(dates.productionOn), month: monthShort(dates.productionOn) },
     {
-      lines: saiu ? ['Embarcado'] : ['Pronto para', 'embarque'],
+      lines: coletado ? ['Coletado'] : saiu ? ['Embarcado'] : ['Pronto para', 'embarque'],
       day: shortDay(quarto), month: monthShort(quarto),
     },
     { lines: ['Chegada', 'ao Brasil'], day: shortDay(ultimo), month: monthShort(ultimo) },
@@ -500,6 +506,9 @@ export function cardToEmailInput(card, { stage, client, today, logisticsDays, pl
     // `status_since` é reescrito na etapa seguinte. Depois disso a casa fica
     // sem data, em vez de mostrar a data de outra etapa.
     productionOn: card?.status === 'In Production' ? stamp(card?.status_since) : undefined,
+    // Mesma razão de `productionOn`: o dia da coleta não tem coluna própria, e
+    // `status_since` só fala dele enquanto o card está em Collected.
+    collectedOn: card?.status === 'Collected' ? stamp(card?.status_since) : undefined,
     readyOn: plain(card?.delivery_date),
     shippedOn: stamp(card?.shipped_at),
     arrivedOn: plain(card?.arrived_at),

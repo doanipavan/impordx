@@ -1,5 +1,5 @@
 import { orderSchedule } from './utils'
-import { Card } from '../types'
+import { Card, isRdxLeg } from '../types'
 
 /**
  * Um pedido como uma linha na régua do tempo.
@@ -95,7 +95,7 @@ export function buildRow(card: Card, today: Date): Row | null {
   const delivery = calendarDay(card.delivery_date)
   const arrivedAt = calendarDay(card.arrived_at ?? undefined)
   const arrived = card.status === 'Arrived'
-  const shipping = arrived || card.status === 'Ready to Ship' || card.status === 'Shipped'
+  const shipping = isRdxLeg(card.status)
 
   // A fase de amostra só existe se o relógio estiver ancorado numa aprovação de
   // amostra. Ancorado na proforma, não houve amostra a desenhar — e inventar

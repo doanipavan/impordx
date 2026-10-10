@@ -5,7 +5,7 @@ export type SampleStatus = 'Requested' | 'In Preparation' | 'Under RDX Revision'
   | 'Under DEQI Revision' | 'Approved' | 'Lost'
 export type OrderStatus = 'Purchasing' | 'Commercial' | 'PI Requested'
   | 'PI In Preparation' | 'PI Approved' | 'Placed'
-  | 'In Production' | 'Ready to Ship' | 'Shipped' | 'Arrived'
+  | 'In Production' | 'Ready to Ship' | 'Collected' | 'Shipped' | 'Arrived'
 export type CardStatus = QuoteStatus | SampleStatus | OrderStatus
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
@@ -218,7 +218,7 @@ export const BOARD_COLUMNS: Record<BoardType, CardStatus[]> = {
   quotes: ['Requested', 'Quoted', 'Confirmed', 'Declined'],
   samples: ['Requested', 'In Preparation', 'Under RDX Revision', 'Under DEQI Revision', 'Approved', 'Lost'],
   orders: ['Purchasing', 'Commercial', 'PI Requested', 'PI In Preparation', 'PI Approved',
-           'Placed', 'In Production', 'Ready to Ship', 'Shipped', 'Arrived'],
+           'Placed', 'In Production', 'Ready to Ship', 'Collected', 'Shipped', 'Arrived'],
 }
 
 // Purchasing and Commercial are Redantex's own intake — the supplier has no
@@ -231,10 +231,25 @@ export const REDANTEX_ONLY_STATUSES = ['Purchasing', 'Commercial', 'Arrived']
 // and the number stops moving. Before it, everything is still a proposal. The
 // two halves are counted separately because they answer different questions —
 // one is money committed, the other is money at stake.
-export const PLACED_ONWARD: CardStatus[] = ['Placed', 'In Production', 'Ready to Ship', 'Shipped', 'Arrived']
+export const PLACED_ONWARD: CardStatus[] = ['Placed', 'In Production', 'Ready to Ship',
+  'Collected', 'Shipped', 'Arrived']
 
 export function isPlacedOnward(status: CardStatus): boolean {
   return PLACED_ONWARD.includes(status)
+}
+
+// Once the goods are ready, the clock that matters is Redantex's: the factory
+// has done its part and what remains is collection, shipping and customs.
+// `Collected` belongs here by definition — the carrier has the cargo. The Gantt
+// and the card panel both ask this question, and each keeping its own list of
+// statuses is how a stage gets forgotten in one of them.
+const RDX_LEG: CardStatus[] = ['Ready to Ship', 'Collected', 'Shipped', 'Arrived']
+
+// Aceita `string` de propósito: `orderClock` recebe o card numa forma solta,
+// com `status?: string`, e um valor que não seja etapa simplesmente não está
+// na lista. Melhor isso que um cast que esconderia uma incompatibilidade real.
+export function isRdxLeg(status: string): boolean {
+  return (RDX_LEG as string[]).includes(status)
 }
 
 export function visibleColumns(board: BoardType, isSupplier: boolean): CardStatus[] {
@@ -297,6 +312,9 @@ export const STATUS_COLORS: Record<CardStatus, string> = {
   Placed: WAITING,
   'In Production': ACTIVE,
   'Ready to Ship': ACTIVE,
+  // Coletado ainda é trabalho em curso: a carga saiu da fábrica mas não
+  // embarcou, e está na mão do transportador.
+  Collected: ACTIVE,
   // Embarcado é "feito" para o fornecedor; chegado é "feito" para a Redantex.
   // Os dois são verdes: no vocabulário de cor do hub, verde é concluído.
   Shipped: DONE,

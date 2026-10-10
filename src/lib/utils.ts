@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { format, formatDistanceToNow, isAfter, parseISO } from 'date-fns'
+import { isRdxLeg } from '../types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -478,9 +479,11 @@ export function orderClock(
   }
 
   // Status is the truth about which leg is running: goods that are ready have
-  // left the factory's hands even if the calendar disagrees.
+  // left the factory's hands even if the calendar disagrees. A lista das
+  // etapas mora em `types`, com a do Gantt — duas cópias é como uma etapa
+  // nova entra numa tela e esquece a outra.
   const arrived = status === 'Arrived'
-  const shipping = arrived || status === 'Ready to Ship' || status === 'Shipped'
+  const shipping = isRdxLeg(status)
 
   return {
     activeLeg: shipping ? 'rdx' : 'deqi',

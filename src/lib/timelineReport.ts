@@ -42,7 +42,8 @@ export const STAGE_GROUPS: Array<{ id: StageGroup; label: string; statuses: Orde
   { id: 'before', label: 'Waiting on the proforma',
     statuses: ['Purchasing', 'Commercial', 'PI Requested', 'PI In Preparation', 'PI Approved'] },
   { id: 'production', label: 'Placed · in production', statuses: ['Placed', 'In Production'] },
-  { id: 'shipped', label: 'Ready · shipped', statuses: ['Ready to Ship', 'Shipped'] },
+  { id: 'shipped', label: 'Ready · collected · shipped',
+    statuses: ['Ready to Ship', 'Collected', 'Shipped'] },
   { id: 'arrived', label: 'Arrived', statuses: ['Arrived'] },
 ]
 

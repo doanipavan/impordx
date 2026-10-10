@@ -19,6 +19,7 @@ const STATUS_STYLES: Partial<Record<CardStatus, string>> = {
   Placed: 'border-t-slate-400',
   'In Production': 'border-t-blue-400',
   'Ready to Ship': 'border-t-teal-400',
+  Collected: 'border-t-cyan-400',
   Shipped: 'border-t-green-400',
 }
 
