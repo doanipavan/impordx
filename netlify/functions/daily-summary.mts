@@ -1,5 +1,6 @@
 import type { Config } from '@netlify/functions'
 import { dailyReport } from '../lib/dailyReport.mjs'
+import { recordRun } from '../lib/jobRuns.mjs'
 
 /**
  * O panorama diário da Redantex: um kanban de meses, às 8h.
@@ -105,6 +106,22 @@ async function retratoAnterior(dia: string) {
 }
 
 export default async () => {
+  // O batimento sai no `finally`: a tela de Settings precisa saber tanto que a
+  // rotina rodou quanto que ela falhou, e uma falha que não registra nada é
+  // indistinguível de um agendamento que parou.
+  let nota = 'não chegou ao fim'
+  let ok = false
+  try {
+    return await rodar((n) => { nota = n; ok = true })
+  } catch (err) {
+    nota = `falhou: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
+    throw err
+  } finally {
+    await recordRun({ job: 'daily-summary', note: nota, ok })
+  }
+}
+
+async function rodar(anotar: (nota: string) => void) {
   const dia = hoje()
   const cards = await get(`cards?select=${encodeURIComponent(CAMPOS)}&board=eq.orders&archived=eq.false`)
   const { quando, linhas } = await retratoAnterior(dia)
@@ -155,6 +172,10 @@ export default async () => {
   const corte = new Date(Date.now() - GUARDA_DIAS * 86_400_000).toISOString().slice(0, 10)
   await db(`arrival_snapshots?taken_on=lt.${corte}`, { method: 'DELETE' })
     .catch((err) => console.error('Prune:', err))
+
+  anotar(`${para.length} destinatário(s) · ${rows.length} pedidos · `
+    + (moves.length ? `${moves.length} mudança(s) de mês` : 'nada mudou')
+    + (quando ? '' : ' · primeiro retrato'))
 
   return new Response(JSON.stringify({
     sent: para.length, orders: rows.length, moves: moves.length, comparedWith: quando,

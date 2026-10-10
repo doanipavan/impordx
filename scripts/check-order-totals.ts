@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { boardTotals, bucketFor, OrderItemRow } from '../src/lib/orderTotals'
-import { BoardType, Card, CardStatus } from '../src/types'
+import { BoardType, Card, CardStatus, PLACED_ONWARD } from '../src/types'
 
 const { Client } = createRequire(join(homedir(), '.rdx-dbtool/db.mjs'))('pg')
 
@@ -48,9 +48,15 @@ async function main() {
   `)
 
   // A mesma pergunta, feita ao banco em SQL.
+  //
+  // A lista de etapas vai como parâmetro, vinda de `PLACED_ONWARD`, em vez de
+  // escrita aqui à mão. Escrita à mão ela envelheceu duas vezes sem ninguém
+  // notar: ficou sem `Arrived` desde a migração 042 e sem `Collected` desde a
+  // 060, e só apareceu quando um card de verdade entrou numa delas — aí o
+  // teste acusou o código, que estava certo.
   const { rows: [sql] } = await db.query(`
     with g as (
-      select case when c.status in ('Placed','In Production','Ready to Ship','Shipped')
+      select case when c.status = any($1::text[])
                   then 'feito' else 'aberto' end as grupo,
              c.id as card_id, i.quantity, i.unit_price_usd, p.sale_price_brl
         from cards c
@@ -67,7 +73,7 @@ async function main() {
       (select coalesce(sum(quantity),0) from g where grupo='aberto')::int as aberto_pecas,
       (select coalesce(sum(quantity*unit_price_usd),0) from g where grupo='aberto')::float8 as aberto_usd,
       (select coalesce(sum(quantity*sale_price_brl),0) from g where grupo='aberto')::float8 as aberto_brl
-  `)
+  `, [PLACED_ONWARD])
 
   const cards = cardRows as Card[]
   const rows = itemRows as OrderItemRow[]

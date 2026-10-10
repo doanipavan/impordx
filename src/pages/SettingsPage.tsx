@@ -5,6 +5,7 @@ import { useToast } from '../components/ui/toast'
 import { Button } from '../components/ui/button'
 import { Salespeople } from '../components/settings/Salespeople'
 import { Recipients } from '../components/settings/Recipients'
+import { Schedules } from '../components/settings/Schedules'
 import { formatDateTime } from '../lib/utils'
 
 /**
@@ -115,6 +116,8 @@ export function SettingsPage() {
         </p>
 
         <Recipients />
+
+        <Schedules />
 
         <Salespeople />
       </div>
