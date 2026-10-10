@@ -53,17 +53,41 @@ export function monthName(key: string): string {
  * `scripts/check-sales-panel.ts` compara as duas em cima das mesmas datas e
  * falha se discordarem.
  */
-export function forecastBand(plain?: string | null): string | null {
+export interface Decendio { de: number; ate: number; mes: string; ano: number }
+
+/** O terço do mês em que a previsão cai. Uma conta, duas frases abaixo. */
+export function decendio(plain?: string | null): Decendio | null {
   if (!plain) return null
   const [y, m, d] = String(plain).slice(0, 10).split('-').map(Number)
   if (!y || !m || !d) return null
   const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  const de = d <= 10 ? 1 : d <= 20 ? 11 : 21
-  const ate = d <= 10 ? 10 : d <= 20 ? 20 : ultimo
-  // A frase inteira, palavra por palavra como o cliente a recebeu. Devolver
-  // só "11 a 20" convidava quem chama a escrever "entre" na frente, e foi o
-  // que aconteceu nas duas telas: "chegada entre 11 a 20 de janeiro".
-  return `entre ${de} e ${ate} de ${MESES[m - 1]} de ${y}`
+  return {
+    de: d <= 10 ? 1 : d <= 20 ? 11 : 21,
+    ate: d <= 10 ? 10 : d <= 20 ? 20 : ultimo,
+    mes: MESES[m - 1],
+    ano: y,
+  }
+}
+
+/**
+ * A frase inteira, palavra por palavra como o cliente a recebeu.
+ *
+ * Devolver só "11 a 20" convidava quem chama a escrever "entre" na frente, e
+ * foi o que aconteceu nas duas telas: "chegada entre 11 a 20 de janeiro".
+ */
+export function forecastBand(plain?: string | null): string | null {
+  const d = decendio(plain)
+  return d ? `entre ${d.de} e ${d.ate} de ${d.mes} de ${d.ano}` : null
+}
+
+/**
+ * Só os dois dias, para quando o mês já está escrito em cima — é o caso da
+ * coluna do mês na tela do vendedor, onde repetir "de janeiro" em cada cartão
+ * gasta a largura que o nome do cliente precisa.
+ */
+export function forecastDays(plain?: string | null): string | null {
+  const d = decendio(plain)
+  return d ? `${d.de} e ${d.ate}` : null
 }
 
 /** `2026-11-25` → `25 nov 2026`. Dia de calendário, nunca um instante. */

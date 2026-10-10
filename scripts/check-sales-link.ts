@@ -24,14 +24,31 @@ async function main() {
   const url = readFileSync(join(homedir(), '.rdx-db-url'), 'utf8').trim()
   const db = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
   await db.connect()
+
+  // Quantos links vivos existem antes de tudo. No fim o número tem de ser o
+  // mesmo: o teste não pode deixar porta aberta, nem fechar a de ninguém.
+  const { rows: [antes] } = await db.query(
+    'select count(*)::int as n from salesperson_links where revoked_at is null')
+
   await db.query('begin')
 
   // Tudo abaixo roda como um login da Redantex e é desfeito no fim.
   await db.query(`select set_config('request.jwt.claims',
     json_build_object('sub', (select id::text from users where role='admin' limit 1))::text, true)`)
 
+  // Um vendedor descartável, criado aqui dentro e desfeito no rollback. Usar
+  // uma pessoa de verdade faria o teste revogar o link que ela está usando —
+  // e, quando o cadastro mudasse, acusar falha sem haver defeito.
   const { rows: [vendedor] } = await db.query(
-    "select id, name from salespeople where name = 'Diego Prestes'")
+    `insert into salespeople (name, email) values ('Teste do Link', 'teste@exemplo.com')
+     returning id, name`)
+  // Com um pedido de verdade emprestado, para a consulta ter o que devolver.
+  const { rows: [emprestado] } = await db.query(
+    `update cards set salesperson_ref_id = $1
+      where id = (select id from cards where board = 'orders' and not archived
+                   and status <> 'Lost' order by ref_number limit 1)
+     returning ref_number`, [vendedor.id])
+  check('um pedido emprestado para o teste', !!emprestado.ref_number, true)
   const { rows: [{ token }] } = await db.query(
     'select sales_link_create($1) as token', [vendedor.id])
 
@@ -53,7 +70,7 @@ async function main() {
   // O que sai pela porta
   // ---------------------------------------------------------------------
   const { rows: [{ view }] } = await db.query('select sales_link_view($1) as view', [token])
-  check('o nome de quem abriu', view.vendedor, 'Diego Prestes')
+  check('o nome de quem abriu', view.vendedor, vendedor.name)
 
   const { rows: [esperado] } = await db.query(
     `select count(*)::int as n from cards
@@ -98,7 +115,7 @@ async function main() {
   const { rows: [{ view: velho }] } = await db.query('select sales_link_view($1) as view', [token])
   check('o link antigo morre quando se cria outro', velho, null)
   const { rows: [{ view: novo }] } = await db.query('select sales_link_view($1) as view', [segundo])
-  check('e o novo abre', novo?.vendedor, 'Diego Prestes')
+  check('e o novo abre', novo?.vendedor, vendedor.name)
   const { rows: [vivos] } = await db.query(
     'select count(*)::int as n from salesperson_links where salesperson_id = $1 and revoked_at is null',
     [vendedor.id])
@@ -142,12 +159,13 @@ async function main() {
   check('a tabela é só de leitura pela API',
     (pol as { cmd: string }[]).map((p) => p.cmd), ['SELECT'])
 
-  // Linha revogada fica: é registro verdadeiro de um link que existiu e foi
-  // aberto. O que não pode sobrar é link **vivo** criado por um teste — esse
-  // seria uma porta aberta que ninguém sabe que existe.
-  const { rows: [sobrou] } = await db.query(
+  // Nem porta aberta por este teste, nem porta de alguém fechada por ele.
+  const { rows: [depoisDeTudo] } = await db.query(
     'select count(*)::int as n from salesperson_links where revoked_at is null')
-  check('o teste não deixou link vivo para trás', sobrou.n, 0)
+  check('os links vivos são os mesmos de antes', depoisDeTudo.n, antes.n)
+  const { rows: [fantasma] } = await db.query(
+    "select count(*)::int as n from salespeople where name = 'Teste do Link'")
+  check('o vendedor de teste não ficou no cadastro', fantasma.n, 0)
 
   await db.end()
   console.log(bad === 0 ? '\nTudo certo.\n' : `\n${bad} falha(s).\n`)
