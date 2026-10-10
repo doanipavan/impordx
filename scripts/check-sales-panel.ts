@@ -90,7 +90,7 @@ check('cliente da linha', umaLinha[0].client, 'OURO DO BRASIL')
 check('vendedor da linha', umaLinha[0].salesperson, 'Patrick Santing')
 
 check('a faixa que o cliente ouviu', forecastBand(umaLinha[0].arrival),
-  '11 a 20 de janeiro de 2027')
+  'entre 11 e 20 de janeiro de 2027')
 
 const jaChegou = salesRows([card('b', {
   ...base, delivery_date: '2026-09-02', arrived_at: '2026-10-20', status: 'Arrived',
@@ -177,7 +177,9 @@ async function main() {
   let iguais = 0
   for (const dia of dias) {
     const d = decendio(dia) as { de: number; ate: number; mes: string; ano: number }
-    const esperado = `${d.de} a ${d.ate} de ${d.mes} de ${d.ano}`
+    // A frase exata do email, não uma parecida: é o mesmo texto que o
+    // cliente leu, e o vendedor não pode ler outro.
+    const esperado = `entre ${d.de} e ${d.ate} de ${d.mes} de ${d.ano}`
     if (forecastBand(dia) === esperado) iguais++
     else check(`faixa de ${dia}`, forecastBand(dia), esperado)
   }

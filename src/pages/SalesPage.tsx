@@ -380,7 +380,7 @@ function Gaveta({ card, onClose }: { card: SalesCard; onClose: () => void }) {
             <p className="text-[17px] mt-1">{longDay(chegada) ?? 'a confirmar'}</p>
             {!schedule?.arrivedAt && faixa && (
               <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                O cliente ouviu: entre {faixa}
+                O cliente ouviu: {faixa}
               </p>
             )}
           </div>

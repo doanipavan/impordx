@@ -91,3 +91,61 @@ export function useUpdateSalesperson() {
     },
   })
 }
+
+/**
+ * O link pessoal de cada vendedor.
+ *
+ * O banco guarda só o hash do token, então o endereço completo existe uma
+ * única vez: no retorno de `sales_link_create`. Quem fechar a tela sem copiar
+ * precisa gerar outro — e gerar outro revoga o anterior, que é exatamente o
+ * que se quer quando um link foi parar no lugar errado. Migração 062.
+ */
+export interface SalespersonLink {
+  salesperson_id: string
+  created_at: string
+  first_opened_at?: string | null
+  last_opened_at?: string | null
+  open_count: number
+}
+
+export function useSalespersonLinks() {
+  return useQuery({
+    queryKey: ['salesperson-links'],
+    queryFn: async (): Promise<SalespersonLink[]> => {
+      const { data, error } = await supabase
+        .from('salesperson_links')
+        .select('salesperson_id, created_at, first_opened_at, last_opened_at, open_count')
+        .is('revoked_at', null)
+      if (error) throw error
+      return (data ?? []) as SalespersonLink[]
+    },
+  })
+}
+
+export function useCreateSalespersonLink() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (salespersonId: string): Promise<string> => {
+      const { data, error } = await supabase.rpc('sales_link_create', {
+        p_salesperson: salespersonId,
+      })
+      if (error) throw error
+      if (!data) throw new Error('Could not create the link')
+      return `${window.location.origin}/meus-pedidos/${data as string}`
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['salesperson-links'] }),
+  })
+}
+
+export function useRevokeSalespersonLink() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (salespersonId: string) => {
+      const { error } = await supabase.rpc('sales_link_revoke', { p_salesperson: salespersonId })
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['salesperson-links'] }),
+  })
+}

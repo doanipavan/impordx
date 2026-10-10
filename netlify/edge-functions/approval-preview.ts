@@ -175,4 +175,9 @@ export default async (request: Request, context: Context) => {
   }
 }
 
-export const config: Config = { path: ['/aprovar/*', '/verificar', '/verificar/*'] }
+// `/meus-pedidos/*` entra aqui só pelo idioma: é página em português servida
+// pelo mesmo index.html que declara inglês, e sem esta correção o Chrome
+// chuta espanhol e traduz por cima.
+export const config: Config = {
+  path: ['/aprovar/*', '/verificar', '/verificar/*', '/meus-pedidos/*'],
+}

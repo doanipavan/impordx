@@ -13,6 +13,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { ArchivePage } from './pages/ArchivePage'
 import { FinancePage } from './pages/FinancePage'
 import { SalesPage } from './pages/SalesPage'
+import { MeusPedidos } from './pages/MeusPedidos'
 import { TeamPage } from './pages/TeamPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { Loader2 } from 'lucide-react'
@@ -48,6 +49,9 @@ function AppRoutes() {
       <Route path="/aprovar/:token" element={<ApprovalPage />} />
       {/* A conferência do comprovante, também sem login: é ela que faz o
           registro servir de prova para quem não tem acesso ao hub. */}
+      {/* A carteira do vendedor: pública como a aprovação do cliente,
+          aberta por token, sem conta. */}
+      <Route path="/meus-pedidos/:token" element={<MeusPedidos />} />
       <Route path="/verificar" element={<VerifyPage />} />
       <Route path="/verificar/:code" element={<VerifyPage />} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

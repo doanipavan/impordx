@@ -60,7 +60,10 @@ export function forecastBand(plain?: string | null): string | null {
   const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const de = d <= 10 ? 1 : d <= 20 ? 11 : 21
   const ate = d <= 10 ? 10 : d <= 20 ? 20 : ultimo
-  return `${de} a ${ate} de ${MESES[m - 1]} de ${y}`
+  // A frase inteira, palavra por palavra como o cliente a recebeu. Devolver
+  // só "11 a 20" convidava quem chama a escrever "entre" na frente, e foi o
+  // que aconteceu nas duas telas: "chegada entre 11 a 20 de janeiro".
+  return `entre ${de} e ${ate} de ${MESES[m - 1]} de ${y}`
 }
 
 /** `2026-11-25` → `25 nov 2026`. Dia de calendário, nunca um instante. */

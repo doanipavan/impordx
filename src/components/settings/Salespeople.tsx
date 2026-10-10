@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { Users, Plus, Check, AlertCircle } from 'lucide-react'
+import { Users, Plus, Check, AlertCircle, Link2, Copy } from 'lucide-react'
 import {
   useSalespeople, useCreateSalesperson, useUpdateSalesperson,
+  useSalespersonLinks, useCreateSalespersonLink, useRevokeSalespersonLink,
+  SalespersonLink,
 } from '../../hooks/useSalespeople'
 import { useToast } from '../ui/toast'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Salesperson } from '../../types'
+import { formatDateTime } from '../../lib/utils'
 
 /**
  * The register of who sells — the twenty-five, not the five hub accounts.
@@ -21,6 +24,7 @@ import { Salesperson } from '../../types'
  */
 export function Salespeople() {
   const { data: people, isLoading } = useSalespeople()
+  const { data: links } = useSalespersonLinks()
   const create = useCreateSalesperson()
   const toast = useToast()
   const [novo, setNovo] = useState('')
@@ -69,7 +73,8 @@ export function Salespeople() {
       {isLoading && <p className="text-xs text-muted-foreground mt-4">Loading…</p>}
 
       <div className="mt-4 divide-y divide-border">
-        {active.map((p) => <Linha key={p.id} person={p} />)}
+        {active.map((p) => <Linha key={p.id} person={p}
+          link={links?.find((l) => l.salesperson_id === p.id)} />)}
       </div>
 
       {off.length > 0 && (
@@ -78,7 +83,8 @@ export function Salespeople() {
             No longer selling
           </p>
           <div className="mt-1 divide-y divide-border">
-            {off.map((p) => <Linha key={p.id} person={p} />)}
+            {off.map((p) => <Linha key={p.id} person={p}
+              link={links?.find((l) => l.salesperson_id === p.id)} />)}
           </div>
         </div>
       )}
@@ -100,9 +106,15 @@ export function Salespeople() {
   )
 }
 
-function Linha({ person }: { person: Salesperson }) {
+function Linha({ person, link }: { person: Salesperson; link?: SalespersonLink }) {
   const update = useUpdateSalesperson()
+  const criar = useCreateSalespersonLink()
+  const revogar = useRevokeSalespersonLink()
   const toast = useToast()
+  // O endereço completo existe uma vez só, no retorno da função: o banco
+  // guarda o hash. Some da tela assim que a linha é redesenhada, e é isso que
+  // o torna um segredo em vez de um dado consultável.
+  const [url, setUrl] = useState<string | null>(null)
   const [name, setName] = useState(person.name)
   const [email, setEmail] = useState(person.email ?? '')
   const [saved, setSaved] = useState(false)
@@ -133,8 +145,8 @@ function Linha({ person }: { person: Salesperson }) {
     }
   }
 
-  return (
-    <div className="flex items-center gap-2 py-2">
+  const linha = (
+    <div className="flex items-center gap-2">
       <Input className="h-8 text-xs flex-1" value={name}
         onChange={(e) => setName(e.target.value)} onBlur={save}
         onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
@@ -151,6 +163,71 @@ function Linha({ person }: { person: Salesperson }) {
         className="text-[10px] text-muted-foreground hover:text-foreground shrink-0 w-14 text-right">
         {person.active ? 'Switch off' : 'Switch on'}
       </button>
+    </div>
+  )
+
+  async function gerar() {
+    try {
+      const novo = await criar.mutateAsync(person.id)
+      setUrl(novo)
+      try {
+        await navigator.clipboard.writeText(novo)
+        toast('Link copied — send it to them now', 'success')
+      } catch {
+        // Área de transferência negada (acontece fora de HTTPS e em alguns
+        // navegadores): o endereço fica na tela para copiar à mão.
+        toast('Link created — copy it from the box', 'success')
+      }
+    } catch (err) {
+      toast((err as Error).message, 'error')
+    }
+  }
+
+  function esconder() {
+    setUrl(null)
+  }
+
+  return (
+    <div className="py-2">
+      {linha}
+
+      <div className="flex items-center gap-2 pl-1">
+        {link ? (
+          <>
+            <span className="text-[10px] text-muted-foreground">
+              <Link2 className="h-3 w-3 inline mr-1" />
+              {link.open_count > 0
+                ? `opened ${link.open_count}×, last ${formatDateTime(link.last_opened_at!)}`
+                : 'link created, never opened'}
+            </span>
+            <button onClick={gerar} disabled={criar.isPending}
+              className="text-[10px] text-muted-foreground hover:text-foreground">
+              New link
+            </button>
+            <button onClick={() => revogar.mutate(person.id)}
+              className="text-[10px] text-muted-foreground hover:text-destructive">
+              Revoke
+            </button>
+          </>
+        ) : (
+          <button onClick={gerar} disabled={criar.isPending}
+            className="text-[10px] text-muted-foreground hover:text-foreground">
+            <Link2 className="h-3 w-3 inline mr-1" /> Create a personal link
+          </button>
+        )}
+      </div>
+
+      {url && (
+        <div className="mt-1.5 ml-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2">
+          <p className="text-[10px] text-amber-900 font-semibold flex items-center gap-1">
+            <Copy className="h-3 w-3" /> Copy it now — it is not shown again
+          </p>
+          <p className="text-[10.5px] text-amber-900 break-all mt-1 font-mono">{url}</p>
+          <button onClick={esconder} className="text-[10px] text-amber-800 underline mt-1">
+            Hide
+          </button>
+        </div>
+      )}
     </div>
   )
 }
