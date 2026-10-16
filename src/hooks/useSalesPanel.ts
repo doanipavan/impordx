@@ -71,6 +71,9 @@ export function useCardNotices(cardId?: string | null) {
         .select('id, kind, subject, summary, sent_at')
         .eq('card_id', cardId!)
         .eq('status', 'sent')
+        // Prévia foi para quem pediu, não para o cliente. Listá-la aqui
+        // faria o vendedor acreditar que o cliente já sabe.
+        .eq('preview', false)
         .order('sent_at', { ascending: true })
       if (error) throw error
       return (data ?? []) as Notice[]

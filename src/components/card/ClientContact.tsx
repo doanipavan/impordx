@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Mail, Check, X, Pencil, AlertCircle, ShieldCheck } from 'lucide-react'
+import { Mail, Check, X, Pencil, AlertCircle, ShieldCheck, History } from 'lucide-react'
 import { useClient, useSetClientEmail } from '../../hooks/useClients'
+import { useClientCatchup, useClientSilentOrders } from '../../hooks/useClientNotices'
+import { PreviewButton } from './NoticePreview'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
@@ -26,6 +28,8 @@ export function ClientContact({ card }: { card: Card }) {
   const { user } = useAuth()
   const { data: client, isLoading } = useClient(card.client_id)
   const setEmail = useSetClientEmail()
+  const catchup = useClientCatchup()
+  const { data: calados = 0 } = useClientSilentOrders(card.client_id)
   const toast = useToast()
 
   const [editing, setEditing] = useState(false)
@@ -70,8 +74,13 @@ export function ClientContact({ card }: { card: Card }) {
         <Mail className={missing ? 'h-4 w-4 text-amber-600' : 'h-4 w-4 text-primary'} />
         <p className="text-sm font-semibold">Client contact</p>
         {!editing && client && (
+          <div className="ml-auto flex items-center gap-1">
+            <PreviewButton card={card} clientName={client.name} />
+          </div>
+        )}
+        {!editing && client && (
           <button onClick={startEditing}
-            className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded hover:bg-accent">
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded hover:bg-accent">
             <Pencil className="h-3 w-3" /> Edit
           </button>
         )}
@@ -109,6 +118,35 @@ export function ClientContact({ card }: { card: Card }) {
           </p>
         )}
       </div>
+
+      {/* Cadastrar o endereço não alcança o passado: o gatilho de etapa só
+          dispara quando o card se move. Sem esta oferta, um cliente
+          cadastrado hoje nunca receberia "pedido confirmado" nem "em
+          produção", e o primeiro email que a Redantex lhe mandaria poderia
+          ser "sua mercadoria chegou ao Brasil". */}
+      {email && calados > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-[11.5px] text-amber-900 leading-relaxed flex items-start gap-1.5">
+            <History className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {calados === 1
+              ? 'This client has 1 order in progress they have never heard about.'
+              : `This client has ${calados} orders in progress they have never heard about.`}
+          </p>
+          <Button size="sm" variant="outline" className="mt-2" loading={catchup.isPending}
+            onClick={async () => {
+              try {
+                const n = await catchup.mutateAsync(client!.id)
+                toast(n === 0
+                  ? 'Nothing to send — they are already up to date'
+                  : `Queued ${n} “where your order is” notice${n === 1 ? '' : 's'}`, 'success')
+              } catch (err) {
+                toast((err as Error).message, 'error')
+              }
+            }}>
+            Send them where each order stands
+          </Button>
+        </div>
+      )}
 
       {/* O motivo de existir uma tabela separada, dito onde a pessoa está
           digitando: é o único lugar onde alguém se pergunta quem mais lê isto. */}

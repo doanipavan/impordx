@@ -114,6 +114,98 @@ async function main() {
   check('e um pedido antes de Placed também não', src.includes("'Placed', 'In Production'"), true)
   check('o gatilho engole o próprio erro', src.includes('exception when others then'), true)
 
+  // -------------------------------------------------------------------------
+  // A prévia: quem pediu recebe, o cliente nunca
+  // -------------------------------------------------------------------------
+  await db.query('begin')
+  await db.query(`select set_config('request.jwt.claims',
+    json_build_object('sub', (select id::text from users where role='admin' limit 1))::text, true)`)
+
+  const { rows: [eu] } = await db.query(
+    "select email from users where role = 'admin' limit 1")
+  const { rows: [qualquer] } = await db.query(
+    "select id from cards where board = 'orders' and not archived limit 1")
+
+  const { rows: [p] } = await db.query(
+    "select preview_queue($1, 'stage:Placed') as para", [qualquer.id])
+  // O destinatário não é parâmetro da função: sai de auth.uid(). É o que
+  // impede isto de virar um jeito de mandar o email de um cliente, com nome,
+  // valor e prazo dentro, para um endereço escolhido por quem chamou.
+  check('a prévia vai para quem pediu', p.para, eu.email)
+
+  const { rows: [linha] } = await db.query(
+    `select kind, to_email, preview from email_outbox
+      where card_id = $1 and preview order by created_at desc limit 1`, [qualquer.id])
+  check('marcada como prévia', linha.preview, true)
+  check('com o tipo prefixado', linha.kind, 'preview:stage:Placed')
+  check('e endereçada a mim', linha.to_email, eu.email)
+
+  await db.query("select preview_queue($1, 'stage:Placed')", [qualquer.id])
+  const { rows: [duas] } = await db.query(
+    'select count(*)::int as n from email_outbox where card_id = $1 and preview', [qualquer.id])
+  // Duas prévias da mesma etapa podem coexistir: o índice que impede o aviso
+  // repetido vale para `stage:%`, e prévia não é aviso.
+  check('duas prévias da mesma etapa convivem', duas.n, 2)
+
+  // A exceção esperada aborta a transação inteira em Postgres, então vai
+  // dentro de um savepoint — senão tudo depois dela falha por tabela.
+  let recusou = ''
+  await db.query('savepoint tentativa')
+  try {
+    await db.query("select preview_queue($1, 'stage:Inventado')", [qualquer.id])
+  } catch (err) {
+    recusou = (err as Error).message
+    await db.query('rollback to savepoint tentativa')
+  }
+  check('tipo desconhecido é recusado', recusou.includes('Unknown notice kind'), true)
+
+  // -------------------------------------------------------------------------
+  // O alcance de quem entrou tarde
+  // -------------------------------------------------------------------------
+  const { rows: [cli] } = await db.query(`
+    select cl.id, count(*)::int as pedidos
+      from clients cl join cards c on c.client_id = cl.id
+     where btrim(coalesce(cl.email,'')) <> '' and c.board = 'orders' and not c.archived
+       and c.status in ('Placed','In Production','Ready to Ship','Collected','Shipped')
+     group by cl.id limit 1`)
+  const { rows: [alcance] } = await db.query('select client_catchup($1) as n', [cli.id])
+  check('alcança um pedido por card', alcance.n, cli.pedidos)
+
+  const { rows: [tipo] } = await db.query(
+    `select kind, preview from email_outbox
+      where client_id = $1 and not preview order by created_at desc limit 1`, [cli.id])
+  // Usa o lembrete, que é exatamente "onde seu pedido está", em vez de
+  // inventar um aviso novo para dizer a mesma coisa.
+  check('o alcance usa o lembrete', tipo.kind, 'reminder')
+  check('e não é prévia', tipo.preview, false)
+
+  const { rows: [denovo] } = await db.query('select client_catchup($1) as n', [cli.id])
+  check('chamar de novo não duplica', denovo.n, 0)
+
+  // -------------------------------------------------------------------------
+  // O lembrete automático não confunde prévia com aviso
+  // -------------------------------------------------------------------------
+  await db.query('rollback')
+  await db.query('begin')
+  await db.query(`select set_config('request.jwt.claims',
+    json_build_object('sub', (select id::text from users where role='admin' limit 1))::text, true)`)
+
+  const vencidos = async () =>
+    (await db.query('select count(*)::int as n from orders_needing_reminder(15)')).rows[0].n
+  const antesDaPrevia = await vencidos()
+  const { rows: [umVencido] } = await db.query(
+    'select card_id from orders_needing_reminder(15) limit 1')
+  if (umVencido) {
+    await db.query("select preview_queue($1, 'reminder')", [umVencido.card_id])
+    // Um cliente que recebeu só uma prévia — que nem foi para ele — continua
+    // em silêncio há quinze dias.
+    check('prévia não cala o lembrete do cliente', await vencidos(), antesDaPrevia)
+  }
+  await db.query('rollback')
+
+  const { rows: [limpo] } = await db.query('select count(*)::int as n from email_outbox where preview')
+  check('nenhuma prévia sobreviveu ao teste', limpo.n, 0)
+
   await db.end()
   console.log(bad === 0 ? '\nTudo certo.\n' : `\n${bad} falha(s).\n`)
   process.exit(bad === 0 ? 0 : 1)

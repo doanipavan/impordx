@@ -63,6 +63,8 @@ interface OutboxRow {
   kind: string
   attempts: number
   created_at: string
+  /** Cópia para quem pediu ver antes. Nunca vai para o cliente. */
+  preview: boolean
 }
 
 /** Erro que não adianta tentar de novo: o mundo mudou, não a rede. */
@@ -115,13 +117,26 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
   if (card.archived) throw new Settled('o card foi arquivado')
   if (card.status === 'Lost') throw new Settled('o pedido foi dado como perdido')
 
-  // O endereço de agora manda sobre o que foi anotado: apagar o email do
-  // cliente é a forma de dizer "pare de escrever para ele", e corrigir um
-  // erro de digitação tem que valer para o que ainda não saiu.
-  const destino = String(card.client?.email ?? '').trim()
-  if (!destino) throw new Settled('o cliente não tem mais endereço cadastrado')
+  // Prévia vai para quem pediu, e o endereço foi gravado pela função que a
+  // criou a partir de `auth.uid()` — não é escolha de ninguém. O email do
+  // cliente nem é consultado: uma prévia existe justamente para o caso de o
+  // cliente ainda não ter endereço.
+  //
+  // Para o aviso de verdade, o endereço de agora manda sobre o que foi
+  // anotado: apagar o email do cliente é a forma de dizer "pare de escrever
+  // para ele", e corrigir um erro de digitação tem que valer para o que ainda
+  // não saiu.
+  const destino = row.preview
+    ? String(row.to_email ?? '').trim()
+    : String(card.client?.email ?? '').trim()
+  if (!destino) {
+    throw new Settled(row.preview
+      ? 'quem pediu a prévia não tem endereço'
+      : 'o cliente não tem mais endereço cadastrado')
+  }
 
-  const stage = row.kind.startsWith('stage:') ? row.kind.slice('stage:'.length) : row.kind
+  const puro = row.preview ? row.kind.slice('preview:'.length) : row.kind
+  const stage = puro.startsWith('stage:') ? puro.slice('stage:'.length) : puro
 
   const mail = clientEmail(cardToEmailInput(card, {
     stage,
@@ -171,12 +186,14 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
     body: JSON.stringify({
       from,
       to: [destino],
-      ...(salesEmail ? { cc: [salesEmail] } : {}),
+      ...(salesEmail && !row.preview ? { cc: [salesEmail] } : {}),
       // A promessa do rodapé — "responda este email e ele vai direto para
       // Patrick" — só é verdade por causa desta linha. Sem vendedor, o
       // rodapé diz "seu contato" e a resposta vai para o escritório.
       reply_to: responder,
-      subject: mail.subject,
+      // A prévia se identifica no assunto: achada depois na caixa de entrada,
+      // ninguém a confunde com um aviso que o cliente também recebeu.
+      subject: row.preview ? `[prévia] ${mail.subject}` : mail.subject,
       html: mail.html,
       text: mail.text,
     }),
@@ -233,7 +250,7 @@ async function rodar(anotar: (nota: string) => void) {
 
   const res = await db(
     `email_outbox?status=eq.pending&attempts=lt.${MAX_ATTEMPTS}&order=created_at.asc&limit=${BATCH}` +
-    '&select=id,card_id,client_name,to_email,kind,attempts,created_at')
+    '&select=id,card_id,client_name,to_email,kind,attempts,created_at,preview')
   if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`)
 
   const rows: OutboxRow[] = await res.json()

@@ -55,18 +55,23 @@ export function useSetEmailSwitch() {
   })
 }
 
-/** Quantos avisos estão esperando para sair, e quantos falharam. */
+/**
+ * Quantos avisos estão esperando para sair, e quantos falharam.
+ *
+ * Prévia não entra: ela não foi para cliente nenhum, e contá-la aqui faria o
+ * número da tela dizer que saiu mais aviso do que saiu.
+ */
 export function useOutboxCounts() {
   return useQuery({
     queryKey: ['outbox', 'counts'],
     refetchInterval: 30_000,
     queryFn: async () => {
       const pending = await supabase.from('email_outbox')
-        .select('id', { count: 'exact', head: true }).eq('status', 'pending')
+        .select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('preview', false)
       const failed = await supabase.from('email_outbox')
-        .select('id', { count: 'exact', head: true }).eq('status', 'failed')
+        .select('id', { count: 'exact', head: true }).eq('status', 'failed').eq('preview', false)
       const sent = await supabase.from('email_outbox')
-        .select('id', { count: 'exact', head: true }).eq('status', 'sent')
+        .select('id', { count: 'exact', head: true }).eq('status', 'sent').eq('preview', false)
       return {
         pending: pending.count ?? 0,
         failed: failed.count ?? 0,
