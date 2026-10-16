@@ -16,6 +16,9 @@ export interface Client {
   email?: string | null
   notes?: string | null
   updated_at?: string
+  /** Preenchido quando o endereço devolveu de vez. Migração 066. */
+  bounced_at?: string | null
+  bounce_detail?: string | null
 }
 
 export function useClient(clientId?: string | null) {
@@ -25,7 +28,7 @@ export function useClient(clientId?: string | null) {
     queryFn: async (): Promise<Client | null> => {
       const { data, error } = await supabase
         .from('clients')
-        .select('id, name, email, notes, updated_at')
+        .select('id, name, email, notes, updated_at, bounced_at, bounce_detail')
         .eq('id', clientId!)
         .maybeSingle()
       // Um viewer recebe zero linhas, não um erro: a política filtra, não grita.
@@ -45,9 +48,12 @@ export function useSetClientEmail() {
       const trimmed = email.trim()
       const { data, error } = await supabase
         .from('clients')
-        .update({ email: trimmed || null })
+        // Salvar o endereço limpa a marca de devolução: corrigir é dizer
+        // "pode tentar outra vez". Sem isto, o cliente ficaria calado para
+        // sempre depois de um dedo trocado.
+        .update({ email: trimmed || null, bounced_at: null, bounce_detail: null })
         .eq('id', clientId)
-        .select('id, name, email, notes, updated_at')
+        .select('id, name, email, notes, updated_at, bounced_at, bounce_detail')
         .maybeSingle()
 
       if (error) throw error

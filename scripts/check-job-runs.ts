@@ -32,13 +32,14 @@ async function main() {
   const noBanco = (rows as { job: string }[]).map((r) => r.job)
   check('a tela e o banco falam das mesmas rotinas', naTela, noBanco)
 
-  // O nome tem que bater com o que a função escreve. Lido do próprio código
-  // das funções, não de uma lista repetida aqui.
-  const escritos = ['daily-summary', 'queue-reminders', 'send-queued-emails']
-    .filter((job) => {
-      const src = readFileSync(`netlify/functions/${job}.mts`, 'utf8')
-      return src.includes(`job: '${job}'`)
-    })
+  // O nome tem que bater com o que a função escreve. A lista vem de
+  // `ROUTINES`, não repetida aqui: escrita à mão, ela envelheceu no dia em
+  // que uma quarta rotina apareceu, e o teste acusou a rotina nova de não
+  // existir.
+  const escritos = naTela.filter((job) => {
+    const src = readFileSync(`netlify/functions/${job}.mts`, 'utf8')
+    return src.includes(`job: '${job}'`)
+  })
   check('cada função registra com o próprio nome', escritos.sort(), naTela)
 
   // Toda saída da função passa pelo registro: sem isto, um caminho de retorno

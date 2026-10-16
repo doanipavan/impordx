@@ -45,6 +45,16 @@ export const ROUTINES: Routine[] = [
     detail: 'Sends what is waiting, to the client with the salesperson in copy',
     overdueHours: 2,
   },
+  {
+    job: 'resend-webhook',
+    label: 'Delivery and bounces',
+    // Não é agendada: responde quando a Resend avisa. "Atrasada" aqui não
+    // quer dizer parada — pode simplesmente não ter havido evento. Por isso
+    // a folga é larga.
+    cadence: 'when the provider reports back',
+    detail: 'Records what was delivered, what bounced, and silences a dead address',
+    overdueHours: 24 * 30,
+  },
 ]
 
 /** A linha semeada pela migração, antes da primeira execução de verdade. */

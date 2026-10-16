@@ -83,7 +83,7 @@ const CARD_FIELDS = [
   'delivery_date', 'shipped_at', 'arrived_at',
   'sold_by:salespeople!cards_salesperson_ref_id_fkey(name,email)',
   'salesperson:users!cards_salesperson_id_fkey(full_name,email,role)',
-  'client:clients(name,email)',
+  'client:clients(name,email,bounced_at)',
   'card_items(size,quantity,sort_order)',
 ].join(',')
 
@@ -133,6 +133,13 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
     throw new Settled(row.preview
       ? 'quem pediu a prévia não tem endereço'
       : 'o cliente não tem mais endereço cadastrado')
+  }
+
+  // Endereço que devolveu de vez não é tentado de novo. Sem isto, o lembrete
+  // de quinze dias escreveria para uma caixa inexistente para sempre, e a
+  // fila encheria de falhas idênticas que ninguém leria.
+  if (!row.preview && card.client?.bounced_at) {
+    throw new Settled('o endereço do cliente devolveu e precisa ser corrigido')
   }
 
   const puro = row.preview ? row.kind.slice('preview:'.length) : row.kind
@@ -198,6 +205,15 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
       text: mail.text,
     }),
   })
+
+  // O id do provedor é a única forma de casar com os eventos que chegam
+  // depois — entrega, devolução, reclamação. Sem ele, "enviado" seria o fim
+  // da história, como foi até agora.
+  if (res.ok) {
+    const corpo = await res.json().catch(() => null)
+    const id = (corpo as { id?: string } | null)?.id
+    if (id) await patchRow(row.id, { provider_id: id }).catch(() => {})
+  }
 
   if (!res.ok) {
     // A reserva precisa voltar atrás, senão a linha fica como enviada sem

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button'
 import { Salespeople } from '../components/settings/Salespeople'
 import { Recipients } from '../components/settings/Recipients'
 import { Schedules } from '../components/settings/Schedules'
+import { FailedNotices } from '../components/settings/FailedNotices'
 import { formatDateTime } from '../lib/utils'
 
 /**
@@ -114,6 +115,8 @@ export function SettingsPage() {
           The switch takes effect on the next run, at most fifteen minutes away. It does not
           touch the daily pipeline summary, which goes to Redantex only.
         </p>
+
+        <FailedNotices />
 
         <Recipients />
 

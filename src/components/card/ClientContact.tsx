@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Check, X, Pencil, AlertCircle, ShieldCheck, History } from 'lucide-react'
+import { Mail, Check, X, Pencil, AlertCircle, ShieldCheck, History, MailWarning } from 'lucide-react'
 import { useClient, useSetClientEmail } from '../../hooks/useClients'
 import { useClientCatchup, useClientSilentOrders } from '../../hooks/useClientNotices'
 import { PreviewButton } from './NoticePreview'
@@ -65,11 +65,14 @@ export function ClientContact({ card }: { card: Card }) {
 
   const email = client?.email?.trim()
   const missing = !isLoading && !email
+  const devolveu = !!client?.bounced_at
 
   return (
-    <div className={missing
-      ? 'rounded-lg border border-amber-300 bg-amber-50/60 p-4'
-      : 'rounded-lg border border-border bg-card p-4'}>
+    <div className={devolveu
+      ? 'rounded-lg border border-red-300 bg-red-50/60 p-4'
+      : missing
+        ? 'rounded-lg border border-amber-300 bg-amber-50/60 p-4'
+        : 'rounded-lg border border-border bg-card p-4'}>
       <div className="flex items-center gap-2 mb-3">
         <Mail className={missing ? 'h-4 w-4 text-amber-600' : 'h-4 w-4 text-primary'} />
         <p className="text-sm font-semibold">Client contact</p>
@@ -110,7 +113,25 @@ export function ClientContact({ card }: { card: Card }) {
         ) : isLoading ? (
           <p className="text-sm text-muted-foreground">…</p>
         ) : email ? (
-          <p className="text-sm font-medium">{email}</p>
+          <>
+            <p className={`text-sm font-medium ${devolveu ? 'line-through text-muted-foreground' : ''}`}>
+              {email}
+            </p>
+            {/* Devolução permanente cala o cliente até alguém corrigir. Dizer
+                isso aqui, onde o endereço é digitado, é a única forma de a
+                correção acontecer — na fila ninguém olha. */}
+            {devolveu && (
+              <p className="text-[11.5px] text-red-800 bg-red-50 border border-red-200 rounded-lg
+                px-2.5 py-2 mt-1.5 flex items-start gap-1.5">
+                <MailWarning className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  This address bounced and nothing is being sent to it.
+                  {client?.bounce_detail ? ` ${client.bounce_detail}` : ''}
+                  {' '}Fix it above and saving will try again.
+                </span>
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-sm text-amber-700 font-medium flex items-center gap-1.5">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
@@ -124,7 +145,7 @@ export function ClientContact({ card }: { card: Card }) {
           cadastrado hoje nunca receberia "pedido confirmado" nem "em
           produção", e o primeiro email que a Redantex lhe mandaria poderia
           ser "sua mercadoria chegou ao Brasil". */}
-      {email && calados > 0 && (
+      {email && !devolveu && calados > 0 && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
           <p className="text-[11.5px] text-amber-900 leading-relaxed flex items-start gap-1.5">
             <History className="h-3.5 w-3.5 mt-0.5 shrink-0" />
