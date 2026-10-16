@@ -153,6 +153,15 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
   const salesEmail = String(card.sold_by?.email ?? '').trim()
     || (sales?.role === 'admin' || sales?.role === 'member' ? sales.email : null)
 
+  // Sem vendedor com endereço, a resposta do cliente ia para o remetente —
+  // uma caixa de envio que ninguém lê. Agora cai no escritório. Nunca entra
+  // em cópia: o cliente não precisa ver a lista interna; é só o destino de
+  // quem aperta "responder".
+  const reserva = (process.env.CLIENT_REPLY_FALLBACK
+    || 'exportacao@redantex.com.br,sac@redantex.com.br')
+    .split(',').map((e) => e.trim()).filter(Boolean)
+  const responder = salesEmail ? [salesEmail] : reserva
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -164,8 +173,9 @@ async function send(row: OutboxRow): Promise<'sent' | 'skipped'> {
       to: [destino],
       ...(salesEmail ? { cc: [salesEmail] } : {}),
       // A promessa do rodapé — "responda este email e ele vai direto para
-      // Patrick" — só é verdade por causa desta linha.
-      ...(salesEmail ? { reply_to: salesEmail } : {}),
+      // Patrick" — só é verdade por causa desta linha. Sem vendedor, o
+      // rodapé diz "seu contato" e a resposta vai para o escritório.
+      reply_to: responder,
       subject: mail.subject,
       html: mail.html,
       text: mail.text,

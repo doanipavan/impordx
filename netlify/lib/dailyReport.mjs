@@ -19,6 +19,16 @@ const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
 const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
 /** Três famílias de cor, as mesmas do quadro: espera, andando, pronto. */
+/** As etapas como se fala delas em português, para a frase da mudança. */
+const ETAPA_PT = {
+  'Placed': 'pedido confirmado',
+  'In Production': 'em produção',
+  'Ready to Ship': 'pronto para embarque',
+  'Collected': 'coletado',
+  'Shipped': 'embarcado',
+  'Arrived': 'chegou ao Brasil',
+}
+
 const COR = {
   'Placed': '#94a3b8',
   'In Production': '#d97706',
@@ -148,6 +158,16 @@ export function monthMoves(anterior, rows) {
       moves.push({ tipo: 'novo', cliente: r.cliente, valor: r.valor, para: r.mes })
       continue
     }
+    // Etapa só é comparada quando o retrato anterior tem uma: os retratos
+    // tirados antes da coluna existir valem nulo, e nulo é "não sei", nunca
+    // "mudou" — senão o primeiro email depois da migração anunciaria os
+    // trinta e seis pedidos de uma vez.
+    if (a.status && a.status !== r.status) {
+      moves.push({
+        tipo: 'etapa', cliente: r.cliente, valor: r.valor,
+        de: a.status, para: r.status, chegou: r.status === 'Arrived',
+      })
+    }
     if (a.month !== r.mes) {
       moves.push({ tipo: 'moveu', cliente: r.cliente, valor: r.valor, de: a.month, para: r.mes })
     } else if (Math.round(Number(a.value_brl ?? 0)) !== Math.round(r.valor)) {
@@ -171,6 +191,9 @@ export function monthMoves(anterior, rows) {
   const soma = new Map()
   const add = (mes, v) => soma.set(mes, (soma.get(mes) ?? 0) + v)
   for (const m of moves) {
+    // Mudar de etapa não move dinheiro de mês nenhum: o saldo continua sendo
+    // sobre o mês de chegada, não sobre o andamento.
+    if (m.tipo === 'etapa') continue
     if (m.tipo === 'moveu') { add(m.de, -m.valor); add(m.para, m.valor) }
     if (m.tipo === 'novo') add(m.para, m.valor)
     if (m.tipo === 'saiu') add(m.de, -m.valor)
@@ -181,11 +204,22 @@ export function monthMoves(anterior, rows) {
     .map(([mes, delta]) => ({ mes, delta }))
     .sort((a, b) => a.mes.localeCompare(b.mes))
 
+  // A chegada primeiro, depois o resto das etapas, depois o dinheiro: é a
+  // ordem em que a notícia interessa a quem lê de relance.
+  const rank = (m) => (m.tipo === 'etapa' ? (m.chegou ? 0 : 1) : 2)
+  moves.sort((a, b) => rank(a) - rank(b))
+
   return { moves, saldo }
 }
 
 function frase(m) {
   const nome = (k) => mesNome(k).split(' ')[0].toLowerCase()
+  const etapa = (k) => ETAPA_PT[k] ?? k
+  if (m.tipo === 'etapa') {
+    return m.chegou
+      ? `<b>${esc(m.cliente)}</b> ${brl(m.valor)} · <b>chegou ao Brasil</b>`
+      : `<b>${esc(m.cliente)}</b> ${brl(m.valor)} · ${esc(etapa(m.de))} &rarr; <b>${esc(etapa(m.para))}</b>`
+  }
   if (m.tipo === 'moveu') {
     return `<b>${esc(m.cliente)}</b> ${brl(m.valor)} · ${nome(m.de)} &rarr; <b>${nome(m.para)}</b>`
   }
@@ -229,6 +263,11 @@ export function dailyReport({ cards, previous, today }) {
   const { moves, saldo } = monthMoves(previous, rows)
 
   const total = rows.reduce((s, r) => s + r.valor, 0)
+  // Mercadoria que desembarcou não está mais "a caminho". Contá-la junto
+  // inflava o número do topo com dinheiro que já chegou.
+  const chegaram = rows.filter((r) => r.status === 'Arrived')
+  const jaChegou = chegaram.reduce((s, r) => s + r.valor, 0)
+  const aCaminho = total - jaChegou
   const semEmail = rows.filter((r) => !r.clienteEmail).length
 
   const vendedores = [...new Set(rows.map((r) => r.vendedor))]
@@ -241,13 +280,19 @@ export function dailyReport({ cards, previous, today }) {
   // Contar todas as mudanças juntas dizia "3 pedidos mudaram de mês" quando
   // um mudou de mês e dois eram pedidos novos — manchete errada no lugar onde
   // ninguém confere.
+  // Chegada ganha de tudo: é a única mudança que encerra a espera.
+  const chegou = moves.filter((m) => m.tipo === 'etapa' && m.chegou).length
   const mudaram = moves.filter((m) => m.tipo === 'moveu').length
   const novos = moves.filter((m) => m.tipo === 'novo').length
-  const subject = mudaram > 0
+  const subject = chegou > 0
+    ? `Panorama do dia — ${chegou} ${chegou === 1 ? 'pedido chegou' : 'pedidos chegaram'} ao Brasil`
+    : mudaram > 0
     ? `Panorama do dia — ${mudaram} ${mudaram === 1 ? 'pedido mudou' : 'pedidos mudaram'} de mês`
     : novos > 0
       ? `Panorama do dia — ${novos} ${novos === 1 ? 'pedido novo' : 'pedidos novos'}`
-      : `Panorama do dia — ${brl(total)} a caminho`
+      // `aCaminho`, não `total`: o assunto diria "a caminho" contando
+      // mercadoria que já desembarcou, o mesmo erro que o cabeçalho tinha.
+      : `Panorama do dia — ${brl(aCaminho)} a caminho`
 
   const aviso = moves.length === 0 ? '' : `
   <tr><td style="padding:14px 20px 0">
@@ -281,7 +326,7 @@ export function dailyReport({ cards, previous, today }) {
     <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:${BRAND}">Redantex</div>
     <div style="font-size:18px;font-weight:700;color:${INK};margin-top:3px">Chegadas por mês</div>
     <div style="font-size:12px;color:${MUTED};margin-top:1px">
-      ${brl(total)} em ${rows.length} pedido${rows.length === 1 ? '' : 's'} a caminho · ${esc(diaTexto(today))}
+      ${brl(aCaminho)} em ${rows.length - chegaram.length} pedido${rows.length - chegaram.length === 1 ? '' : 's'} a caminho${chegaram.length ? ` · ${brl(jaChegou)} já ${chegaram.length === 1 ? 'chegou' : 'chegaram'}` : ''} · ${esc(diaTexto(today))}
     </div>
   </td></tr>
 ${aviso}
@@ -305,7 +350,8 @@ ${aviso}
 
   const text = [
     `Redantex — Chegadas por mês · ${diaTexto(today)}`,
-    `${brl(total)} em ${rows.length} pedidos a caminho`,
+    `${brl(aCaminho)} em ${rows.length - chegaram.length} pedidos a caminho`
+      + (chegaram.length ? ` · ${brl(jaChegou)} já chegaram` : ''),
     '',
     ...(moves.length ? [
       'MUDOU DE MÊS',

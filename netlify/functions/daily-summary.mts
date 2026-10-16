@@ -101,7 +101,7 @@ async function retratoAnterior(dia: string) {
   const quando = (ultimo as { taken_on: string }[])[0]?.taken_on
   if (!quando) return { quando: null, linhas: [] }
   const linhas = await get(
-    `arrival_snapshots?select=card_id,card_ref,client_name,month,value_brl&taken_on=eq.${quando}`)
+    `arrival_snapshots?select=card_id,card_ref,client_name,month,value_brl,status&taken_on=eq.${quando}`)
   return { quando, linhas }
 }
 
@@ -148,7 +148,7 @@ async function rodar(anotar: (nota: string) => void) {
   // O retrato é gravado **depois** do envio: se o email falhar, amanhã ainda
   // compara com o de ontem e o aviso de mudança de mês não se perde.
   const retrato = rows.map((r: {
-    cardId: string; ref: string; cliente: string; mes: string; valor: number
+    cardId: string; ref: string; cliente: string; mes: string; valor: number; status: string
   }) => ({
     taken_on: dia,
     card_id: r.cardId,
@@ -156,6 +156,9 @@ async function rodar(anotar: (nota: string) => void) {
     client_name: r.cliente,
     month: r.mes,
     value_brl: r.valor,
+    // A etapa entra no retrato (063) para que a comparação de amanhã saiba
+    // dizer que a mercadoria chegou — mês e valor sozinhos não contam isso.
+    status: r.status,
   }))
 
   if (retrato.length > 0) {

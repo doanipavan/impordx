@@ -156,6 +156,49 @@ check('duas linhas na troca cruzada', cruzado.moves.length, 2)
 check('e saldo nenhum', cruzado.saldo, [])
 
 // ---------------------------------------------------------------------------
+// A etapa no retrato — o que faz a chegada ser notícia
+// ---------------------------------------------------------------------------
+
+// Retrato antigo, sem etapa gravada: nulo é "não sei", nunca "mudou". Sem
+// isto, o primeiro email depois da migração 063 anunciaria uma mudança em
+// cada um dos trinta e seis pedidos de uma vez.
+check('retrato sem etapa não inventa mudança', monthMoves(
+  [{ card_id: 'x', client_name: 'M', month: '2026-11', value_brl: 16020 }], agora).moves, [])
+
+const chegada = reportRows([
+  card({ id: 'q', cliente: 'QUEEN', valor: 92000, fabrica: '2026-09-02',
+    chegou: '2026-10-16', extra: { status: 'Arrived' } }),
+]).rows
+const anunciouChegada = monthMoves(
+  [{ card_id: 'q', client_name: 'QUEEN', month: '2026-10', value_brl: 92000, status: 'Shipped' }],
+  chegada)
+check('chegar ao Brasil é anunciado', anunciouChegada.moves[0]?.tipo, 'etapa')
+check('e marcado como chegada', anunciouChegada.moves[0]?.chegou, true)
+// O mês não mudou: estava previsto para outubro e chegou em outubro. Era
+// exatamente por isso que a chegada passava em branco.
+check('mesmo com o mês igual', chegada[0].mes, '2026-10')
+check('mudar de etapa não mexe no saldo do mês', anunciouChegada.saldo, [])
+
+const embarcou = monthMoves(
+  [{ card_id: 'x', client_name: 'MARIA DOLORES', month: '2026-11', value_brl: 16020,
+    status: 'Collected' }], agora)
+check('e as outras etapas também', embarcou.moves[0]?.tipo, 'etapa')
+check('sem marcar como chegada', embarcou.moves[0]?.chegou, false)
+
+// Etapa e mês mudando juntos são duas notícias, não uma: a segunda é a que
+// explica o saldo do mês.
+const andouDuasVezes = reportRows([
+  card({ id: 'x', cliente: 'MARIA DOLORES', valor: 16020, fabrica: '2026-10-11',
+    extra: { status: 'In Production' } }),
+]).rows
+const duasCoisas = monthMoves(
+  [{ card_id: 'x', client_name: 'M', month: '2026-12', value_brl: 16020, status: 'Placed' }],
+  andouDuasVezes)
+check('etapa e mês contam separado', duasCoisas.moves.map((m) => m.tipo), ['etapa', 'moveu'])
+check('e o saldo conta só o mês',
+  duasCoisas.saldo, [{ mes: '2026-11', delta: 16020 }, { mes: '2026-12', delta: -16020 }])
+
+// ---------------------------------------------------------------------------
 // O email
 // ---------------------------------------------------------------------------
 
@@ -166,6 +209,15 @@ const cards = [
 ]
 const quieto = dailyReport({ cards, previous: [], today: '2026-10-09' })
 check('assunto sem mudança', quieto.subject, 'Panorama do dia — R$ 76.220 a caminho')
+// O assunto conta o que ainda vem, não o que já desembarcou.
+check('o assunto não conta o que já chegou', dailyReport({
+  cards: [
+    card({ id: 'v', cliente: 'VEM', valor: 1000, fabrica: '2026-10-28' }),
+    card({ id: 'c', cliente: 'CHEGOU', valor: 9000, fabrica: '2026-09-02',
+      chegou: '2026-10-16', extra: { status: 'Arrived' } }),
+  ],
+  previous: [], today: '2026-10-16',
+}).subject, 'Panorama do dia — R$ 1.000 a caminho')
 check('sem mudança, sem bloco âmbar', quieto.html.includes('O que mudou'), false)
 check('conta quem está sem email', quieto.html.includes('1 de 3 pedidos têm cliente sem email'), true)
 
@@ -181,6 +233,29 @@ check('com a direção certa', agitado.html.includes('dezembro &rarr; <b>novembr
 // comportamento certo e o teste existe para que ninguém o "conserte".
 check('os que não estavam no retrato entram como novos',
   agitado.moves.filter((m) => m.tipo === 'novo').length, 2)
+
+// A chegada manda no assunto: é a única mudança que encerra a espera.
+const comChegada = dailyReport({
+  cards: [
+    card({ id: 'a1', cliente: 'RIZZI', valor: 59200, fabrica: '2026-10-28' }),
+    card({ id: 'q', cliente: 'QUEEN', valor: 92000, fabrica: '2026-09-02',
+      chegou: '2026-10-16', extra: { status: 'Arrived' } }),
+  ],
+  previous: [
+    { card_id: 'a1', client_name: 'RIZZI', month: '2026-12', value_brl: 59200, status: 'Placed' },
+    { card_id: 'q', client_name: 'QUEEN', month: '2026-10', value_brl: 92000, status: 'Shipped' },
+  ],
+  today: '2026-10-16',
+})
+check('o assunto anuncia a chegada', comChegada.subject,
+  'Panorama do dia — 1 pedido chegou ao Brasil')
+check('a chegada vem em primeiro no bloco', comChegada.moves[0].cliente, 'QUEEN')
+// Quem já desembarcou sai do "a caminho": contar junto inflava o número do
+// topo com dinheiro que já chegou.
+check('o topo separa o que chegou',
+  comChegada.html.includes('R$ 59.200 em 1 pedido a caminho · R$ 92.000 já chegou'), true)
+check('e sem chegada nenhuma não inventa a frase',
+  quieto.html.includes('já chegou') || quieto.html.includes('já chegaram'), false)
 
 const texto = dailyReport({ cards, previous: [], today: '2026-10-09' }).text
 check('a versão em texto traz os meses', texto.includes('Dezembro 2026'), true)
