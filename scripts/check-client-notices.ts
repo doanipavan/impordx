@@ -69,7 +69,10 @@ async function main() {
   // teste passaria por engano.
   const { rows: [alvo] } = await db.query(`
     select c.ref_number, c.id from cards c join clients cl on cl.id = c.client_id
-     where c.board = 'orders' and not c.archived and c.status = 'Placed'
+     where c.board = 'orders' and not c.archived
+       -- Qualquer etapa de que o cliente pode ouvir falar: fixar em 'Placed'
+       -- fazia o teste quebrar sozinho quando alguém movia o quadro.
+       and c.status in ('Placed', 'In Production', 'Ready to Ship', 'Collected', 'Shipped')
        and btrim(coalesce(cl.email,'')) <> '' and c.delivery_date is not null
      limit 1`)
   check('há um card com cliente avisável', !!alvo?.id, true)
@@ -113,6 +116,56 @@ async function main() {
     src.includes("if destino is null or destino = '' then return new; end if;"), true)
   check('e um pedido antes de Placed também não', src.includes("'Placed', 'In Production'"), true)
   check('o gatilho engole o próprio erro', src.includes('exception when others then'), true)
+
+  // -------------------------------------------------------------------------
+  // Todo cliente novo existe, em vez de ficar só como texto
+  // -------------------------------------------------------------------------
+  // A tabela de clientes foi semeada uma vez e ninguém cuidou do dia
+  // seguinte: card novo com nome novo ficava sem vínculo, e sem vínculo não
+  // há onde guardar o email. O cliente nascia impossível de avisar, e o
+  // defeito crescia um cliente por vez, sem dar sinal.
+  await db.query('begin')
+  await db.query(`select set_config('request.jwt.claims',
+    json_build_object('sub', (select id::text from users where role='admin' limit 1))::text, true)`)
+
+  const { rows: [modelo] } = await db.query(
+    "select * from cards where board = 'orders' limit 1")
+  const criar = async (nome: string) => (await db.query(`
+    insert into cards (board, status, title, priority, client_name, created_by, supplier_id,
+                       ref_number, ref_root)
+    values ('quotes', 'Requested', 'teste de vínculo', 'medium', $1, $2, $3,
+            'TST-' || substr(md5(random()::text), 1, 8), 'tst')
+    returning client_id`, [nome, modelo.created_by, modelo.supplier_id])).rows[0].client_id
+
+  const inedito = `ZZ Cliente Novo ${Math.floor(Math.random() * 1e6)}`
+  const id1 = await criar(inedito)
+  check('card com nome novo nasce vinculado', !!id1, true)
+
+  // O mesmo nome não cria um segundo cliente — é o índice único por nome, e
+  // é o que impede o cadastro de virar uma lista de grafias.
+  const id2 = await criar(inedito.toUpperCase())
+  check('o mesmo nome em outra caixa reusa o cliente', id2, id1)
+
+  const { rows: [quantos] } = await db.query(
+    'select count(*)::int as n from clients where upper(btrim(name)) = upper($1)', [inedito])
+  check('e não duplica a linha', quantos.n, 1)
+
+  // Cliente que já existe é reusado, não recriado.
+  const { rows: [velho] } = await db.query(
+    "select id, name from clients where btrim(coalesce(email,'')) <> '' limit 1")
+  check('nome que já existe aponta para a linha existente', await criar(velho.name), velho.id)
+
+  await db.query('rollback')
+
+  const { rows: [restou] } = await db.query(
+    "select count(*)::int as n from clients where name like 'ZZ Cliente Novo%'")
+  check('o teste não deixou cliente para trás', restou.n, 0)
+
+  // E, depois do conserto, nenhum card ficou órfão.
+  const { rows: [orfaos] } = await db.query(`
+    select count(*)::int as n from cards
+     where client_id is null and btrim(coalesce(client_name, '')) <> ''`)
+  check('nenhum card com nome de cliente sem vínculo', orfaos.n, 0)
 
   // -------------------------------------------------------------------------
   // A prévia: quem pediu recebe, o cliente nunca
