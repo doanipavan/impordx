@@ -257,6 +257,28 @@ check('o topo separa o que chegou',
 check('e sem chegada nenhuma não inventa a frase',
   quieto.html.includes('já chegou') || quieto.html.includes('já chegaram'), false)
 
+// A largura segue o número de meses: com seis, as duas últimas colunas
+// caíam para a segunda linha e o kanban deixava de ser lido de uma vez.
+const largo = dailyReport({
+  cards: [
+    card({ id: 'm1', fabrica: '2026-09-01' }), card({ id: 'm2', fabrica: '2026-10-01' }),
+    card({ id: 'm3', fabrica: '2026-11-01' }), card({ id: 'm4', fabrica: '2026-12-01' }),
+    card({ id: 'm5', fabrica: '2027-01-01' }), card({ id: 'm6', fabrica: '2027-02-01' }),
+  ],
+  previous: [], today: '2026-11-08',
+})
+check('seis meses pedem largura para seis', largo.html.includes('max-width:880px'), true)
+check('e a tabela continua fluida', largo.html.includes('width:100%'), true)
+check('três meses não esticam além do mínimo',
+  dailyReport({ cards, previous: [], today: '2026-10-09' }).html.includes('max-width:600px'), true)
+// Sem teto, doze meses dariam uma tabela que não cabe em caixa de entrada
+// nenhuma — aí quebrar em duas linhas é melhor que encolher a letra.
+const muitos = Array.from({ length: 14 }, (_, n) => card({
+  id: `x${n}`, fabrica: `2026-${String((n % 12) + 1).padStart(2, '0')}-01`,
+}))
+check('muitos meses param no teto',
+  dailyReport({ cards: muitos, previous: [], today: '2026-11-08' }).html.includes('max-width:1180px'), true)
+
 const texto = dailyReport({ cards, previous: [], today: '2026-10-09' }).text
 check('a versão em texto traz os meses', texto.includes('Dezembro 2026'), true)
 check('e os clientes', texto.includes('RIZZI — R$ 59.200'), true)

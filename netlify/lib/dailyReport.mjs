@@ -284,6 +284,17 @@ export function dailyReport({ cards, previous, today }) {
   const chegou = moves.filter((m) => m.tipo === 'etapa' && m.chegou).length
   const mudaram = moves.filter((m) => m.tipo === 'moveu').length
   const novos = moves.filter((m) => m.tipo === 'novo').length
+  // A largura acompanha quantos meses existem, em vez de ser fixa em 600px.
+  // Com seis meses, as duas últimas colunas caíam para uma segunda linha e o
+  // kanban deixava de ser lido de uma vez, que é a razão de ele existir.
+  //
+  // Isto não quebra o celular: a tabela é `width:100%` com esta largura só
+  // como máximo, e as colunas são `inline-block`, então numa tela estreita
+  // elas voltam a quebrar em duas por linha, com a letra do mesmo tamanho.
+  // O teto existe porque passar de mil e poucos pixels não cabe em caixa de
+  // entrada nenhuma, e aí quebrar é melhor que encolher.
+  const largura = Math.min(1180, Math.max(600, 40 + cols.length * 140))
+
   const subject = chegou > 0
     ? `Panorama do dia — ${chegou} ${chegou === 1 ? 'pedido chegou' : 'pedidos chegaram'} ao Brasil`
     : mudaram > 0
@@ -319,8 +330,8 @@ export function dailyReport({ cards, previous, today }) {
 <body style="margin:0;padding:20px 10px;background:#f5f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 <tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0"
-       style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e3e6ea;border-radius:10px">
+<table role="presentation" width="${largura}" cellpadding="0" cellspacing="0"
+       style="max-width:${largura}px;width:100%;background:#ffffff;border:1px solid #e3e6ea;border-radius:10px">
 
   <tr><td style="padding:20px 20px 14px;border-bottom:1px solid ${LINE}">
     <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:${BRAND}">Redantex</div>
