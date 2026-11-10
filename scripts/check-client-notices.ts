@@ -77,9 +77,14 @@ async function main() {
      limit 1`)
   check('há um card com cliente avisável', !!alvo?.id, true)
 
-  const naFila = async () => (await db.query(
+  // Conta a diferença, não o total: a fila é de produção e já tem avisos de
+  // verdade. Um teste que exige fila vazia quebra sozinho no dia em que o
+  // sistema começa a funcionar — que é o dia em que ele mais precisa passar.
+  const total = async () => (await db.query(
     "select count(*)::int as n from email_outbox where card_id = $1 and kind = 'date-change'",
     [alvo.id])).rows[0].n
+  const partida = await total()
+  const naFila = async () => (await total()) - partida
 
   // `guard_delivery_date` exige um motivo junto da data nova — a fábrica
   // sempre explica, e o hub não deixa remarcar em silêncio.
@@ -88,11 +93,23 @@ async function main() {
             delivery_date_change_reason = 'conferência automática'
       where id = $1`, [alvo.id, dias])
 
-  await remarcar(6)
-  check('seis dias não escrevem ao cliente', await naFila(), 0)
+  // Os saltos saem da data real do card, não de números fixos. Quantos dias
+  // cabem dentro da mesma faixa depende de onde a data cai no terço do mês:
+  // fixar "seis dias" fazia o teste passar por coincidência e quebrar quando
+  // o card escolhido mudava.
+  const { rows: [saltos] } = await db.query(`
+    select max(k) filter (where arrival_band(delivery_date) = arrival_band(delivery_date + k)) as fica,
+           min(k) filter (where arrival_band(delivery_date) <> arrival_band(delivery_date + k)) as sai
+      from cards, generate_series(1, 40) as k
+     where id = $1`, [alvo.id])
+  check('há um salto que fica na faixa', saltos.fica > 0, true)
+  check('e um que sai dela', saltos.sai > 0, true)
 
-  await remarcar(10)
-  check('dezesseis escrevem, uma vez', await naFila(), 1)
+  await remarcar(saltos.fica)
+  check(`${saltos.fica} dias dentro da faixa não escrevem ao cliente`, await naFila(), 0)
+
+  await remarcar(saltos.sai - saltos.fica + 1)
+  check('cruzar a faixa escreve, uma vez', await naFila(), 1)
 
   // Segunda remarcação com o aviso ainda na fila: continua um email, porque
   // ele relê o card na hora de enviar e sai com a data mais recente.
@@ -103,8 +120,9 @@ async function main() {
 
   // Nada do teste sobreviveu.
   const { rows: [sobrou] } = await db.query(
-    "select count(*)::int as n from email_outbox where kind = 'date-change'")
-  check('a fila ficou como estava', sobrou.n, 0)
+    "select count(*)::int as n from email_outbox where card_id = $1 and kind = 'date-change'",
+    [alvo.id])
+  check('a fila ficou como estava', sobrou.n, partida)
 
   // -------------------------------------------------------------------------
   // Quem nunca pode receber

@@ -13,6 +13,21 @@ const BOARD_COLORS = {
 }
 const BOARD_LABELS: Record<string, string> = { quotes: 'QUO', samples: 'SMP', orders: 'ORD' }
 
+/**
+ * O que a busca procura, e por que o texto é limpo antes.
+ *
+ * O filtro do PostgREST separa as condições por vírgula, então uma vírgula
+ * digitada parte o filtro no meio e a consulta volta 400 — e a tela diz
+ * "nenhum resultado", que é a pior forma de errar: parece resposta. Buscar
+ * um cliente como "CAROLINA GONZAGA, POUCH" não achava nada.
+ *
+ * Parênteses fecham o grupo do `or` pelo mesmo motivo. `%` e `*` são curingas
+ * e sozinhos trariam o quadro inteiro.
+ */
+function limpar(texto: string): string {
+  return texto.replace(/[,()%*\\]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 export function Spotlight({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Card[]>([])
@@ -24,13 +39,24 @@ export function Spotlight({ onClose }: { onClose: () => void }) {
   useEffect(() => { inputRef.current?.focus() }, [])
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return }
+    const limpo = limpar(query)
+    if (!limpo) { setResults([]); return }
     const timer = setTimeout(async () => {
       setLoading(true)
       const { data } = await supabase
         .from('cards')
-        .select('id, title, board, status, ref_number, client_name, collection, priority')
-        .or(`title.ilike.%${query}%,ref_number.ilike.%${query}%,client_name.ilike.%${query}%,collection.ilike.%${query}%`)
+        .select('id, title, board, status, ref_number, client_name, collection, priority, pi_number, purchase_order')
+        // A proforma e o pedido de compra entram porque são por onde a
+        // conversa com a fábrica e com o ERP acontece: o número chega por
+        // email ou no WhatsApp, e procurar por ele era impossível.
+        .or([
+          `title.ilike.%${limpo}%`,
+          `ref_number.ilike.%${limpo}%`,
+          `client_name.ilike.%${limpo}%`,
+          `collection.ilike.%${limpo}%`,
+          `pi_number.ilike.%${limpo}%`,
+          `purchase_order.ilike.%${limpo}%`,
+        ].join(','))
         .eq('archived', false)
         .order('updated_at', { ascending: false })
         .limit(8)
@@ -40,6 +66,13 @@ export function Spotlight({ onClose }: { onClose: () => void }) {
     }, 250)
     return () => clearTimeout(timer)
   }, [query])
+
+  // Qual campo trouxe este resultado. Procurar uma proforma e receber uma
+  // linha que não a menciona deixa a dúvida de se é o card certo.
+  function casou(valor: string | null | undefined, texto: string): boolean {
+    const alvo = limpar(texto).toUpperCase()
+    return !!valor && alvo.length > 1 && valor.toUpperCase().includes(alvo)
+  }
 
   function openCard(card: Card) {
     navigate(`/${card.board}/${card.ref_number ?? card.id}`)
@@ -69,7 +102,7 @@ export function Spotlight({ onClose }: { onClose: () => void }) {
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search by ref, title or client..."
+            placeholder="Search by ref, client, proforma or purchase order..."
             className="flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
           {loading && <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />}
@@ -100,6 +133,12 @@ export function Spotlight({ onClose }: { onClose: () => void }) {
                         {card.ref_number && <span className="text-xs font-mono text-muted-foreground">{card.ref_number}</span>}
                         {card.client_name && <span className="text-xs text-muted-foreground">· {card.client_name}</span>}
                         {card.collection && <span className="text-xs text-muted-foreground">· {card.collection}</span>}
+                        {casou(card.pi_number, query) && (
+                          <span className="text-xs font-mono text-primary">· PI {card.pi_number}</span>
+                        )}
+                        {casou(card.purchase_order, query) && (
+                          <span className="text-xs font-mono text-primary">· PO {card.purchase_order}</span>
+                        )}
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-muted-foreground shrink-0">{BOARD_LABELS[card.board]}</span>
