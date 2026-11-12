@@ -16,7 +16,10 @@ export function useNotifications() {
         .select(`*, card:cards(id, title, board, ref_number), actor:users!notifications_actor_id_fkey(id, full_name, avatar_url, email, role, created_at)`)
         .eq('user_id', user!.id)
         .order('created_at', { ascending: false })
-        .limit(50)
+        // Cinquenta cobriam uns quatro dias do volume real — num sábado
+        // deste mês chegaram 55 de uma vez — e a tela agora é um quadro de
+        // dias, onde quatro colunas é pouco para quem volta de uma viagem.
+        .limit(200)
       if (error) throw error
       return data as Notification[]
     },
