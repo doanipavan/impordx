@@ -3,8 +3,28 @@
   publish = "dist"
   # Skip the build when nothing that ships has changed. A deploy costs ~15
   # credits, and docs, SQL migrations and CLAUDE.md change nothing the
-  # browser ever downloads. Exit 0 = skip.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src public index.html package.json package-lock.json vite.config.ts vite.config.js tailwind.config.js postcss.config.js netlify"
+  # browser ever downloads. Exit 0 = skip; qualquer outra coisa constrói.
+  #
+  # A primeira linha existe por uma armadilha que deixou três dias de
+  # conserto sem publicar, em 8 e 9 de novembro de 2026. Quando o cache do
+  # build não existe — e ele some sozinho depois de algumas semanas sem
+  # deploy — o Netlify preenche `CACHED_COMMIT_REF` com o **próprio commit**
+  # que está sendo construído. O `git diff` compara o commit com ele mesmo,
+  # não acha diferença, devolve 0, e a build é cancelada com a mensagem
+  # "Canceled build due to no content change".
+  #
+  # E a armadilha se alimenta: build cancelada não grava cache, e sem cache a
+  # seguinte cai igual. Foram dois deploys seguidos, o site ficou quase um mês
+  # servindo código velho, e nada dizia que havia algo errado — o commit
+  # estava no GitHub e o painel dizia "Canceled", que parece decisão e não
+  # falha.
+  #
+  # Na dúvida, construir: quinze créditos custam menos que um conserto que
+  # ninguém sabe que não subiu.
+  ignore = '''
+if [ -z "$CACHED_COMMIT_REF" ] || [ "$CACHED_COMMIT_REF" = "$COMMIT_REF" ]; then exit 1; fi
+git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- src public index.html package.json package-lock.json vite.config.ts vite.config.js tailwind.config.js postcss.config.js netlify
+'''
 
 # O cartão da prévia, antes do catch-all abaixo. A função já declara este
 # mesmo caminho em `config.path`; a regra existe porque a ordem entre rota de

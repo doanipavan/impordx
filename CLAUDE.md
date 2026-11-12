@@ -170,6 +170,23 @@ CLAUDE.md changed, but that is the small half of the fix; the habit is the
 other half. Serving the site is free by comparison — bandwidth and compute
 together came to under 2 credits in a month.
 
+**A pushed commit is not a deployed commit, and the difference is invisible.**
+On 8 and 9 Nov 2026 two deploys were cancelled and the site served a month-old
+build while GitHub showed everything merged. The cause was the ignore command
+above: when the build cache is gone — it expires on its own after a few weeks
+without a deploy — Netlify fills `CACHED_COMMIT_REF` with **the very commit
+being built**, so `git diff` compares a commit with itself, finds nothing, and
+cancels. The trap feeds itself, because a cancelled build writes no cache and
+the next one falls the same way. The guard in `netlify.toml` now builds
+whenever that ref is empty or equal, and the dashboard's word for this is
+**"Canceled"**, which reads like a decision rather than a failure.
+
+So **verify the deployed content, not the push**: fetch the site and look for a
+string from the change. A frontend change moves the bundle hash in
+`dist/index.html`; a change under `netlify/lib` does not move it at all, and
+there the only proof is the behaviour — the next scheduled run, or the
+function's own `job_runs` line.
+
 ## Known open issues
 
 - **Two RLS policies are wide open**: `cards` ("Members can update cards") and
