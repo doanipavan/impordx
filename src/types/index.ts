@@ -171,7 +171,10 @@ export interface Notification {
   card?: Pick<Card, 'id' | 'title' | 'board' | 'ref_number'>
   actor_id?: string
   actor?: User
-  type: 'comment' | 'status_change' | 'assignment' | 'mention' | 'due_soon'
+  // O tipo vem do banco e nove deles existem hoje; a lista estava com cinco,
+  // três dos quais nunca foram gravados. `string` é honesto sobre isso, e o
+  // agrupamento da tela de notificações traduz tipo em assunto num lugar só.
+  type: string
   message: string
   read: boolean
   created_at: string

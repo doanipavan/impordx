@@ -12,7 +12,10 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { groupByDay, dayInSaoPaulo, dayLabel, timeInSaoPaulo } from '../src/lib/notificationDays'
+import {
+  groupByDay, dayInSaoPaulo, dayLabel, timeInSaoPaulo,
+  agruparAnexos, grupoDe, tiposDoGrupo, GRUPOS,
+} from '../src/lib/notificationDays'
 
 const { Client } = createRequire(join(homedir(), '.rdx-dbtool/db.mjs'))('pg')
 
@@ -65,6 +68,59 @@ check('o dia 11, que não teve nada, não aparece',
   grupos.some((g) => g.day === '2026-11-11'), false)
 check('sem notificações, sem grupos', groupByDay([], '2026-11-12'), [])
 
+// ---------------------------------------------------------------------------
+// Assunto: nove tipos viram seis botões
+// ---------------------------------------------------------------------------
+
+check('menção', grupoDe('mention'), 'Mentions')
+check('as três de data caem no mesmo botão',
+  [grupoDe('delivery_set'), grupoDe('delivery_change'), grupoDe('due_soon')],
+  ['Dates', 'Dates', 'Dates'])
+check('tipo desconhecido não some num grupo errado', grupoDe('coisa_nova'), null)
+check('o grupo de datas devolve os três tipos',
+  tiposDoGrupo('Dates').sort(), ['delivery_change', 'delivery_set', 'due_soon'])
+// A varredura usa esta lista para montar a consulta: um tipo de fora ficaria
+// marcado como lido sem o usuário ter pedido.
+check('nenhum grupo devolve tipo de outro',
+  GRUPOS.every((g) => tiposDoGrupo(g).every((t) => grupoDe(t) === g)), true)
+
+// ---------------------------------------------------------------------------
+// Juntar os anexos repetidos
+// ---------------------------------------------------------------------------
+
+const anexo = (id: string, card: string, autor: string, read = true) =>
+  ({ id, type: 'attachment', card_id: card, actor_id: autor, read })
+
+const juntou = agruparAnexos([
+  anexo('1', 'c1', 'a'), anexo('2', 'c1', 'a'), anexo('3', 'c1', 'a'),
+])
+check('quatro linhas de arquivo viram uma', juntou.length, 1)
+check('com o número à vista', juntou[0].count, 3)
+check('e todas dentro, para marcar lidas juntas', juntou[0].all.length, 3)
+
+check('autor diferente não junta',
+  agruparAnexos([anexo('1', 'c1', 'a'), anexo('2', 'c1', 'b')]).length, 2)
+check('card diferente não junta',
+  agruparAnexos([anexo('1', 'c1', 'a'), anexo('2', 'c2', 'a')]).length, 2)
+// Juntar não consecutivos tiraria as coisas da ordem do dia.
+check('separadas por outra coisa não juntam', agruparAnexos([
+  anexo('1', 'c1', 'a'),
+  { id: '2', type: 'comment', card_id: 'c1', actor_id: 'a', read: true },
+  anexo('3', 'c1', 'a'),
+]).length, 3)
+// Juntar comentários apagaria o que cada um diz.
+check('comentários nunca juntam', agruparAnexos([
+  { id: '1', type: 'comment', card_id: 'c1', actor_id: 'a', read: true },
+  { id: '2', type: 'comment', card_id: 'c1', actor_id: 'a', read: true },
+]).length, 2)
+
+// O grupo só conta como lido quando todas estão: uma não lida no meio tem de
+// deixar o cartão aceso.
+check('uma não lida acende o grupo',
+  agruparAnexos([anexo('1', 'c1', 'a'), anexo('2', 'c1', 'a', false)])[0].read, false)
+check('todas lidas apagam', agruparAnexos([anexo('1', 'c1', 'a')])[0].read, true)
+check('nada entra, nada sai', agruparAnexos([]), [])
+
 async function main() {
   const url = readFileSync(join(homedir(), '.rdx-db-url'), 'utf8').trim()
   const db = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
@@ -95,6 +151,52 @@ async function main() {
     (sql as { total: number }[]).map((r) => r.total))
   check('nada se perdeu no caminho',
     ts.reduce((s, g) => s + g.items.length, 0), reais.length)
+
+  // -------------------------------------------------------------------------
+  // Silenciar um card
+  // -------------------------------------------------------------------------
+  // O portão fica antes do insert, e não dentro das sete funções que
+  // notificam: sete verificações seriam sete lugares para esquecer uma.
+  const { rows: gatilhos } = await db.query(`
+    select tgname::text as nome from pg_trigger
+     where tgrelid = 'notifications'::regclass and not tgisinternal`)
+  check('há um portão antes do insert',
+    (gatilhos as { nome: string }[]).map((g) => g.nome), ['trg_drop_muted_notification'])
+
+  await db.query('begin')
+  const { rows: [alguem] } = await db.query("select id from users where role='admin' limit 1")
+  const { rows: [card] } = await db.query('select id from cards limit 1')
+  const contar = async () => (await db.query(
+    'select count(*)::int as n from notifications where user_id = $1 and card_id = $2',
+    [alguem.id, card.id])).rows[0].n
+
+  const antes = await contar()
+  await db.query(`insert into notifications (user_id, card_id, type, message)
+                  values ($1, $2, 'comment', 'antes de silenciar')`, [alguem.id, card.id])
+  check('sem silenciar, a notificação entra', await contar(), antes + 1)
+
+  await db.query('insert into muted_cards (user_id, card_id) values ($1, $2)',
+    [alguem.id, card.id])
+  await db.query(`insert into notifications (user_id, card_id, type, message)
+                  values ($1, $2, 'comment', 'depois de silenciar')`, [alguem.id, card.id])
+  check('silenciado, não entra', await contar(), antes + 1)
+
+  // O que já chegou fica: silenciar é sobre o futuro, não apaga histórico.
+  check('e o que já tinha chegado continua lá', await contar() > antes, true)
+
+  // Silenciar vale por pessoa: ninguém cala o aviso de outro.
+  const { rows: [outro] } = await db.query(
+    "select id from users where role <> 'admin' limit 1")
+  await db.query(`insert into notifications (user_id, card_id, type, message)
+                  values ($1, $2, 'comment', 'para outra pessoa')`, [outro.id, card.id])
+  const { rows: [doOutro] } = await db.query(
+    'select count(*)::int as n from notifications where user_id = $1 and card_id = $2',
+    [outro.id, card.id])
+  check('o silêncio de um não cala o outro', doOutro.n > 0, true)
+  await db.query('rollback')
+
+  const { rows: [limpo] } = await db.query('select count(*)::int as n from muted_cards')
+  check('o teste não deixou card silenciado', limpo.n, 0)
 
   await db.end()
   console.log(bad === 0 ? '\nTudo certo.\n' : `\n${bad} falha(s).\n`)

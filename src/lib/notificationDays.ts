@@ -79,3 +79,82 @@ export function groupByDay<T extends Timed>(items: T[], today: string): DayGroup
       unread: lista.filter((n) => n.read === false).length,
     }))
 }
+
+/**
+ * Os grupos de assunto que a barra de filtros oferece.
+ *
+ * Nove tipos viram seis botões: o que separa "a data foi definida" de "a data
+ * mudou" interessa a quem escreveu o gatilho, não a quem está procurando o
+ * que perdeu.
+ */
+export const GRUPOS = ['Mentions', 'Comments', 'Files', 'Stages', 'Dates', 'Client'] as const
+export type Grupo = typeof GRUPOS[number]
+
+const DE_TIPO: Record<string, Grupo> = {
+  mention: 'Mentions',
+  comment: 'Comments',
+  attachment: 'Files',
+  status_change: 'Stages',
+  delivery_set: 'Dates',
+  delivery_change: 'Dates',
+  due_soon: 'Dates',
+  client_approved: 'Client',
+  client_changes: 'Client',
+}
+
+export function grupoDe(type?: string | null): Grupo | null {
+  return DE_TIPO[String(type ?? '')] ?? null
+}
+
+/** Os tipos que um grupo abrange — é isso que vai para a consulta ao varrer. */
+export function tiposDoGrupo(grupo: Grupo): string[] {
+  return Object.keys(DE_TIPO).filter((t) => DE_TIPO[t] === grupo)
+}
+
+interface Agrupavel {
+  id: string
+  type?: string | null
+  read?: boolean
+  card_id?: string | null
+  actor_id?: string | null
+}
+
+export interface Agrupada<T> {
+  /** A primeira do grupo: é dela que saem hora, card e autor. */
+  head: T
+  /** Todas, inclusive a primeira — marcar lida tem de valer para o grupo. */
+  all: T[]
+  /** Quantas foram juntadas. 1 quando não houve junção. */
+  count: number
+  /** Lida só quando todas estão. */
+  read: boolean
+}
+
+/**
+ * Junta anexos seguidos da mesma pessoa no mesmo card.
+ *
+ * "Carlos adicionou Tecidos.png", "...Expositor.png", mais duas: quatro
+ * linhas que dizem uma coisa só. São 265 avisos de arquivo na caixa, o maior
+ * volume de todos, e juntá-los não esconde nada — o número fica à vista.
+ *
+ * Só anexos, e só consecutivos. Juntar comentários apagaria o que cada um
+ * diz, e juntar não consecutivos tiraria as coisas da ordem do dia.
+ */
+export function agruparAnexos<T extends Agrupavel>(lista: T[]): Agrupada<T>[] {
+  const out: Agrupada<T>[] = []
+  for (const n of lista) {
+    const ult = out[out.length - 1]
+    const juntavel = ult
+      && n.type === 'attachment' && ult.head.type === 'attachment'
+      && n.card_id && ult.head.card_id === n.card_id
+      && ult.head.actor_id === n.actor_id
+    if (juntavel) {
+      ult.all.push(n)
+      ult.count += 1
+      ult.read = ult.read && n.read !== false
+      continue
+    }
+    out.push({ head: n, all: [n], count: 1, read: n.read !== false })
+  }
+  return out
+}
