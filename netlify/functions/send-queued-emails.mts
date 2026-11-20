@@ -244,12 +244,12 @@ async function enabled(): Promise<boolean> {
 }
 
 export default async () => {
-  let nota = 'não chegou ao fim'
+  let nota = 'did not finish'
   let ok = false
   try {
     return await rodar((n) => { nota = n; ok = true })
   } catch (err) {
-    nota = `falhou: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
+    nota = `failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
     throw err
   } finally {
     await recordRun({ job: 'send-queued-emails', note: nota, ok })
@@ -258,7 +258,7 @@ export default async () => {
 
 async function rodar(anotar: (nota: string) => void) {
   if (!await enabled()) {
-    anotar('freio puxado — nada enviado')
+    anotar('paused — nothing sent')
     return new Response(JSON.stringify({ paused: true }), {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -295,8 +295,8 @@ async function rodar(anotar: (nota: string) => void) {
   // "Fila vazia" é o resultado normal de quase toda rodada, e precisa ser
   // distinguível de "a rotina não rodou" na tela de Settings.
   anotar(rows.length === 0
-    ? 'fila vazia'
-    : `${sent} enviado(s) · ${skipped} já reservado(s) · ${failed.length} falha(s)`)
+    ? 'queue empty'
+    : `${sent} sent · ${skipped} already claimed · ${failed.length} failed`)
 
   return new Response(JSON.stringify({ picked: rows.length, sent, skipped, failed: failed.length }), {
     headers: { 'Content-Type': 'application/json' },

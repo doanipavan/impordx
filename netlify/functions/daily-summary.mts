@@ -109,12 +109,15 @@ export default async () => {
   // O batimento sai no `finally`: a tela de Settings precisa saber tanto que a
   // rotina rodou quanto que ela falhou, e uma falha que não registra nada é
   // indistinguível de um agendamento que parou.
-  let nota = 'não chegou ao fim'
+  // As notas aparecem em Settings, que é tela do hub — e o hub é inglês
+  // inteiro. Escritas em português, elas eram a regra da casa quebrada no
+  // único lugar que ninguém relê.
+  let nota = 'did not finish'
   let ok = false
   try {
     return await rodar((n) => { nota = n; ok = true })
   } catch (err) {
-    nota = `falhou: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
+    nota = `failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
     throw err
   } finally {
     await recordRun({ job: 'daily-summary', note: nota, ok })
@@ -176,9 +179,9 @@ async function rodar(anotar: (nota: string) => void) {
   await db(`arrival_snapshots?taken_on=lt.${corte}`, { method: 'DELETE' })
     .catch((err) => console.error('Prune:', err))
 
-  anotar(`${para.length} destinatário(s) · ${rows.length} pedidos · `
-    + (moves.length ? `${moves.length} mudança(s) de mês` : 'nada mudou')
-    + (quando ? '' : ' · primeiro retrato'))
+  anotar(`${para.length} recipient${para.length === 1 ? '' : 's'} · ${rows.length} orders · `
+    + (moves.length ? `${moves.length} change${moves.length === 1 ? '' : 's'}` : 'nothing changed')
+    + (quando ? '' : ' · first snapshot'))
 
   return new Response(JSON.stringify({
     sent: para.length, orders: rows.length, moves: moves.length, comparedWith: quando,

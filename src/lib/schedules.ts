@@ -20,6 +20,16 @@ export interface Routine {
   detail: string
   /** Horas sem rodar a partir das quais a tela acende o alerta. */
   overdueHours: number
+  /**
+   * Rotina que não tem hora: só roda quando alguém de fora a chama.
+   *
+   * "Atrasada" não quer dizer nada para ela — pode simplesmente não ter
+   * havido evento, que é o normal em semana sem devolução. Acender âmbar por
+   * silêncio seria acusar um defeito que não existe; o que de fato precisa
+   * acender é a própria rotina dizendo que não está configurada, e isso ela
+   * faz registrando `last_ok = false`.
+   */
+  eventDriven?: boolean
 }
 
 export const ROUTINES: Routine[] = [
@@ -53,7 +63,8 @@ export const ROUTINES: Routine[] = [
     // a folga é larga.
     cadence: 'when the provider reports back',
     detail: 'Records what was delivered, what bounced, and silences a dead address',
-    overdueHours: 24 * 30,
+    overdueHours: Infinity,
+    eventDriven: true,
   },
 ]
 
@@ -67,6 +78,8 @@ export function routineState(
 ): 'novo' | 'ok' | 'atrasado' | 'falhou' {
   if (!run || run.note === NUNCA_REGISTROU) return 'novo'
   if (!run.last_ok) return 'falhou'
+  // `Infinity` é como uma rotina sem hora marcada chega aqui: nunca atrasa.
+  if (!Number.isFinite(overdueHours)) return 'ok'
   const horas = (now - new Date(run.last_run_at).getTime()) / 3_600_000
   return horas > overdueHours ? 'atrasado' : 'ok'
 }

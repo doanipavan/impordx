@@ -3,6 +3,9 @@ import { useJobRuns } from '../../hooks/useJobRuns'
 import { formatDateTime, cn } from '../../lib/utils'
 import { ROUTINES, routineState } from '../../lib/schedules'
 
+/** Quem não tem hora marcada "reporta", não "roda". */
+const ROTINA_SEM_HORA = new Set(ROUTINES.filter((r) => r.eventDriven).map((r) => r.job))
+
 export function Schedules() {
   const { data: runs, isLoading } = useJobRuns()
   const by = new Map((runs ?? []).map((r) => [r.job, r]))
@@ -56,7 +59,8 @@ export function Schedules() {
                 {run && !novo && (
                   <p className={cn('text-[11px] mt-1',
                     falhou || atrasado ? 'text-amber-700' : 'text-muted-foreground')}>
-                    Last ran {formatDateTime(run.last_run_at)}
+                    {ROTINA_SEM_HORA.has(r.job) ? 'Last reported ' : 'Last ran '}
+                    {formatDateTime(run.last_run_at)}
                     {run.note ? ` — ${run.note}` : ''}
                     {atrasado ? ' · later than expected' : ''}
                   </p>

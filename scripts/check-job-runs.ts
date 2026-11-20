@@ -48,7 +48,7 @@ async function main() {
   for (const job of naTela) {
     const src = readFileSync(`netlify/functions/${job}.mts`, 'utf8')
     check(`${job} registra no finally`, src.includes('} finally {'), true)
-    check(`${job} registra falha também`, src.includes('nota = `falhou:'), true)
+    check(`${job} registra falha também`, src.includes('nota = `failed:'), true)
   }
 
   // Uma linha por rotina, reescrita. Duas linhas para a mesma rotina fariam a
@@ -102,7 +102,32 @@ async function main() {
   check('a de quinze minutos, parada há três horas, está atrasada',
     routineState(rodou('2026-10-10T09:00:00Z'), 2, agora), 'atrasado')
   check('falha vence o atraso',
-    routineState(rodou('2026-10-10T11:00:00Z', false, 'falhou: Resend 403'), 26, agora), 'falhou')
+    routineState(rodou('2026-10-10T11:00:00Z', false, 'failed: Resend 403'), 26, agora), 'falhou')
+
+  // Rotina sem hora marcada não atrasa: ela só roda quando alguém de fora a
+  // chama, e semana sem devolução é semana normal. Acender âmbar por silêncio
+  // acusaria um defeito que não existe — e foi o que a tela fez durante um
+  // mês com o webhook da Resend.
+  check('a que não tem hora nunca atrasa',
+    routineState(rodou('2026-10-16T20:28:00Z'), Infinity, agora), 'ok')
+  // Mas o que precisa acender continua acendendo: a própria rotina diz que
+  // não está configurada gravando `last_ok = false`.
+  check('e ainda assim acusa quando falha',
+    routineState(rodou('2026-10-16T20:28:00Z', false, 'not set up yet'), Infinity, agora), 'falhou')
+  check('exatamente uma rotina é sem hora',
+    ROUTINES.filter((r) => r.eventDriven).map((r) => r.job), ['resend-webhook'])
+  check('e ela não tem horas de atraso',
+    ROUTINES.filter((r) => r.eventDriven).every((r) => !Number.isFinite(r.overdueHours)), true)
+
+  // As notas das rotinas aparecem em Settings, que é tela do hub — inglês
+  // inteiro. Escritas em português, eram a regra da casa quebrada no único
+  // lugar que ninguém relê.
+  const acentos = /[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]/
+  for (const job of naTela) {
+    const src = readFileSync(`netlify/functions/${job}.mts`, 'utf8')
+    const notas = [...src.matchAll(/(?:nota = |anotar\()'([^']*)'/g)].map((m) => m[1])
+    check(`${job} anota em inglês`, notas.filter((n) => acentos.test(n)), [])
+  }
 
   console.log(bad === 0 ? '\nTudo certo.\n' : `\n${bad} falha(s).\n`)
   process.exit(bad === 0 ? 0 : 1)

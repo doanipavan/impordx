@@ -52,12 +52,12 @@ async function enabled(): Promise<boolean> {
 }
 
 export default async () => {
-  let nota = 'não chegou ao fim'
+  let nota = 'did not finish'
   let ok = false
   try {
     return await rodar((n) => { nota = n; ok = true })
   } catch (err) {
-    nota = `falhou: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
+    nota = `failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
     throw err
   } finally {
     await recordRun({ job: 'queue-reminders', note: nota, ok })
@@ -68,7 +68,7 @@ async function rodar(anotar: (nota: string) => void) {
   // Com o freio puxado nem se enfileira: lembrete acumulado vira enxurrada
   // quando alguém solta o freio.
   if (!await enabled()) {
-    anotar('freio puxado — nada enfileirado')
+    anotar('paused — nothing queued')
     return new Response(JSON.stringify({ paused: true }), {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -84,7 +84,7 @@ async function rodar(anotar: (nota: string) => void) {
   if (pending.length === 0) {
     // Silêncio aqui é resultado, não falha: significa que todo mundo foi
     // avisado de alguma coisa nos últimos quinze dias.
-    anotar('ninguém vencido — nada a enfileirar')
+    anotar('nobody due — nothing to queue')
     return new Response(JSON.stringify({ queued: 0 }), {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -106,7 +106,7 @@ async function rodar(anotar: (nota: string) => void) {
   })
   if (!ins.ok) throw new Error(`Supabase ${ins.status}: ${await ins.text()}`)
 
-  anotar(`${rows.length} lembrete(s) enfileirado(s)`)
+  anotar(`${rows.length} reminder${rows.length === 1 ? '' : 's'} queued`)
   return new Response(JSON.stringify({ queued: rows.length }), {
     headers: { 'Content-Type': 'application/json' },
   })

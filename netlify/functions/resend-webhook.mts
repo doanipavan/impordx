@@ -86,17 +86,22 @@ interface Evento {
 }
 
 export default async (req: Request) => {
-  let nota = 'não chegou ao fim'
+  let nota = 'did not finish'
   let ok = false
   try {
     const corpo = await req.text()
 
     if (!assinaturaConfere(req, corpo)) {
       // Nem detalhe nem dica: quem está tentando adivinhar não ganha pistas.
-      nota = process.env.RESEND_WEBHOOK_SECRET
-        ? 'assinatura recusada'
-        : 'sem RESEND_WEBHOOK_SECRET configurado'
-      ok = true
+      // Sem segredo é problema nosso: o tratamento de devolução não existe
+      // até alguém criar o webhook na Resend, e isso precisa acender em
+      // Settings. Assinatura recusada é outra coisa — alguém bateu na porta
+      // sem chave, e a porta funcionou.
+      const faltaSegredo = !process.env.RESEND_WEBHOOK_SECRET
+      nota = faltaSegredo
+        ? 'not set up yet — create the webhook in Resend and set RESEND_WEBHOOK_SECRET'
+        : 'signature rejected'
+      ok = !faltaSegredo
       return new Response('no', { status: 401 })
     }
 
@@ -112,7 +117,7 @@ export default async (req: Request) => {
           : null
 
     if (!id || !traduzido) {
-      nota = `ignorado: ${tipo || 'sem tipo'}`
+      nota = `ignored: ${tipo || 'no type'}`
       ok = true
       return new Response('ok')
     }
@@ -136,12 +141,12 @@ export default async (req: Request) => {
     const casou = await res.json()
 
     nota = casou === true
-      ? `${traduzido}${permanente ? ' permanente' : ''}`
-      : `${traduzido} de um email que não é nosso`
+      ? `${traduzido}${permanente ? ' · permanent' : ''}`
+      : `${traduzido} for an email that is not ours`
     ok = true
     return new Response('ok')
   } catch (err) {
-    nota = `falhou: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
+    nota = `failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 300)
     // Devolver 500 faz a Resend tentar de novo, que é o certo quando a falha
     // foi nossa.
     return new Response('erro', { status: 500 })
