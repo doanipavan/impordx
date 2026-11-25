@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useSalesOrders, useCardNotices, SalesCard } from '../hooks/useSalesPanel'
 import {
   salesRows, salesMonths, salespeopleIn, monthName, forecastBand,
-  shortDay, longDay, brl, pecas, SalesMonth,
+  shortDay, longDay, brl, pecas, SalesMonth, SalesRow, datelessRows,
 } from '../lib/salesPanel'
 import { orderSchedule } from '../lib/utils'
 import { cn } from '../lib/utils'
@@ -76,14 +76,20 @@ export function SalesPage() {
   }
 
   const todas = useMemo(() => salesRows((cards ?? []) as SalesCard[]), [cards])
+  // Pedido no começo ainda não tem mês. Fica numa coluna à parte em vez de
+  // sumir: é valor em carteira, e some justamente quando é novidade.
+  const semData = useMemo(() => {
+    const lista = datelessRows((cards ?? []) as SalesCard[])
+    return quem ? lista.filter((r) => r.salesperson === quem) : lista
+  }, [cards, quem])
   const vendedores = useMemo(() => salespeopleIn(todas), [todas])
   const rows = useMemo(
     () => (quem ? todas.filter((r) => r.salesperson === quem) : todas),
     [todas, quem])
   const meses = useMemo(() => salesMonths(rows), [rows])
 
-  const total = rows.reduce((s, r) => s + r.value, 0)
-  const clientes = new Set(rows.map((r) => r.client)).size
+  const total = [...rows, ...semData].reduce((s, r) => s + r.value, 0)
+  const clientes = new Set([...rows, ...semData].map((r) => r.client)).size
 
   // O fornecedor não tem o que fazer nesta tela: é a carteira comercial da
   // Redantex, com valor de venda em cada linha.
@@ -150,8 +156,8 @@ export function SalesPage() {
         )}
 
         {vista === 'linhas'
-          ? <EmLinhas meses={meses} onOpen={setAberto} />
-          : <EmColunas meses={meses} onOpen={setAberto} />}
+          ? <EmLinhas meses={meses} semData={semData} onOpen={setAberto} />
+          : <EmColunas meses={meses} semData={semData} onOpen={setAberto} />}
 
         <p className="text-[11px] text-muted-foreground leading-relaxed mt-4">
           O mês é o da chegada ao Brasil, pela mesma regra que o cliente lê no email: a data que a
@@ -166,12 +172,15 @@ export function SalesPage() {
 }
 
 /** Um mês embaixo do outro: o mês inteiro se lê de uma vez. */
-function EmLinhas({ meses, onOpen }: {
-  meses: SalesMonth[]; onOpen: (c: SalesCard) => void
+function EmLinhas({ meses, semData, onOpen }: {
+  meses: SalesMonth[]; semData: SalesRow[]; onOpen: (c: SalesCard) => void
 }) {
+  const todos = semData.length
+    ? [...meses, { key: 'sem-data', rows: semData, total: semData.reduce((s, r) => s + r.value, 0) }]
+    : meses
   return (
     <>
-      {meses.map((mes) => (
+      {todos.map((mes) => (
         <div key={mes.key} className="rounded-xl border border-border bg-card mb-3 overflow-hidden">
           <CabecalhoMes mes={mes} />
           {mes.rows.length === 0 ? (
@@ -213,13 +222,15 @@ function EmLinhas({ meses, onOpen }: {
  * As colunas têm largura mínima e a faixa rola de lado: com quatro meses cabe
  * na tela, e com doze continua legível em vez de virar doze tiras finas.
  */
-function EmColunas({ meses, onOpen }: {
-  meses: SalesMonth[]; onOpen: (c: SalesCard) => void
+function EmColunas({ meses, semData, onOpen }: {
+  meses: SalesMonth[]; semData: SalesRow[]; onOpen: (c: SalesCard) => void
 }) {
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex gap-3 items-start" style={{ minWidth: meses.length * 260 }}>
-        {meses.map((mes) => (
+        {(semData.length
+          ? [...meses, { key: 'sem-data', rows: semData, total: semData.reduce((s, r) => s + r.value, 0) }]
+          : meses).map((mes) => (
           <div key={mes.key}
             className="flex-1 min-w-[250px] rounded-xl border border-border bg-card overflow-hidden">
             <CabecalhoMes mes={mes} empilhado />
@@ -256,7 +267,9 @@ function CabecalhoMes({ mes, empilhado }: { mes: SalesMonth; empilhado?: boolean
   return (
     <div className={cn('px-4 py-2.5 border-b border-border bg-muted/30',
       empilhado ? '' : 'flex items-baseline justify-between')}>
-      <p className="text-[13px] font-semibold">{monthName(mes.key)}</p>
+      <p className="text-[13px] font-semibold">
+        {mes.key === 'sem-data' ? 'Sem data ainda' : monthName(mes.key)}
+      </p>
       {empilhado ? (
         <>
           <p className="text-[15px] font-semibold tabular-nums mt-1">{total}</p>

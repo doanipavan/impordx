@@ -24,6 +24,7 @@ import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import {
   salesRows, salesMonths, salespeopleIn, monthName, forecastBand, shortDay, longDay,
+  datelessRows,
 } from '../src/lib/salesPanel'
 import { arrivalsByMonth } from '../src/lib/orderTotals'
 import { Card, salespersonLabel } from '../src/types'
@@ -222,10 +223,17 @@ async function main() {
   const rows = salesRows(cards as Card[])
   const meses = salesMonths(rows)
 
-  check('todo pedido aberto entrou', rows.length, cards.length)
+  // Pedido ainda em intake não tem âncora e não tem mês. Ele não some: vai
+  // para a coluna "Sem data ainda", e a soma das duas listas tem de fechar
+  // com o quadro — senão um pedido desaparece do painel sem ninguém ver.
+  const sem = datelessRows(cards as Card[])
+  check('nada se perde entre as duas listas', rows.length + sem.length, cards.length)
+  check('e os sem data são os que o SQL não consegue datar',
+    sem.length, sql.filter((r) => r.mes === null).reduce((n, r) => n + r.pedidos, 0))
   check('os meses com pedido são os mesmos do SQL',
-    meses.filter((m) => m.rows.length).map((m) => m.key), sql.map((r) => r.mes))
-  for (const r of sql) {
+    meses.filter((m) => m.rows.length).map((m) => m.key),
+    sql.filter((r) => r.mes !== null).map((r) => r.mes))
+  for (const r of sql.filter((x) => x.mes !== null)) {
     const m = meses.find((x) => x.key === r.mes)!
     check(`${r.mes} pedidos`, m.rows.length, r.pedidos)
     check(`${r.mes} R$`, Math.round(m.total), Math.round(r.brl))

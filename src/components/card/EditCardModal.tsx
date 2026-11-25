@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Card, BoardType, BOARD_COLUMNS, CardStatus, Priority } from '../../types'
 import { useUpdateCard } from '../../hooks/useCards'
+import { useSuppliers } from '../../hooks/useSupplierFilter'
+import { useCardItems } from '../../hooks/useCardItems'
+import { supabase } from '../../lib/supabase'
 import { useToast } from '../ui/toast'
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../ui/dialog'
 import { Button } from '../ui/button'
@@ -38,6 +42,7 @@ const schema = z.object({
   logo_color_inside: z.string().optional(),
   reference_code: z.string().optional(),
   supplier_ref: z.string().optional(),
+  supplier_id: z.string().optional(),
 })
 
 // The salesperson comes from the register now (056), so the field is a
@@ -53,6 +58,8 @@ interface EditCardModalProps {
 
 export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
   const { data: staff = [] } = useRedantexUsers()
+  const { data: suppliers = [] } = useSuppliers()
+  const { data: itens = [] } = useCardItems(card.id)
   const { data: salespeople = [] } = useActiveSalespeople()
   const updateCard = useUpdateCard()
   const toast = useToast()
@@ -67,6 +74,7 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
       client_name: card.client_name ?? '',
       collection: card.collection ?? '',
       salesperson_ref_id: card.salesperson_ref_id ?? '',
+      supplier_id: card.supplier_id ?? '',
       project_manager_id: card.project_manager_id ?? '',
       quantity: card.quantity ?? '',
       deadline: card.deadline ? card.deadline.substring(0, 10) : '',
@@ -88,6 +96,18 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
   })
 
   const watchedSalesperson = watch('salesperson_ref_id')
+
+  // Trocar o fornecedor passa o pedido de mãos. O que o anterior escreveu e
+  // enviou deixa de ser visível para o novo (migração 069) — mas o preço de
+  // compra dos itens fica, porque item não tem autor, e apagar número em
+  // silêncio é pior do que mostrá-lo. Daí a decisão ser explícita aqui.
+  const fornecedorEscolhido = watch('supplier_id')
+  const trocando = !!card.supplier_id && !!fornecedorEscolhido
+    && fornecedorEscolhido !== card.supplier_id
+  const nomeAtual = suppliers.find((f) => f.id === card.supplier_id)?.short_name ?? 'the supplier'
+  const nomeNovo = suppliers.find((f) => f.id === fornecedorEscolhido)?.short_name ?? 'the new one'
+  const comPreco = itens.filter((i) => i.unit_price_usd != null).length
+  const [limparPrecos, setLimparPrecos] = useState(true)
   const soldBy = salespeople.find(s => s.id === watchedSalesperson)
 
   const onSubmit = async (values: FormValues) => {
@@ -99,6 +119,7 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         priority: values.priority as Priority,
         client_name: values.client_name || undefined,
         collection: values.collection || undefined,
+        supplier_id: values.supplier_id || undefined,
         salesperson_ref_id: values.salesperson_ref_id,
         // O nome acompanha porque é ele que o quadro lê; `salespeople` é
         // tabela da Redantex e a consulta do fornecedor não pode embuti-la.
@@ -124,7 +145,27 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
         reference_code: values.reference_code || undefined,
         supplier_ref: values.supplier_ref || undefined,
       })
-      toast('Card updated', 'success')
+      // A troca fica no histórico do card com os dois nomes: meses depois,
+      // "por que este pedido está com a Sconcept" é uma pergunta de verdade.
+      if (trocando) {
+        const precos = limparPrecos && comPreco > 0
+          ? itens.filter((i) => i.unit_price_usd != null)
+            .map((i) => `${i.size ?? 'item'}: ${i.unit_price_usd}`).join(', ')
+          : null
+        if (limparPrecos && comPreco > 0) {
+          await supabase.from('card_items')
+            .update({ unit_price_usd: null }).eq('card_id', card.id)
+        }
+        const { data: quem } = await supabase.auth.getUser()
+        await supabase.from('activity_logs').insert({
+          card_id: card.id,
+          user_id: quem.user?.id ?? null,
+          action: 'supplier_changed',
+          old_value: nomeAtual,
+          new_value: precos ? `${nomeNovo} · prices cleared: ${precos}` : nomeNovo,
+        })
+      }
+      toast(trocando ? `Handed over to ${nomeNovo}` : 'Card updated', 'success')
       onClose()
     } catch {
       toast('Failed to update card', 'error')
@@ -177,6 +218,51 @@ export function EditCardModal({ card, board, onClose }: EditCardModalProps) {
               </Select>
             </div>
           </div>
+
+          {/* Só a Redantex escolhe, e só quando há mais de um: uma conta de
+              fornecedor não tem o que escolher e não pode descobrir que
+              existe outro. */}
+          {suppliers.length > 1 && (
+            <div>
+              <Label htmlFor="supplier_id">Supplier</Label>
+              <Select id="supplier_id" {...register('supplier_id')}>
+                {suppliers.map((f) => (
+                  <option key={f.id} value={f.id}>{f.short_name}</option>
+                ))}
+              </Select>
+
+              {trocando && (
+                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
+                  <p className="text-[11.5px] font-semibold text-amber-900">
+                    Handing this order from {nomeAtual} to {nomeNovo}
+                  </p>
+                  <ul className="text-[11px] text-amber-900 mt-1 space-y-0.5 list-disc list-inside">
+                    <li>{nomeNovo} will see this card from now on; {nomeAtual} will not.</li>
+                    <li>
+                      Comments and files written by {nomeAtual} stay visible to Redantex and
+                      become invisible to {nomeNovo}.
+                    </li>
+                    {comPreco > 0 && (
+                      <li>
+                        {comPreco} item{comPreco === 1 ? '' : 's'} still carry {nomeAtual}'s
+                        purchase price.
+                      </li>
+                    )}
+                  </ul>
+                  {comPreco > 0 && (
+                    <label className="flex items-start gap-1.5 mt-2 text-[11.5px] text-amber-900">
+                      <input type="checkbox" checked={limparPrecos} className="mt-0.5"
+                        onChange={(e) => setLimparPrecos(e.target.checked)} />
+                      <span>
+                        Clear those prices — {nomeNovo} would otherwise read what {nomeAtual}
+                        charged. The old values stay in the card history.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

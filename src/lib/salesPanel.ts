@@ -135,6 +135,30 @@ export function salesRows(cards: Card[]): SalesRow[] {
 }
 
 /**
+ * Os pedidos que o relógio ainda não alcança.
+ *
+ * Antes de a proforma ser aprovada não há amostra aprovada, confirmação nem
+ * data da fábrica — e sem âncora não há mês. Eles ficavam de fora do painel
+ * sem aparecer em lugar nenhum: um pedido de R$ 95.600 sumia da carteira do
+ * vendedor e do total do diretor por estar no começo. A tela do vendedor já
+ * os mostrava numa coluna à parte; aqui faltava.
+ */
+export function datelessRows(cards: Card[]): SalesRow[] {
+  return cards
+    .filter((c) => !c.archived && c.status !== 'Lost' && !orderSchedule(c))
+    .map((card) => ({
+      card,
+      arrival: '',
+      month: '',
+      landed: false,
+      salesperson: card.salesperson_name?.trim() || card.salesperson?.full_name || '—',
+      client: card.client_name?.trim() || '—',
+      value: Number(card.value_brl ?? 0),
+    }))
+    .sort((a, b) => b.value - a.value)
+}
+
+/**
  * Agrupa por mês, sem pular os meses vazios do meio.
  *
  * O vazio é informação: hoje vinte e oito dos trinta e seis pedidos caem em

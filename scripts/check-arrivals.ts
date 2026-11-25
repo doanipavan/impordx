@@ -154,6 +154,16 @@ async function main() {
     select to_char(chegada, 'YYYY-MM') as mes, count(*)::int as pedidos
       from anc where chegada is not null group by 1 order by 1`)
 
+  // Pedido ainda em intake não tem âncora e não entra em mês nenhum. O painel
+  // não o esconde: conta à parte e diz na tela que não está somado. O teste
+  // pergunta se os dois lados concordam em quantos são, não se são zero —
+  // supor zero fez este arquivo quebrar no dia em que entrou um.
+  const { rows: [semRelogio] } = await db.query(`
+    select count(*)::int as n from cards
+     where board = 'orders' and not archived and status <> 'Lost'
+       and sample_approved_at is null and order_confirmed_at is null
+       and delivery_date is null`)
+
   await db.end()
 
   const tsByKey = new Map(ts.months.map(m => [m.key, m.total]))
@@ -166,7 +176,7 @@ async function main() {
     check(`${r.mes} US$`, round2(t.purchaseUsd), round2(r.usd))
     check(`${r.mes} R$`, round2(t.saleBrl), round2(r.brl))
   }
-  check('nenhum pedido sem relógio hoje', ts.withoutClock, 0)
+  check('os pedidos sem relógio batem com o banco', ts.withoutClock, semRelogio.n)
 
   console.log(bad === 0 ? '\nTudo certo.\n' : `\n${bad} falha(s).\n`)
   process.exit(bad === 0 ? 0 : 1)
