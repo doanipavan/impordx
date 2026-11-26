@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 import { ToastProvider } from './components/ui/toast'
 import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/Login'
+import { ResetPasswordPage } from './pages/ResetPassword'
 import { ApprovalPage } from './pages/ApprovalPage'
 import { VerifyPage } from './pages/VerifyPage'
 import { DashboardPage } from './pages/Dashboard'
@@ -41,6 +42,17 @@ function PublicRoute({ children }: { children: ReactNode }) {
 }
 
 function AppRoutes() {
+  // Antes das rotas, e não como uma delas: o link de recuperação devolve uma
+  // sessão válida, então `PublicRoute` mandaria a pessoa para dentro do hub e
+  // a senha continuaria a antiga. Aqui ela escolhe a nova antes de qualquer
+  // outra tela existir.
+  //
+  // Sem esperar por `loading`: a marca de recuperação sai do endereço, que já
+  // existe no primeiro render. Esperar aqui poria um spinner na frente da
+  // aprovação do cliente, que é pública e não tem sessão nenhuma a carregar.
+  const { recovery } = useAuth()
+  if (recovery) return <ResetPasswordPage />
+
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

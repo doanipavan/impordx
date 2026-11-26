@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, ExternalLink } from 'lucide-react'
+import { X, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
@@ -11,6 +11,27 @@ import { Row, buildRow, sortRows, timeWindow, todayInSaoPaulo, calendarDay, shor
 // As linhas, a ordem e a janela de tempo moram em src/lib/orderRows.ts, que o
 // relatório em PDF também lê. Aqui fica só o desenho.
 const LABEL_WIDTH = 150
+
+/**
+ * Esconder o que já terminou.
+ *
+ * `sortRows` já afunda o que acabou para o fim da lista, mas afundar não é
+ * sumir: a régua do tempo é para decidir o que está em risco, e em dezembro
+ * haverá mais pedido chegado do que pedido correndo. A barra de quem chegou
+ * não corre mais — ela só ocupa altura.
+ *
+ * Guardado no navegador porque é preferência de quem olha, e não dado do
+ * negócio. Se o `localStorage` estiver bloqueado, a tela abre mostrando tudo
+ * e funciona igual.
+ *
+ * O estado nunca é silencioso: ligado, o próprio botão diz quantas linhas
+ * estão fora. Um filtro que se esquece ligado é um pedido que desapareceu.
+ */
+const OCULTAR_KEY = 'rdx.timeline.hideDone'
+
+function ocultarGuardado(): boolean {
+  try { return localStorage.getItem(OCULTAR_KEY) === '1' } catch { return false }
+}
 
 export function OrdersGantt() {
   const { data: cards = [] } = useCards('orders')
@@ -23,6 +44,7 @@ export function OrdersGantt() {
   const { data: checkpoints = [] } = useCheckpoints(cards.map(c => c.id))
   // Qual negócio está em foco. Null = o quadro inteiro.
   const [focusId, setFocusId] = useState<string | null>(null)
+  const [hideDone, setHideDone] = useState(ocultarGuardado)
   const navigate = useNavigate()
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
@@ -37,11 +59,35 @@ export function OrdersGantt() {
     deqiOnly,
   ), [cards, today, deqiOnly, supplierFilter])
 
+  // Terminado é o fim da régua de quem está olhando: para a Redantex, chegou
+  // ao Brasil; para o fornecedor, que nunca vê `Arrived`, é o embarque — a
+  // perna dele acabou ali e o resto não é dele.
+  const done = useMemo(
+    () => rows.filter(r => (deqiOnly ? r.shipping : r.arrived)),
+    [rows, deqiOnly],
+  )
+  const doneWord = deqiOnly ? 'shipped' : 'arrived'
+  const visible = useMemo(
+    () => (hideDone ? rows.filter(r => !(deqiOnly ? r.shipping : r.arrived)) : rows),
+    [rows, hideDone, deqiOnly],
+  )
+
   // Focar é filtrar: a janela de tempo abaixo é derivada das linhas visíveis,
   // então reduzir a uma linha faz o gráfico se abrir sobre ela sozinho. Um
   // zoom escrito à parte seria uma segunda régua para as duas discordarem.
+  //
+  // O foco sai de `rows`, não de `visible`: pedir uma linha pelo nome é mais
+  // explícito que o filtro, e um clique que não abre nada parece defeito.
   const focused = focusId ? rows.find(r => r.card.id === focusId) ?? null : null
-  const drawn = focused ? [focused] : rows
+  const drawn = focused ? [focused] : visible
+
+  function alternarOcultar() {
+    setHideDone(v => {
+      const next = !v
+      try { localStorage.setItem(OCULTAR_KEY, next ? '1' : '0') } catch { /* aba privada, e tudo bem */ }
+      return next
+    })
+  }
 
   const { start, end, months, pct } = useMemo(() => timeWindow(drawn, today, deqiOnly), [drawn, today, deqiOnly])
 
@@ -81,8 +127,31 @@ export function OrdersGantt() {
     <section className="flex-1 min-h-0 border border-border rounded-lg bg-card overflow-hidden flex flex-col">
       <div className="flex items-center gap-2.5 px-3 py-1.5 border-b border-border bg-muted/40 shrink-0">
         <span className="text-[11px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
-          {rows.length} {rows.length === 1 ? 'order' : 'orders'}
+          {visible.length} {visible.length === 1 ? 'order' : 'orders'}
         </span>
+
+        {/* Só aparece quando há o que esconder: um botão que não faz nada é
+            uma pergunta sem resposta. Ligado, ele troca de cor e passa a dizer
+            o número — o estado do filtro tem de ser legível de longe, senão
+            daqui a um mês um pedido "sumiu". */}
+        {done.length > 0 && (
+          <button
+            type="button"
+            onClick={alternarOcultar}
+            title={hideDone
+              ? `Showing ${visible.length} of ${rows.length}. Click to bring the ${doneWord} ${done.length === 1 ? 'one' : 'ones'} back.`
+              : `Hide the ${done.length} ${doneWord} ${done.length === 1 ? 'order' : 'orders'} and keep the running ones`}
+            className={cn(
+              'flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2 py-0.5 border transition-colors',
+              hideDone
+                ? 'text-amber-800 bg-amber-100 border-amber-300 hover:bg-amber-200'
+                : 'text-muted-foreground bg-muted border-transparent hover:bg-muted/70')}>
+            {hideDone ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            {hideDone
+              ? `${done.length} ${doneWord} hidden`
+              : `Hide ${doneWord} · ${done.length}`}
+          </button>
+        )}
 
         {/* Sair do foco tem de estar sempre visível: um gráfico que mostra uma
             linha só, sem dizer por quê, parece um gráfico quebrado. */}
@@ -110,9 +179,25 @@ export function OrdersGantt() {
         </div>
       </div>
 
+      {/* Esconder tudo é um resultado possível, e um gráfico vazio sem motivo
+          escrito parece um gráfico que não carregou. O caminho de volta fica
+          na própria frase. */}
+      {drawn.length === 0 && (
+        <div className="flex-1 flex items-center justify-center px-6">
+          <p className="text-sm text-muted-foreground text-center">
+            Every order on the clock has {doneWord}.
+            <button type="button" onClick={alternarOcultar}
+              className="block mx-auto mt-2 text-xs font-semibold text-primary hover:underline">
+              Show the {rows.length} {rows.length === 1 ? 'order' : 'orders'} again
+            </button>
+          </p>
+        </div>
+      )}
+
       {/* Quem rola é este miolo, não a página: o eixo dos meses fica preso no
           topo enquanto as linhas passam por baixo. */}
-      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin overscroll-contain">
+      <div className={cn('flex-1 min-h-0 overflow-auto scrollbar-thin overscroll-contain',
+        drawn.length === 0 && 'hidden')}>
           <div ref={chartRef} className="min-w-[620px] relative">
 
             {/* month axis — fica no topo ao rolar, senão as barras lá embaixo
