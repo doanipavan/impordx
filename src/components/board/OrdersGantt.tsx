@@ -1,37 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, ExternalLink, Eye, EyeOff } from 'lucide-react'
+import { X, ExternalLink } from 'lucide-react'
 import { useCards } from '../../hooks/useCards'
 import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
 import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
+import { useHideArrived, publishArrivedCount, setHideArrived } from '../../hooks/useHideArrived'
 import { cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, orderSchedule, clockFor, supplierAccent, supplierNameOf, deliverySlip, logisticsOutcome } from '../../lib/utils'
 import { Row, buildRow, sortRows, timeWindow, todayInSaoPaulo, calendarDay, shortRef, shortDate } from '../../lib/orderRows'
 
 // As linhas, a ordem e a janela de tempo moram em src/lib/orderRows.ts, que o
 // relatório em PDF também lê. Aqui fica só o desenho.
 const LABEL_WIDTH = 150
-
-/**
- * Esconder o que já terminou.
- *
- * `sortRows` já afunda o que acabou para o fim da lista, mas afundar não é
- * sumir: a régua do tempo é para decidir o que está em risco, e em dezembro
- * haverá mais pedido chegado do que pedido correndo. A barra de quem chegou
- * não corre mais — ela só ocupa altura.
- *
- * Guardado no navegador porque é preferência de quem olha, e não dado do
- * negócio. Se o `localStorage` estiver bloqueado, a tela abre mostrando tudo
- * e funciona igual.
- *
- * O estado nunca é silencioso: ligado, o próprio botão diz quantas linhas
- * estão fora. Um filtro que se esquece ligado é um pedido que desapareceu.
- */
-const OCULTAR_KEY = 'rdx.timeline.hideDone'
-
-function ocultarGuardado(): boolean {
-  try { return localStorage.getItem(OCULTAR_KEY) === '1' } catch { return false }
-}
 
 export function OrdersGantt() {
   const { data: cards = [] } = useCards('orders')
@@ -44,7 +24,7 @@ export function OrdersGantt() {
   const { data: checkpoints = [] } = useCheckpoints(cards.map(c => c.id))
   // Qual negócio está em foco. Null = o quadro inteiro.
   const [focusId, setFocusId] = useState<string | null>(null)
-  const [hideDone, setHideDone] = useState(ocultarGuardado)
+  const { hidden: hideDone } = useHideArrived()
   const navigate = useNavigate()
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
@@ -81,13 +61,10 @@ export function OrdersGantt() {
   const focused = focusId ? rows.find(r => r.card.id === focusId) ?? null : null
   const drawn = focused ? [focused] : visible
 
-  function alternarOcultar() {
-    setHideDone(v => {
-      const next = !v
-      try { localStorage.setItem(OCULTAR_KEY, next ? '1' : '0') } catch { /* aba privada, e tudo bem */ }
-      return next
-    })
-  }
+  // Quantas linhas o botão lá em cima tem para esconder. Publicado daqui
+  // porque a conta depende do recorte do fornecedor e de quem está olhando,
+  // e refazê-la no cabeçalho seria a segunda leitura da mesma régua.
+  useEffect(() => { publishArrivedCount(done.length) }, [done.length])
 
   const { start, end, months, pct } = useMemo(() => timeWindow(drawn, today, deqiOnly), [drawn, today, deqiOnly])
 
@@ -130,27 +107,13 @@ export function OrdersGantt() {
           {visible.length} {visible.length === 1 ? 'order' : 'orders'}
         </span>
 
-        {/* Só aparece quando há o que esconder: um botão que não faz nada é
-            uma pergunta sem resposta. Ligado, ele troca de cor e passa a dizer
-            o número — o estado do filtro tem de ser legível de longe, senão
-            daqui a um mês um pedido "sumiu". */}
-        {done.length > 0 && (
-          <button
-            type="button"
-            onClick={alternarOcultar}
-            title={hideDone
-              ? `Showing ${visible.length} of ${rows.length}. Click to bring the ${doneWord} ${done.length === 1 ? 'one' : 'ones'} back.`
-              : `Hide the ${done.length} ${doneWord} ${done.length === 1 ? 'order' : 'orders'} and keep the running ones`}
-            className={cn(
-              'flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2 py-0.5 border transition-colors',
-              hideDone
-                ? 'text-amber-800 bg-amber-100 border-amber-300 hover:bg-amber-200'
-                : 'text-muted-foreground bg-muted border-transparent hover:bg-muted/70')}>
-            {hideDone ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-            {hideDone
-              ? `${done.length} ${doneWord} hidden`
-              : `Hide ${doneWord} · ${done.length}`}
-          </button>
+        {/* O botão do filtro mora no cabeçalho da página, com os outros
+            controles. Aqui fica só o efeito dele, escrito ao lado da conta. */}
+        {hideDone && done.length > 0 && (
+          <span className="text-[11px] font-medium text-amber-800 bg-amber-100
+                           border border-amber-300 rounded-full px-2 py-0.5">
+            {done.length} {doneWord} hidden
+          </span>
         )}
 
         {/* Sair do foco tem de estar sempre visível: um gráfico que mostra uma
@@ -186,7 +149,7 @@ export function OrdersGantt() {
         <div className="flex-1 flex items-center justify-center px-6">
           <p className="text-sm text-muted-foreground text-center">
             Every order on the clock has {doneWord}.
-            <button type="button" onClick={alternarOcultar}
+            <button type="button" onClick={() => setHideArrived(false)}
               className="block mx-auto mt-2 text-xs font-semibold text-primary hover:underline">
               Show the {rows.length} {rows.length === 1 ? 'order' : 'orders'} again
             </button>
