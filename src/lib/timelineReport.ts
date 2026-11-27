@@ -248,6 +248,13 @@ function ganttRow(row: Row, deqiOnly: boolean, pct: (d: Date) => number, todayPc
     ? `<i class="dm" style="left:${pct(row.delivery)}%;${row.missedPromise ? `border-color:${C.red[1]};background:${C.red[0]}` : ''}"></i>`
     : ''
 
+  // A arte com o cliente, por cima da barra: atravessa as fases em vez de ser
+  // uma delas. Desenhada aqui e na tela a partir do mesmo campo da Row, senão
+  // o papel e o monitor contariam histórias diferentes do mesmo pedido.
+  const art = row.artStart && row.artEnd
+    ? `<i class="art" style="left:${pct(row.artStart)}%;width:${Math.max(pct(row.artEnd) - pct(row.artStart), 0.25)}%"></i>`
+    : ''
+
   return `<tr>
     <td class="lbl" style="border-left-color:${edgeColour(row)}">
       <b>${esc(row.card.client_name || row.card.title)}</b>
@@ -261,6 +268,7 @@ function ganttRow(row: Row, deqiOnly: boolean, pct: (d: Date) => number, todayPc
         <span class="seg" style="width:${supplierW}%;background:${supplierState[0]};color:${supplierState[1]}">${label(supplierW, 'SUPPLIER')}</span>
         ${deqiOnly ? '' : `<span class="seg" style="width:${rest - supplierW}%;background:${rdxState[0]};color:${rdxState[1]}">${label(rest - supplierW, 'RDX')}</span>`}
       </div>
+      ${art}
       ${diamond}
       <span class="chip" style="left:calc(${right}% + 6px);background:${chipTone[0]};color:${chipTone[1]}">${chipText}</span>
     </td>
@@ -354,6 +362,8 @@ export function timelineReportHtml(rows: Row[], o: ReportOptions): string {
   .seg.sample { background: rgb(237 233 246) repeating-linear-gradient(45deg, transparent 0 2px, rgba(124,58,237,.3) 2px 4px); }
   .dm { position: absolute; top: 50%; width: 7px; height: 7px; border: 1.5px solid ${C.ink}; background: #fff; z-index: 3;
         transform: translate(-50%, -50%) rotate(45deg); }
+  .art { position: absolute; top: 4px; height: 11px; background: #bfdbfe; border: 1px solid #3b82f6;
+         border-radius: 2px; z-index: 2; }
   .chip { position: absolute; top: 50%; transform: translateY(-50%); font-size: 7.5px; font-weight: 700; padding: 1px 5px;
           border-radius: 8px; white-space: nowrap; }
   .key { display: flex; gap: 12px; margin-top: 6px; color: ${C.muted}; font-size: 8px; }
@@ -387,6 +397,7 @@ ${sections.chart ? `<table class="gantt">
   </tbody>
 </table>
 <div class="key">
+  ${rows.some(r => r.artStart) ? `<span><i style="background:#bfdbfe;border-color:#3b82f6"></i>Art with the client</span>` : ''}
   <span><i style="background:rgb(237 233 246);border-color:#a78bfa"></i>Sample</span>
   <span><i style="background:${C.amber[0]};border-color:#f59e0b"></i>${o.deqiOnly ? 'In production' : 'Supplier · production'}</span>
   ${o.deqiOnly ? '' : `<span><i style="background:${C.slate[0]};border-color:#94a3b8"></i>RDX · to Brazil (${LOGISTICS_TARGET_DAYS}d from the supplier's date)</span>`}

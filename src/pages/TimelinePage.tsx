@@ -1,6 +1,7 @@
 import { LOGISTICS_TARGET_DAYS, ORDER_LEG_DAYS } from '../lib/utils'
 import { OrdersGantt } from '../components/board/OrdersGantt'
 import { HideArrivedButton } from '../components/board/HideArrivedButton'
+import { DensityToggle } from '../components/board/DensityToggle'
 import { SupplierSwitch } from '../components/board/SupplierSwitch'
 import { TimelineReport } from '../components/board/TimelineReport'
 import { useAuth } from '../hooks/useAuth'
@@ -34,6 +35,7 @@ export function TimelinePage() {
           {/* Com os outros controles, e não dentro do gráfico: na faixa da
               legenda ele passou despercebido por quem o pediu. */}
           <HideArrivedButton />
+          <DensityToggle />
           <TimelineReport />
         </div>
       </div>

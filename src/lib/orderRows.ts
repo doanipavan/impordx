@@ -50,11 +50,35 @@ export function shortDate(date: Date) {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }
 
+/**
+ * A janela em que a arte esteve com o cliente, da primeira enviada à última
+ * assinatura. Vem de `approval_requests`, que só a Redantex lê.
+ */
+export interface ArtApproval {
+  /** ISO da primeira aprovação enviada. */
+  sent: string
+  /** ISO da última assinatura. */
+  signed: string
+  /** Quantas vezes foi enviada: mais de uma significa que a arte voltou. */
+  rounds: number
+}
+
+export type ArtMap = Map<string, ArtApproval>
+
 export interface Row {
   card: Card
   /** Quando a peça entrou em amostra. Null quando nunca foi uma. */
   sampleStart: Date | null
   sampleDays: number | null
+  /**
+   * A espera da arte. Null é "não sabemos", nunca "zero dias": o link de
+   * aprovação é de setembro de 2026, e o que foi aprovado por WhatsApp antes
+   * dele não deixou registro em lugar nenhum.
+   */
+  artStart: Date | null
+  artEnd: Date | null
+  artDays: number | null
+  artRounds: number
   confirmed: Date
   /** Onde a perna do fornecedor termina: a data que ele deu, ou o dia 60 do plano. */
   handover: Date
@@ -73,7 +97,7 @@ export interface Row {
   missedPromise: boolean
 }
 
-export function buildRow(card: Card, today: Date): Row | null {
+export function buildRow(card: Card, today: Date, art?: ArtMap): Row | null {
   // Shared with the card panel on purpose. This used to read order_confirmed_at
   // directly, which is only stamped at PI Approved — so an order still waiting
   // on its proforma had no bar at all, however real it was.
@@ -103,10 +127,21 @@ export function buildRow(card: Card, today: Date): Row | null {
   const bornOn = anchor.kind === 'sample' ? saoPauloDay(card.created_at) : null
   const sampleStart = bornOn && bornOn < confirmed ? bornOn : null
 
+  // A arte é lida como dia de calendário em São Paulo, como tudo que vira
+  // barra aqui: `approval_requests` guarda instantes, e um link enviado às 22h
+  // de Brasília nasceria amanhã se fosse cortado em UTC.
+  const janela = art?.get(card.id)
+  const artStart = saoPauloDay(janela?.sent)
+  const artEnd = saoPauloDay(janela?.signed)
+
   return {
     card,
     sampleStart,
     sampleDays: sampleStart ? daysBetween(sampleStart, confirmed) : null,
+    artStart,
+    artEnd,
+    artDays: artStart && artEnd ? daysBetween(artStart, artEnd) : null,
+    artRounds: janela?.rounds ?? 0,
     confirmed, handover, arrival, plannedReady, delivery, arrivedAt, shipping,
     forecast: sched.arrivalKind === 'forecast',
     shipped: card.status === 'Shipped' || arrived,
@@ -131,6 +166,50 @@ export function sortRows(rows: Row[], deqiOnly: boolean): Row[] {
   })
 }
 
+export interface MonthGroup {
+  /** `YYYY-MM`. */
+  key: string
+  /** `December 2026` — inglês, como todo o resto do hub. */
+  label: string
+  rows: Row[]
+}
+
+/**
+ * Os pedidos em blocos, pelo mês em que a coisa acontece.
+ *
+ * Para a Redantex o mês é o da chegada ao Brasil; para o fornecedor é o mês
+ * em que ele tem de estar pronto, porque a perna até o Brasil não é dele e
+ * ele nem a vê. Agrupar pela chegada na tela dele seria agrupar por uma data
+ * que ele não conhece.
+ *
+ * Mês vazio no meio não vira bloco. Na aba Sales os meses magros ficam, e
+ * fazem falta: lá eles são colunas lado a lado e o vazio é a comparação. Aqui
+ * seriam um título com nada embaixo, que numa lista vertical se lê como
+ * defeito.
+ *
+ * A ordem dentro do bloco é a de `sortRows` — mais urgente primeiro — e não se
+ * recalcula aqui.
+ */
+export function monthGroups(rows: Row[], deqiOnly: boolean): MonthGroup[] {
+  const mes = (r: Row) => {
+    const dia = deqiOnly ? r.handover : (r.arrivedAt ?? r.arrival)
+    return dia.toISOString().slice(0, 7)
+  }
+
+  const by = new Map<string, Row[]>()
+  for (const r of rows) {
+    const k = mes(r)
+    by.set(k, [...(by.get(k) ?? []), r])
+  }
+
+  return [...by.keys()].sort().map(key => ({
+    key,
+    label: new Date(`${key}-01T00:00:00Z`)
+      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+    rows: by.get(key)!,
+  }))
+}
+
 export interface TimeWindow {
   start: Date
   end: Date
@@ -141,7 +220,13 @@ export interface TimeWindow {
 
 /** The window spans every bar on screen, padded to whole months. */
 export function timeWindow(rows: Row[], today: Date, deqiOnly: boolean): TimeWindow {
-  const starts = rows.map(r => (r.sampleStart ?? r.confirmed).getTime())
+  // A arte entra na conta da borda esquerda. Num pedido ancorado na proforma
+  // não há faixa de amostra, e a aprovação costuma ser anterior à confirmação
+  // — sem isto, a perna azul cairia fora da janela e seria cortada.
+  const starts = rows.map(r => Math.min(
+    (r.sampleStart ?? r.confirmed).getTime(),
+    r.artStart ? r.artStart.getTime() : Infinity,
+  ))
   // Delivery dates count toward the range: a date the supplier commits to
   // beyond day 120 is the one most worth seeing, and it would fall off the
   // right edge.

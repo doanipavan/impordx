@@ -6,6 +6,7 @@ import { useSupplierFilter, useSuppliers } from '../../hooks/useSupplierFilter'
 import { useBoardDestinations } from '../../hooks/useItemDestinations'
 import { supabase } from '../../lib/supabase'
 import { Row, buildRow, sortRows, todayInSaoPaulo } from '../../lib/orderRows'
+import { useArtApproval } from '../../hooks/useArtApproval'
 import {
   ReportFilter, DEFAULT_FILTER, STAGE_GROUPS, StageGroup,
   applyReportFilter, describeFilter, monthLabel, rowMonth, timelineReportHtml,
@@ -56,9 +57,13 @@ export function TimelineReport() {
   const [filter, setFilter] = useState<ReportFilter>(DEFAULT_FILTER)
 
   const today = useMemo(() => todayInSaoPaulo(), [])
+  // A mesma janela da arte que o gráfico desenha. Lida pelo mesmo hook, e não
+  // por uma consulta própria daqui: o papel e a tela têm de contar a mesma
+  // história do mesmo pedido.
+  const { data: art } = useArtApproval(cards.map(c => c.id))
   const rows = useMemo(
-    () => sortRows(cards.map(c => buildRow(c, today)).filter((r): r is Row => r !== null), deqiOnly),
-    [cards, today, deqiOnly],
+    () => sortRows(cards.map(c => buildRow(c, today, art)).filter((r): r is Row => r !== null), deqiOnly),
+    [cards, today, deqiOnly, art],
   )
 
   // As opções saem do que existe: um cliente que não tem pedido na régua não

@@ -6,8 +6,11 @@ import { useAuth } from '../../hooks/useAuth'
 import { useCheckpoints, Checkpoint } from '../../hooks/useActivityLog'
 import { useSupplierFilter, matchesSupplier } from '../../hooks/useSupplierFilter'
 import { useHideArrived, publishArrivedCount, setHideArrived } from '../../hooks/useHideArrived'
+import { useArtApproval } from '../../hooks/useArtApproval'
+import { useDensity, Density } from '../../hooks/useDensity'
 import { cn, ORDER_LEG_DAYS, LOGISTICS_TARGET_DAYS, orderSchedule, clockFor, supplierAccent, supplierNameOf, deliverySlip, logisticsOutcome } from '../../lib/utils'
-import { Row, buildRow, sortRows, timeWindow, todayInSaoPaulo, calendarDay, shortRef, shortDate } from '../../lib/orderRows'
+import { Row, buildRow, sortRows, timeWindow, monthGroups, todayInSaoPaulo, calendarDay, shortRef, shortDate } from '../../lib/orderRows'
+import { Card } from '../../types'
 
 // As linhas, a ordem e a janela de tempo moram em src/lib/orderRows.ts, que o
 // relatório em PDF também lê. Aqui fica só o desenho.
@@ -25,19 +28,45 @@ export function OrdersGantt() {
   // Qual negócio está em foco. Null = o quadro inteiro.
   const [focusId, setFocusId] = useState<string | null>(null)
   const { hidden: hideDone } = useHideArrived()
+  const density = useDensity()
+  // Quanto a arte ficou com o cliente. Um login de fornecedor recebe um mapa
+  // vazio — a política de `approval_requests` é só da Redantex — e a perna
+  // azul deixa de existir sem nenhuma condição escrita aqui.
+  const { data: art } = useArtApproval(cards.map(c => c.id))
   const navigate = useNavigate()
   const chartRef = useRef<HTMLDivElement>(null)
   const [todayX, setTodayX] = useState<number | null>(null)
 
   const today = useMemo(() => todayInSaoPaulo(), [])
 
+  const noRecorte = useMemo(
+    () => cards.filter(c => matchesSupplier(c, supplierFilter)),
+    [cards, supplierFilter],
+  )
+
   const rows = useMemo(() => sortRows(
-    cards
-      .filter(c => matchesSupplier(c, supplierFilter))
-      .map(c => buildRow(c, today))
+    noRecorte
+      .map(c => buildRow(c, today, art))
       .filter((r): r is Row => r !== null),
     deqiOnly,
-  ), [cards, today, deqiOnly, supplierFilter])
+  ), [noRecorte, today, deqiOnly, art])
+
+  /**
+   * Os pedidos que o relógio ainda não alcança.
+   *
+   * Antes da amostra aprovada ou da proforma confirmada não há âncora, e sem
+   * âncora não há barra — `buildRow` devolve null e eles sumiam da tela sem
+   * aparecer em lugar nenhum. É o mesmo buraco que engolia o QUEEN de
+   * R$ 95.600 na aba Sales até 25/nov: pedido novo some justamente por ser
+   * novidade. Ficam num bloco no fim, sem barra, porque desenhar uma barra
+   * para eles seria inventar uma data.
+   */
+  const semRelogio = useMemo(
+    () => noRecorte
+      .filter(c => !c.archived && c.status !== 'Lost' && !orderSchedule(c))
+      .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')),
+    [noRecorte],
+  )
 
   // Terminado é o fim da régua de quem está olhando: para a Redantex, chegou
   // ao Brasil; para o fornecedor, que nunca vê `Arrived`, é o embarque — a
@@ -60,6 +89,11 @@ export function OrdersGantt() {
   // explícito que o filtro, e um clique que não abre nada parece defeito.
   const focused = focusId ? rows.find(r => r.card.id === focusId) ?? null : null
   const drawn = focused ? [focused] : visible
+
+  // Em blocos, pelo mês em que a coisa acontece: chegada ao Brasil para a
+  // Redantex, dia de ficar pronto para o fornecedor. Quarenta e cinco linhas
+  // corridas eram uma lista; quatro blocos são uma resposta.
+  const grupos = useMemo(() => monthGroups(visible, deqiOnly), [visible, deqiOnly])
 
   // Quantas linhas o botão lá em cima tem para esconder. Publicado daqui
   // porque a conta depende do recorte do fornecedor e de quem está olhando,
@@ -84,7 +118,7 @@ export function OrdersGantt() {
 
   // A página é só isto. Vazia, tem de dizer por quê — um branco aqui parece
   // um gráfico que não carregou.
-  if (rows.length === 0) {
+  if (rows.length === 0 && semRelogio.length === 0) {
     return (
       <section className="flex-1 border border-border rounded-lg bg-card flex items-center justify-center">
         <p className="text-sm text-muted-foreground text-center px-6">
@@ -128,6 +162,11 @@ export function OrdersGantt() {
         )}
 
         <div className="ml-auto hidden md:flex items-center gap-3.5">
+          {/* Só aparece quando há azul na tela: para o fornecedor nunca há,
+              porque o banco não lhe entrega `approval_requests`. */}
+          {rows.some(r => r.artStart) && (
+            <Key className="bg-blue-200 border-blue-500" label="Art with the client" />
+          )}
           <Key className="border-violet-400"
             style={{
               backgroundColor: 'rgb(237 233 246)',
@@ -145,7 +184,7 @@ export function OrdersGantt() {
       {/* Esconder tudo é um resultado possível, e um gráfico vazio sem motivo
           escrito parece um gráfico que não carregou. O caminho de volta fica
           na própria frase. */}
-      {drawn.length === 0 && (
+      {drawn.length === 0 && semRelogio.length === 0 && (
         <div className="flex-1 flex items-center justify-center px-6">
           <p className="text-sm text-muted-foreground text-center">
             Every order on the clock has {doneWord}.
@@ -160,7 +199,7 @@ export function OrdersGantt() {
       {/* Quem rola é este miolo, não a página: o eixo dos meses fica preso no
           topo enquanto as linhas passam por baixo. */}
       <div className={cn('flex-1 min-h-0 overflow-auto scrollbar-thin overscroll-contain',
-        drawn.length === 0 && 'hidden')}>
+        drawn.length === 0 && semRelogio.length === 0 && 'hidden')}>
           <div ref={chartRef} className="min-w-[620px] relative">
 
             {/* month axis — fica no topo ao rolar, senão as barras lá embaixo
@@ -182,18 +221,46 @@ export function OrdersGantt() {
               </div>
             </div>
 
-            {drawn.map(row => (
-              <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} deqiOnly={deqiOnly}
-                checkpoints={checkpoints.filter(c => c.card_id === row.card.id)}
-                focused={!!focused}
-                onFocus={() => setFocusId(focused ? null : row.card.id)}
-                onOpenCard={row.card.ref_number
-                  ? () => navigate(`/orders/${row.card.ref_number}`)
-                  : undefined} />
+            {/* Em foco não há blocos: é uma linha só, e um título de mês em
+                cima dela seria um rótulo para um item. */}
+            {focused ? (
+              <>
+                <GanttRow row={focused} months={months.length} pct={pct} deqiOnly={deqiOnly}
+                  density={density}
+                  checkpoints={checkpoints.filter(c => c.card_id === focused.card.id)}
+                  focused
+                  onFocus={() => setFocusId(null)}
+                  onOpenCard={focused.card.ref_number
+                    ? () => navigate(`/orders/${focused.card.ref_number}`)
+                    : undefined} />
+                <FocusDetail row={focused} deqiOnly={deqiOnly} />
+              </>
+            ) : grupos.map(g => (
+              <div key={g.key}>
+                <GroupHead label={g.label} count={g.rows.length} />
+                {g.rows.map(row => (
+                  <GanttRow key={row.card.id} row={row} months={months.length} pct={pct} deqiOnly={deqiOnly}
+                    density={density}
+                    checkpoints={checkpoints.filter(c => c.card_id === row.card.id)}
+                    focused={false}
+                    onFocus={() => setFocusId(row.card.id)}
+                    onOpenCard={row.card.ref_number
+                      ? () => navigate(`/orders/${row.card.ref_number}`)
+                      : undefined} />
+                ))}
+              </div>
             ))}
 
-            {/* O detalhe do negócio em foco, embaixo da própria barra. */}
-            {focused && <FocusDetail row={focused} deqiOnly={deqiOnly} />}
+            {/* O bloco do fim: pedido sem âncora não tem barra, mas existe. */}
+            {!focused && semRelogio.length > 0 && (
+              <div>
+                <GroupHead label="No date yet" count={semRelogio.length} muted />
+                {semRelogio.map(c => (
+                  <SemRelogio key={c.id} card={c}
+                    onOpenCard={c.ref_number ? () => navigate(`/orders/${c.ref_number}`) : undefined} />
+                ))}
+              </div>
+            )}
 
             {/* today */}
             {todayX !== null && (
@@ -258,6 +325,21 @@ export function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) 
       k: 'In sample',
       v: `${row.sampleDays} ${row.sampleDays === 1 ? 'day' : 'days'}`,
     })
+  }
+
+  // "Não registrado" e "zero dias" são coisas diferentes, e a diferença é
+  // grande: o link de aprovação é de setembro de 2026, e tudo que foi aprovado
+  // por WhatsApp antes dele não deixou rastro. Um traço aqui mentiria menos
+  // que um zero, e dizer a frase mente ainda menos.
+  if (!deqiOnly) {
+    facts.push(row.artDays == null
+      ? { k: 'Art with the client', v: 'not recorded' }
+      : {
+          k: 'Art with the client',
+          v: `${row.artDays} ${row.artDays === 1 ? 'day' : 'days'}`
+            + (row.artRounds > 1 ? ` · ${row.artRounds} rounds` : ''),
+          tone: row.artRounds > 1 ? 'late' : undefined,
+        })
   }
 
   if (row.delivery) {
@@ -328,12 +410,17 @@ export function FocusDetail({ row, deqiOnly }: { row: Row; deqiOnly: boolean }) 
   )
 }
 
-export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onFocus, onOpenCard }: {
+export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, density = 'full', onFocus, onOpenCard }: {
   row: Row; months: number; pct: (d: Date) => number; deqiOnly: boolean; checkpoints: Checkpoint[]
   focused: boolean
+  density?: Density
   onFocus: () => void
   onOpenCard?: () => void
 }) {
+  // Limpo tira o que se repete em toda linha e guarda o resto a um clique:
+  // noventa palavras e uns quatrocentos pontos pretos que são história, não
+  // risco. Em foco tudo volta, porque aí a linha é a tela inteira.
+  const cheio = density === 'full' || focused
   // A barra começa na amostra quando houve uma. Tudo em proporção verdadeira:
   // seis dias de amostra ao lado de cento e vinte de pedido são um fio, e é
   // isso mesmo que eles são. O número legível fica no painel de detalhe, em
@@ -447,24 +534,46 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
           <div className={cn('h-full flex items-center justify-center min-w-0', segment[deqiState])}
             style={{ width: `${deqiWidth}%` }}>
             {/* De quem é a perna, não quem é o fornecedor: o nome dele não
-                aparece em texto em lugar nenhum do gráfico, por decisão. */}
-            <span className="text-[9px] font-bold tracking-wide px-1 truncate">SUPPLIER</span>
+                aparece em texto em lugar nenhum do gráfico, por decisão.
+                A palavra é a mesma em toda linha, então no modo limpo ela sai:
+                o que se repete em quarenta e cinco lugares não distingue
+                nenhum deles, e a legenda já diz de quem é a cor. */}
+            {cheio && <span className="text-[9px] font-bold tracking-wide px-1 truncate">SUPPLIER</span>}
           </div>
           {!deqiOnly && (
             <>
               <div className="w-px bg-card" />
               <div className={cn('h-full flex items-center justify-center min-w-0', segment[rdxState])}
                 style={{ width: `${rest - deqiWidth}%` }}>
-                <span className="text-[9px] font-bold tracking-wide px-1 truncate">RDX</span>
+                {cheio && <span className="text-[9px] font-bold tracking-wide px-1 truncate">RDX</span>}
               </div>
             </>
           )}
         </div>
 
+        {/* A arte com o cliente, por cima da barra e não dentro dela: ela
+            atravessa as fases em vez de ser uma delas — começa antes da
+            amostra ser aprovada e, de vez em quando, termina depois. Zero dia
+            vira um risco de dois pixels, e é isso que zero dia é. Ausência de
+            azul não é zero: é "não registrado", e isso está escrito no painel
+            de detalhe, nunca como número. */}
+        {row.artStart && row.artEnd && (
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-3 rounded-[2px] border border-blue-500 bg-blue-200 z-10"
+            style={{
+              left: `${pct(row.artStart)}%`,
+              width: `${Math.max(pct(row.artEnd) - pct(row.artStart), 0.25)}%`,
+            }}
+            title={`Art with the client: ${row.artDays} ${row.artDays === 1 ? 'day' : 'days'}`
+              + ` · ${shortDate(row.artStart)} → ${shortDate(row.artEnd)}`
+              + (row.artRounds > 1 ? ` · ${row.artRounds} rounds` : '')}
+          />
+        )}
+
         {/* Each status change, on the day it happened. No planned marker:
             there is no agreed schedule inside the 60 days to compare against,
             and drawing an invented one would be worse than drawing nothing. */}
-        {checkpoints.map(cp => {
+        {cheio && checkpoints.map(cp => {
           const day = calendarDay(cp.at.slice(0, 10))
           if (!day) return null
           const x = pct(day)
@@ -479,8 +588,11 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
           )
         })}
 
-        {/* the date DEQI committed to */}
-        {row.delivery && (
+        {/* A data que o fornecedor deu. No modo limpo ela só aparece quando
+            já passou do dia 60 do plano: um marcador que existe apenas quando
+            algo está errado se explica sozinho, e branco em toda linha ele
+            virava enfeite. */}
+        {row.delivery && (cheio || row.missedPromise) && (
           <div
             className={cn('absolute top-1/2 h-2.5 w-2.5 rounded-[2px] border-2 z-10 shadow-sm',
               row.missedPromise
@@ -503,6 +615,69 @@ export function GanttRow({ row, months, pct, deqiOnly, checkpoints, focused, onF
             : daysLeft < 0 ? `${Math.abs(daysLeft)}d over`
             : `${daysLeft}d`}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * O título do bloco de um mês.
+ *
+ * Gruda logo abaixo do eixo dos meses, que também gruda: rolando, você sempre
+ * sabe que mês está lendo sem contar linha nem voltar ao topo. O `top` é a
+ * altura do eixo — os dois empilhados, não sobrepostos.
+ */
+function GroupHead({ label, count, muted }: { label: string; count: number; muted?: boolean }) {
+  return (
+    <div className={cn('sticky top-[25px] z-10 flex items-baseline gap-2 px-3 py-1.5',
+      'border-y border-border bg-muted/80 backdrop-blur-sm')}>
+      <span className={cn('text-[11.5px] font-semibold',
+        muted ? 'text-muted-foreground' : 'text-foreground')}>
+        {label}
+      </span>
+      <span className="text-[11px] text-muted-foreground">
+        {count} {count === 1 ? 'order' : 'orders'}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Um pedido sem relógio: nome, referência, etapa. Sem barra.
+ *
+ * Desenhar uma barra aqui exigiria inventar uma data de chegada, e inventar
+ * data num gráfico cujo eixo inteiro é o tempo é pior que não desenhar.
+ */
+function SemRelogio({ card, onOpenCard }: { card: Card; onOpenCard?: () => void }) {
+  return (
+    <div className={cn('grid border-b border-border/60 hover:bg-muted/30 transition-colors',
+        'border-l-[3px]', supplierAccent(supplierNameOf(card)).edge)}
+      style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
+      <div className="px-2.5 py-2 border-r border-border min-w-0">
+        <button type="button" onClick={onOpenCard} disabled={!onOpenCard}
+          title={onOpenCard ? `Open ${card.ref_number}` : 'This order has no reference number yet'}
+          className={cn('group/name w-full text-left text-[11.5px] font-semibold truncate leading-none',
+            'flex items-center gap-1.5 rounded-sm',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary',
+            onOpenCard && 'hover:text-primary cursor-pointer')}>
+          <span className="truncate">{card.client_name || card.title}</span>
+          {card.ref_number && (
+            <span className="font-mono font-normal text-[9px] text-muted-foreground/70 tabular-nums">
+              {shortRef(card.ref_number)}
+            </span>
+          )}
+          {onOpenCard && (
+            <ExternalLink className="h-2.5 w-2.5 shrink-0 ml-auto opacity-0 group-hover/name:opacity-70 transition-opacity" />
+          )}
+        </button>
+      </div>
+      <div className="py-2 px-3 flex items-center gap-2">
+        <span className="text-[10px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+          {card.status}
+        </span>
+        <span className="text-[10.5px] text-muted-foreground">
+          The clock starts when the sample is approved or the proforma is confirmed.
+        </span>
       </div>
     </div>
   )

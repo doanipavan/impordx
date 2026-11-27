@@ -92,6 +92,21 @@ reads `orderSchedule`; the Gantt and the card panel each keeping their own
 `node_modules/.bin/jiti scripts/check-delivery-schedule.ts` and
 `scripts/check-arrivals.ts`, under `TZ=Asia/Shanghai` too.
 
+The timeline groups its rows by that same arrival month (`monthGroups` in
+`src/lib/orderRows.ts`) — by the **handover** month for a supplier login,
+because the leg to Brazil is not theirs. Orders with no anchor have no bar and
+no month, so they sit in a "No date yet" block rather than vanishing, which is
+the hole that swallowed a R$ 95.600 order in the Sales panel. The blue leg is
+the time the art spent with the client, from the **first** approval sent to the
+**last** signature, because the wait between rounds is wait too; `null` days
+means "not recorded" and must never render as 0 — the approval link only exists
+since Sept 2026 and what went by WhatsApp before it left no trace.
+`approval_requests` is Redantex-only at the database, so a supplier login gets
+an empty map and the blue leg simply does not exist for them. Test:
+`scripts/check-timeline-groups.ts`, which caught the art window being measured
+in UTC instead of São Paulo — a link sent at 00:56 UTC was sent the previous
+evening in Brazil, and the span was one day short.
+
 **A piece keeps one reference number for life.** `allocate_card_ref` mints
 `2026-10014` once and it survives promotion: `QUO-2026-10014` → `SMP-` → `ORD-`,
 with `-R2` for a repeat run. Never generate refs client-side.
